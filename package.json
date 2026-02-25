@@ -5,7 +5,7 @@
   "scripts": {
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "build": "nest build"
+    "build": "export GIT_COMMIT=$(git rev-parse --short HEAD) && nest build"
   },
   "dependencies": {
     "@mikro-orm/core": "^6.0.0",
@@ -18,10 +18,12 @@
     "@nestjs/passport": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "bcrypt": "^5.1.0",
+    "nest-winston": "^1.10.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

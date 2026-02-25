@@ -2,11 +2,22 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "es2019",
+    "moduleResolution": "node",
+    "baseUrl": "./",
+    "paths": {
+      "@config/*": ["src/config/*"],
+      "@common/*": ["src/common/*"],
+      "@modules/*": ["src/modules/*"]
+    },
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "strict": false,
-    "outDir": "./dist",
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "sourceMap": true,
+    "incremental": true,
+    "strict": false,
+    "skipLibCheck": true
   }
 }
