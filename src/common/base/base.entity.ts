@@ -1,8 +1,7 @@
-import { PrimaryKey, SerializedPrimaryKey, Property } from '@mikro-orm/core';
-import { ObjectId } from '@mikro-orm/mongodb';
+import { PrimaryKey, Property, SerializedPrimaryKey } from "@mikro-orm/core";
+import { ObjectId } from "@mikro-orm/mongodb";
 
 export abstract class BaseEntity {
-
   @PrimaryKey()
   _id!: ObjectId;
 
@@ -14,4 +13,7 @@ export abstract class BaseEntity {
 
   @Property({ onUpdate: () => new Date() })
   updatedAt = new Date();
+
+  @Property({ default: false })
+  deleted: boolean = false;
 }
