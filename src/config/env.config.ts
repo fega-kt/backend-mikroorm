@@ -1,5 +1,11 @@
 import "dotenv/config";
 
+export enum NodeEnv {
+  DEVELOPMENT = "development",
+  PRODUCTION = "production",
+  TEST = "test",
+}
+
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || "development",
   PORT: Number(process.env.PORT) || 3000,
