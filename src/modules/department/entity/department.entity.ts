@@ -1,6 +1,6 @@
 import { BaseEntity } from "@common/base/base.entity";
 import { Collection, Entity, Index, ManyToOne, OneToMany, Property, types } from "@mikro-orm/core";
-import { UserEntity } from "@modules/user/user.entity";
+import { UserEntity } from "@modules/user/entity/user.entity";
 
 @Entity({ collection: "departments" })
 export class DepartmentEntity extends BaseEntity {
