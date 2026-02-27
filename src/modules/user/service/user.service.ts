@@ -2,9 +2,9 @@ import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, NotFoundException } from "@nestjs/common";
 
-import { CreateUserDto } from "./dto/create-user.dto";
-import { UpdateUserDto } from "./dto/update-user.dto";
-import { UserEntity } from "./user.entity";
+import { CreateUserDto } from "../dto/create-user.dto";
+import { UpdateUserDto } from "../dto/update-user.dto";
+import { UserEntity } from "../entity/user.entity";
 
 @Injectable()
 export class UsersService {
