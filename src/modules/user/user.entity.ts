@@ -1,4 +1,5 @@
-import { Entity, Property } from "@mikro-orm/core";
+import { Entity, ManyToOne, Property } from "@mikro-orm/core";
+import { DepartmentEntity } from "@modules/department/department.entity";
 import { BaseEntity } from "../../common/base/base.entity";
 
 @Entity({ collection: "users" })
@@ -11,4 +12,7 @@ export class UserEntity extends BaseEntity {
 
   @Property()
   name!: string;
+
+  @ManyToOne({ cascade: [], entity: () => DepartmentEntity })
+  department: DepartmentEntity;
 }

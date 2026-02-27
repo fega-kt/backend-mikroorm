@@ -10,7 +10,7 @@ import { UserEntity } from "./user.entity";
 export class UsersService {
   constructor(
     @InjectRepository(UserEntity)
-    private readonly userRepo: EntityRepository<UserEntity>,
+    private readonly userRepo: EntityRepository<UserEntity>
   ) {}
 
   async create(dto: CreateUserDto) {
@@ -27,7 +27,7 @@ export class UsersService {
       {
         limit,
         offset: (page - 1) * limit,
-      },
+      }
     );
 
     return {
@@ -59,7 +59,11 @@ export class UsersService {
   async remove(id: string) {
     const user = await this.findOne(id);
 
-    await this.userRepo.getEntityManager().removeAndFlush(user);
+    this.userRepo.assign(user, { deleted: true });
+
+    await this.userRepo.getEntityManager().flush();
+
+    return user;
 
     return {
       message: "Deleted",
