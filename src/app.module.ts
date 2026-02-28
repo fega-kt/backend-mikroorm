@@ -3,8 +3,9 @@ import { LoggerMiddleware } from "@common/middleware/logger.middleware";
 import mikroConfig from "@config/mikro-orm.config";
 import { MikroOrmModule } from "@mikro-orm/nestjs";
 import { AuthModule } from "@modules/auth/auth.module";
+import { DepartmentModule } from "@modules/department/department.module";
 import { HealthModule } from "@modules/health/health.module";
-import { UsersModule } from "@modules/users/users.module";
+import { UserModule } from "@modules/user/user.module";
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
@@ -13,7 +14,8 @@ import { ConfigModule } from "@nestjs/config";
     HealthModule,
     LoggerModule,
     AuthModule,
-    UsersModule,
+    UserModule,
+    DepartmentModule,
     ConfigModule.forRoot({ isGlobal: true }),
     MikroOrmModule.forRoot({ ...mikroConfig, autoLoadEntities: true }),
   ],

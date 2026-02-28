@@ -1,5 +1,6 @@
-import { PrimaryKey, Property, SerializedPrimaryKey } from "@mikro-orm/core";
+import { ManyToOne, PrimaryKey, Property, SerializedPrimaryKey } from "@mikro-orm/core";
 import { ObjectId } from "@mikro-orm/mongodb";
+import { UserEntity } from "@modules/user/entity/user.entity";
 
 export abstract class BaseEntity {
   @PrimaryKey()
@@ -16,4 +17,10 @@ export abstract class BaseEntity {
 
   @Property({ default: false })
   deleted: boolean = false;
+
+  @ManyToOne(() => UserEntity, { nullable: false })
+  createdBy!: UserEntity;
+
+  @ManyToOne(() => UserEntity, { nullable: false })
+  updatedBy!: UserEntity;
 }

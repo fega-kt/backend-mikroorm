@@ -2,15 +2,15 @@ import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, NotFoundException } from "@nestjs/common";
 
-import { CreateUserDto } from "./dto/create-user.dto";
-import { UpdateUserDto } from "./dto/update-user.dto";
-import { UserEntity } from "./user.entity";
+import { CreateUserDto } from "../dto/create-user.dto";
+import { UpdateUserDto } from "../dto/update-user.dto";
+import { UserEntity } from "../entity/user.entity";
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(UserEntity)
-    private readonly userRepo: EntityRepository<UserEntity>,
+    private readonly userRepo: EntityRepository<UserEntity>
   ) {}
 
   async create(dto: CreateUserDto) {
@@ -27,7 +27,7 @@ export class UsersService {
       {
         limit,
         offset: (page - 1) * limit,
-      },
+      }
     );
 
     return {
@@ -59,7 +59,9 @@ export class UsersService {
   async remove(id: string) {
     const user = await this.findOne(id);
 
-    await this.userRepo.getEntityManager().removeAndFlush(user);
+    this.userRepo.assign(user, { deleted: true });
+
+    await this.userRepo.getEntityManager().flush();
 
     return {
       message: "Deleted",
