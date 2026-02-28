@@ -63,8 +63,6 @@ export class UsersService {
 
     await this.userRepo.getEntityManager().flush();
 
-    return user;
-
     return {
       message: "Deleted",
     };
