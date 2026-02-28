@@ -1,5 +1,6 @@
 import { HttpExceptionFilter } from "@common/filters/http-exception.filter";
-import { ENV } from "@config/env.config";
+import { ENV, NodeEnv } from "@config/env.config";
+import handleApplySwagger from "@config/swagger.config";
 import { MikroORM } from "@mikro-orm/core";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
@@ -18,9 +19,22 @@ async function bootstrap() {
 
   app.setGlobalPrefix(ENV.API_PREFIX);
 
-  const post = ENV.PORT || 3000;
-  logger.log(`Server is running on http://localhost:${post}`);
+  const port = ENV.PORT || 3000;
 
-  await app.listen(3000);
+  if (ENV.NODE_ENV === NodeEnv.DEVELOPMENT) {
+    await handleApplySwagger(app, port);
+  }
+
+  await app.listen(port);
+
+  logger.log(`
+    ========================================
+    🚀 MODE       : ${ENV.NODE_ENV}
+    🌐 PORT       : ${ENV.PORT}
+    🔗 URL        : http://localhost:${ENV.PORT}
+    📦 DATABASE   : ${ENV.DB_NAME}
+    🔗 API PREFIX : /${ENV.API_PREFIX}
+    ========================================
+    `);
 }
 bootstrap();
