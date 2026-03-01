@@ -19,6 +19,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^11.2.6",
     "bcrypt": "^5.1.0",
+    "lodash": "^4.17.23",
     "nest-winston": "^1.10.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
+    "@types/lodash": "^4",
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
   },

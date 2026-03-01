@@ -1,17 +1,23 @@
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
 
+import { BaseService } from "@common/base/base.service";
+import { REQUEST } from "@nestjs/core";
+import { Request } from "express";
 import { CreateUserDto } from "../dto/create-user.dto";
 import { UpdateUserDto } from "../dto/update-user.dto";
 import { UserEntity } from "../entity/user.entity";
 
-@Injectable()
-export class UsersService {
+@Injectable({ scope: Scope.REQUEST })
+export class UserService extends BaseService<UserEntity> {
   constructor(
+    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>
-  ) {}
+  ) {
+    super(userRepo);
+  }
 
   async create(dto: CreateUserDto) {
     const user = this.userRepo.create(dto);
@@ -21,12 +27,13 @@ export class UsersService {
     return user;
   }
 
-  async findAll(page = 1, limit = 10) {
-    const [data, total] = await this.userRepo.findAndCount(
+  async findAllUser(page = 1, limit = 10) {
+    const { data, total } = await this.findAll(
       { deleted: { $ne: true } },
       {
         limit,
-        offset: (page - 1) * limit,
+        page,
+        fields: ["id", "name", "email", "isActive"],
       }
     );
 
