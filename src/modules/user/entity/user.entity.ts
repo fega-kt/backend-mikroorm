@@ -15,4 +15,7 @@ export class UserEntity extends BaseEntity {
 
   @ManyToOne({ cascade: [], entity: () => DepartmentEntity })
   department: DepartmentEntity;
+
+  @Property({ default: false })
+  isActive: boolean = false;
 }

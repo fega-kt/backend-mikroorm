@@ -2,34 +2,34 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestj
 
 import { CreateUserDto } from "../dto/create-user.dto";
 import { UpdateUserDto } from "../dto/update-user.dto";
-import { UsersService } from "../service/user.service";
+import { UserService } from "../service/user.service";
 
 @Controller("user")
 export class UserController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly userService: UserService) {}
 
   @Post()
   create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+    return this.userService.create(dto);
   }
 
   @Get()
   findAll(@Query("page") page = 1, @Query("limit") limit = 10) {
-    return this.usersService.findAll(Number(page), Number(limit));
+    return this.userService.findAllUser(Number(page), Number(limit));
   }
 
   @Get(":id")
   findOne(@Param("id") id: string) {
-    return this.usersService.findOne(id);
+    return this.userService.findOne(id);
   }
 
   @Patch(":id")
   update(@Param("id") id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(id, dto);
+    return this.userService.update(id, dto);
   }
 
   @Delete(":id")
   remove(@Param("id") id: string) {
-    return this.usersService.remove(id);
+    return this.userService.remove(id);
   }
 }

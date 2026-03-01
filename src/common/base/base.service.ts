@@ -1,19 +1,20 @@
-import { EntityData, RequiredEntityData, wrap } from "@mikro-orm/core";
+import { EntityData, EntityField, RequiredEntityData, wrap } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery } from "@mikro-orm/mongodb";
 import { Logger, NotFoundException } from "@nestjs/common";
 import { BaseEntity } from "./base.entity";
 
-export interface PaginationQuery {
+export interface PaginationQuery<T> {
   page?: number;
   limit?: number;
+  fields?: readonly EntityField<T>[];
+  populate?: readonly EntityField<T>[];
 }
 export abstract class BaseService<T extends BaseEntity> {
   private readonly baseLogger = new Logger(BaseService.name);
 
-  public constructor(protected request?: Request) {
+  public constructor(protected readonly repo: EntityRepository<T>, protected request?: Request) {
     // Empty
   }
-  protected abstract repo: EntityRepository<T>;
 
   /* ================= CURRENT USER ================= */
 
@@ -25,12 +26,15 @@ export abstract class BaseService<T extends BaseEntity> {
   }
 
   /* ================= FIND ALL ================= */
-  async findAll(query: PaginationQuery = {}, filter: FilterQuery<T> = {}) {
-    const { page = 1, limit = 10 } = query;
+  async findAll(filter: FilterQuery<T> = {}, query: PaginationQuery<T> = {}) {
+    const { page = 1, limit = 10, fields = ["id"], populate = [] } = query;
 
     const [data, total] = await this.repo.findAndCount(filter, {
       limit,
       offset: (page - 1) * limit,
+      fields: fields as never[],
+      populate: populate as never[],
+      disableIdentityMap: true,
     });
 
     return { data, total, page, limit };
