@@ -2,6 +2,7 @@ import { Injectable, Logger, NestMiddleware } from "@nestjs/common";
 
 import chalk from "chalk";
 import { NextFunction, Request, Response } from "express";
+import { compact } from "lodash";
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
@@ -13,10 +14,15 @@ export class LoggerMiddleware implements NestMiddleware {
     res.on("finish", () => {
       const duration = Date.now() - start;
 
-      const { method, originalUrl } = req;
+      const { method, originalUrl, user, isPublic } = req;
+      let userInfo = "";
+      if (!isPublic) {
+        userInfo = `user ${user?.email}`;
+      }
       const status = res.statusCode;
       const ip = this.getClientIp(req);
-      const message = `[${ip}] ${req.method} ${req.originalUrl} ${status} ${duration}ms`;
+      const arrayInfo = compact([userInfo, method, originalUrl, status, duration]).join(" ");
+      const message = `[${ip}] ${arrayInfo}ms`;
 
       if (status >= 500) {
         this.logger.error(chalk.red(message));
