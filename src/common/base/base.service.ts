@@ -19,7 +19,7 @@ export abstract class BaseService<T extends BaseEntity> {
   /* ================= CURRENT USER ================= */
 
   /* ================= CREATE ================= */
-  async create(data: RequiredEntityData<T>): Promise<T> {
+  async addOne(data: RequiredEntityData<T>): Promise<T> {
     const entity = this.repo.create(data);
     await this.repo.getEntityManager().persistAndFlush(entity);
     return entity;
@@ -41,7 +41,18 @@ export abstract class BaseService<T extends BaseEntity> {
   }
 
   /* ================= FIND ONE ================= */
-  async findOne(id: string): Promise<T> {
+  async findOne(
+    filter: FilterQuery<T>,
+    dataQuery: { fields?: readonly EntityField<T>[]; populate?: readonly EntityField<T>[] }
+  ): Promise<T> {
+    const { fields = ["id"], populate = [] } = dataQuery || {};
+    const entity = await this.repo.findOne(filter, { fields: fields as never[], populate: populate as never[] });
+
+    return entity;
+  }
+
+  /* ================= FIND BY ID ================= */
+  async findById(id: string): Promise<T> {
     const entity = await this.repo.findOne({
       id,
     } as FilterQuery<T>);
@@ -58,7 +69,7 @@ export abstract class BaseService<T extends BaseEntity> {
     id: string,
     data: EntityData<T> // không cần UpdateDto nữa
   ): Promise<T> {
-    const entity = await this.findOne(id);
+    const entity = await this.findById(id);
 
     wrap(entity).assign(data as any);
 
@@ -69,7 +80,7 @@ export abstract class BaseService<T extends BaseEntity> {
 
   /* ================= SOFT DELETE ================= */
   async remove(id: string): Promise<{ message: string }> {
-    const entity = await this.findOne(id);
+    const entity = await this.findById(id);
 
     this.repo.assign(entity, { deleted: true } as any);
     await this.repo.getEntityManager().flush();
