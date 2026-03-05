@@ -1,6 +1,7 @@
-import { EntityData, EntityField, RequiredEntityData, wrap } from "@mikro-orm/core";
+import { EntityData, EntityField, FromEntityType, RequiredEntityData, wrap } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery } from "@mikro-orm/mongodb";
-import { Logger, NotFoundException } from "@nestjs/common";
+import { Inject, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import { REQUEST } from "@nestjs/core";
 import { BaseEntity } from "./base.entity";
 
 export interface PaginationQuery<T> {
@@ -9,18 +10,33 @@ export interface PaginationQuery<T> {
   fields?: readonly EntityField<T>[];
   populate?: readonly EntityField<T>[];
 }
+
+interface IUser {
+  id: string;
+}
 export abstract class BaseService<T extends BaseEntity> {
   private readonly baseLogger = new Logger(BaseService.name);
 
-  public constructor(protected readonly repo: EntityRepository<T>, protected request?: Request) {
+  public constructor(
+    protected readonly repo: EntityRepository<T>,
+    @Inject(REQUEST) protected readonly request: (Request & { user?: IUser }) | undefined
+  ) {
     // Empty
   }
 
   /* ================= CURRENT USER ================= */
+  getCurrentUser(options?: { user?: IUser }): IUser {
+    const user = this.request?.user || options?.user;
+    if (!user) {
+      throw new InternalServerErrorException("User not found in request context");
+    }
+    return user;
+  }
 
   /* ================= CREATE ================= */
-  async addOne(data: RequiredEntityData<T>): Promise<T> {
-    const entity = this.repo.create(data);
+  async addOne(data: RequiredEntityData<T>, options?: { user?: IUser }): Promise<T> {
+    const { id } = this.getCurrentUser(options);
+    const entity = this.repo.create({ ...data, createdBy: id, updatedBy: id });
     await this.repo.getEntityManager().persistAndFlush(entity);
     return entity;
   }
@@ -65,13 +81,13 @@ export abstract class BaseService<T extends BaseEntity> {
   }
 
   /* ================= UPDATE ================= */
-  async update(
-    id: string,
-    data: EntityData<T> // không cần UpdateDto nữa
-  ): Promise<T> {
+  async update(id: string, data: EntityData<FromEntityType<T>>, options?: { user?: IUser }): Promise<T> {
     const entity = await this.findById(id);
-
-    wrap(entity).assign(data as any);
+    const { id: userId } = this.getCurrentUser(options);
+    wrap(entity).assign({
+      ...data,
+      updatedBy: userId,
+    } as any);
 
     await this.repo.getEntityManager().flush();
 

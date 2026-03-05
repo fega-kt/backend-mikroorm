@@ -16,7 +16,7 @@ export class UserService extends BaseService<UserEntity> {
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>
   ) {
-    super(userRepo);
+    super(userRepo, request);
   }
 
   async create(dto: CreateUserDto) {
@@ -54,24 +54,10 @@ export class UserService extends BaseService<UserEntity> {
   }
 
   async update(id: string, dto: UpdateUserDto) {
-    const user = await this.findOne(id);
-
-    this.userRepo.assign(user, dto);
-
-    await this.userRepo.getEntityManager().flush();
-
-    return user;
+    return await this.update(id, dto);
   }
 
   async remove(id: string) {
-    const user = await this.findOne(id);
-
-    this.userRepo.assign(user, { deleted: true });
-
-    await this.userRepo.getEntityManager().flush();
-
-    return {
-      message: "Deleted",
-    };
+    return await this.remove(id);
   }
 }
