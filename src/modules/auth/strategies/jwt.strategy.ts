@@ -29,6 +29,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
+  private handleLogging(payload: JwtPayload): void {
+    this.jwtLogger.debug(`Validating JWT for userId: ${payload.userId}, email: ${payload.email}`);
+  }
+
   async validate(payload: JwtPayload) {
     // 1️⃣ Tìm user trong DB
 
@@ -37,20 +41,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       deleted: false, // nếu bạn đang dùng soft delete
       email: payload.email,
     });
-    this.jwtLogger.debug(`Validating JWT for userId: ${payload.userId}, email: ${payload.email}`);
     // 2️⃣ Nếu không tồn tại hoặc đã bị xóa
     if (!user) {
+      this.handleLogging(payload);
+
       throw new UnauthorizedException("User not found or deleted");
     }
 
     // 3️⃣ Nếu có field isActive / isBlocked
     if (!user.isActive) {
+      this.handleLogging(payload);
       throw new UnauthorizedException("User is inactive");
     }
 
     // ✅ Return user để gán vào req.user
     return {
-      userId: user.id,
+      id: user.id,
       email: user.email,
     };
   }

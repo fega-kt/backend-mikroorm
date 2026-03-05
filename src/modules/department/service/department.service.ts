@@ -2,7 +2,8 @@ import { BaseService } from "@common/base/base.service";
 import { SYSTEM_DEPARTMENT_ID, SYSTEM_USER_ID } from "@common/constants/system.constant";
 import { EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { REQUEST } from "@nestjs/core";
 import z from "zod";
 import { DepartmentEntity } from "../entity/department.entity";
 import { createDepartmentValidation } from "../validation/department.validation";
@@ -11,9 +12,10 @@ import { createDepartmentValidation } from "../validation/department.validation"
 export class DepartmentService extends BaseService<DepartmentEntity> {
   constructor(
     @InjectRepository(DepartmentEntity)
-    private readonly departmentRepo: EntityRepository<DepartmentEntity>
+    private readonly departmentRepo: EntityRepository<DepartmentEntity>,
+    @Inject(REQUEST) protected request: Request | undefined
   ) {
-    super(departmentRepo);
+    super(departmentRepo, request);
   }
 
   async create(data: z.infer<typeof createDepartmentValidation>) {
