@@ -81,7 +81,7 @@ export abstract class BaseService<T extends BaseEntity> {
   }
 
   /* ================= UPDATE ================= */
-  async update(id: string, data: EntityData<FromEntityType<T>>, options?: { user?: IUser }): Promise<T> {
+  async updateOne(id: string, data: EntityData<FromEntityType<T>>, options?: { user?: IUser }): Promise<T> {
     const entity = await this.findById(id);
     const { id: userId } = this.getCurrentUser(options);
     wrap(entity).assign({
