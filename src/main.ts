@@ -3,6 +3,7 @@ import { ENV, NodeEnv } from "@config/env.config";
 import handleApplySwagger from "@config/swagger.config";
 import { MikroORM } from "@mikro-orm/core";
 import { JwtAuthGuard } from "@modules/auth/guards/jwt-auth.guard";
+import { PermissionsGuard } from "@modules/auth/guards/permissions.guard";
 import { Logger } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { AppModule } from "./app.module";
@@ -22,6 +23,7 @@ async function bootstrap() {
 
   const reflector = app.get(Reflector);
   app.useGlobalGuards(new JwtAuthGuard(reflector));
+  app.useGlobalGuards(new PermissionsGuard(reflector));
   const port = ENV.PORT || 3000;
 
   await app.listen(port);
