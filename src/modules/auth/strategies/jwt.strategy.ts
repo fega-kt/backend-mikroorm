@@ -36,11 +36,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     // 1️⃣ Tìm user trong DB
 
-    const user = await this.userRepo.findOne({
-      id: payload.userId,
-      deleted: false, // nếu bạn đang dùng soft delete
-      email: payload.email,
-    });
+    const user = await this.userRepo.findOne(
+      {
+        id: payload.userId,
+        deleted: false, // nếu bạn đang dùng soft delete
+        email: payload.email,
+      },
+      { fields: ["id", "setting", "email", "deleted"], populate: ["setting"] }
+    );
     // 2️⃣ Nếu không tồn tại hoặc đã bị xóa
     if (!user) {
       this.handleLogging(payload);
@@ -48,8 +51,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException("User not found or deleted");
     }
 
+    if (!user.setting) {
+      this.handleLogging(payload);
+      throw new UnauthorizedException("User settings are missing");
+    }
+
+    if (user.deleted || user.setting.deleted) {
+      this.handleLogging(payload);
+      throw new UnauthorizedException("User deleted");
+    }
+
     // 3️⃣ Nếu có field isActive / isBlocked
-    if (!user.isActive) {
+    if (!user.setting.isActive) {
       this.handleLogging(payload);
       throw new UnauthorizedException("User is inactive");
     }
