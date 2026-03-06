@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
+import { Permissions } from "@common/decorators/permissions.decorator";
+import { PermissionType } from "@modules/auth/enums/permission-type.enum";
 import { CreateUserDto } from "../dto/create-user.dto";
 import { UpdateUserDto } from "../dto/update-user.dto";
 import { UserService } from "../service/user.service";
@@ -14,6 +16,7 @@ export class UserController {
   }
 
   @Get()
+  @Permissions(PermissionType.ViewUsers)
   findAll(@Query("page") page = 1, @Query("limit") limit = 10) {
     return this.userService.findAllUser(Number(page), Number(limit));
   }
