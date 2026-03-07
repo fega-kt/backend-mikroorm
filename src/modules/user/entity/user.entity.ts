@@ -11,9 +11,6 @@ export class UserEntity extends BaseEntity {
   email!: string;
 
   @Property()
-  password!: string;
-
-  @Property()
   name!: string;
 
   @ManyToOne({ cascade: [], entity: () => DepartmentEntity })

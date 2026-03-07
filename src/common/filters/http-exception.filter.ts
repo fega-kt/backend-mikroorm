@@ -12,10 +12,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status = exception instanceof HttpException ? exception.getStatus() : 500;
 
     const message = exception instanceof HttpException ? exception.message : "Internal server error";
+
     if (status >= 500) {
       this.logger.error(chalk.red(message));
+      this.logger.error(chalk.red(exception.stack));
     } else if (status >= 400) {
       this.logger.warn(chalk.yellow(message));
+      this.logger.error(chalk.red(exception.stack));
     }
     response.status(status).json({
       message,

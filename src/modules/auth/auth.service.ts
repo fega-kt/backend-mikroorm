@@ -1,10 +1,11 @@
 import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
-import { InjectEntityManager, InjectRepository } from "@mikro-orm/nestjs";
+import { InjectRepository } from "@mikro-orm/nestjs";
 import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 
 import { BaseService } from "@common/base/base.service";
+import { SYSTEM_DEPARTMENT_ID, SYSTEM_USER_ID } from "@common/constants/system.constant";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
 import { UserSettingEntity } from "@modules/user-setting/entity/user-setting.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
@@ -19,7 +20,6 @@ export class AuthService extends BaseService<UserEntity> {
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>,
     @Inject(REQUEST) protected request: Request | undefined,
-    @InjectEntityManager("default")
     private readonly em: EntityManager,
     private readonly jwtService: JwtService
   ) {
@@ -37,13 +37,19 @@ export class AuthService extends BaseService<UserEntity> {
 
     const password = await bcrypt.hash(dto.password, 10);
 
+    const defaulValueBase = {
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdBy: new ObjectId(SYSTEM_USER_ID),
+      updatedBy: new ObjectId(SYSTEM_USER_ID),
+    };
     return this.em.transactional(async (em) => {
       // 1️⃣ create user
       const user = this.userRepo.create({
         name: "Kim Thái",
         email: dto.email,
-        password,
-        department: new ObjectId("000000000000000000000000"),
+        department: new ObjectId(SYSTEM_DEPARTMENT_ID),
+        ...defaulValueBase,
       });
 
       em.persist(user);
@@ -51,6 +57,8 @@ export class AuthService extends BaseService<UserEntity> {
       // 2️⃣ create user setting
       const setting = em.create(UserSettingEntity, {
         user,
+        password,
+        ...defaulValueBase,
       });
 
       em.persist(setting);
@@ -60,6 +68,7 @@ export class AuthService extends BaseService<UserEntity> {
         name: user.name,
         type: PrincipalType.User,
         user,
+        ...defaulValueBase,
       });
 
       em.persist(principal);
@@ -71,13 +80,19 @@ export class AuthService extends BaseService<UserEntity> {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.userRepo.findOne({
-      email: dto.email,
-    });
+    const user = await this.userRepo.findOne(
+      {
+        email: dto.email,
+      },
+      {
+        populate: ["setting"],
+      }
+    );
 
     if (!user) throw new UnauthorizedException();
 
-    const match = await bcrypt.compare(dto.password, user.password);
+    const match = await bcrypt.compare(dto.password, user.setting?.password);
+    console.log("match", match);
 
     if (!match) throw new UnauthorizedException();
 
