@@ -16,7 +16,7 @@ export class LoggerMiddleware implements NestMiddleware {
 
       const { method, originalUrl, user, isPublic } = req;
       let userInfo = "";
-      if (!isPublic) {
+      if (!isPublic && user) {
         userInfo = `user ${user?.email}`;
       }
       const status = res.statusCode;
