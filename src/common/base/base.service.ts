@@ -1,5 +1,5 @@
 import { EntityData, EntityField, FromEntityType, RequiredEntityData, wrap } from "@mikro-orm/core";
-import { EntityRepository, FilterQuery } from "@mikro-orm/mongodb";
+import { EntityRepository, FilterQuery, ObjectId } from "@mikro-orm/mongodb";
 import { Inject, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import { BaseEntity } from "./base.entity";
@@ -31,6 +31,24 @@ export abstract class BaseService<T extends BaseEntity> {
       throw new InternalServerErrorException("User not found in request context");
     }
     return user;
+  }
+
+  getDefaultValuesForCreate(options?: { user?: IUser }) {
+    const { id } = this.getCurrentUser(options);
+    return {
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdBy: new ObjectId(id),
+      updatedBy: new ObjectId(id),
+    };
+  }
+
+  getDefaultValuesForUpdate(options?: { user?: IUser }) {
+    const { id } = this.getCurrentUser(options);
+    return {
+      updatedAt: new Date(),
+      updatedBy: new ObjectId(id),
+    };
   }
 
   /* ================= CREATE ================= */
