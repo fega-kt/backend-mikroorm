@@ -28,7 +28,7 @@ export class UserService extends BaseService<UserEntity> {
   }
 
   async findAllUser(page = 1, limit = 10) {
-    const { data, total } = await this.findAll(
+    const { data, total } = await this.paginate(
       { deleted: { $ne: true } },
       {
         limit,
