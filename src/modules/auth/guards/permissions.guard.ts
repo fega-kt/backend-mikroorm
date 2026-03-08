@@ -1,3 +1,4 @@
+import { IUserResponse } from "@common/base/consts";
 import { PERMISSIONS_KEY } from "@common/decorators/permissions.decorator";
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
@@ -19,14 +20,13 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<Request>();
-    const user = request.user;
+    const user: IUserResponse | undefined = request.user;
 
     if (!user) {
       throw new ForbiddenException("User not found");
     }
 
-    const userPermissions: string[] = user.permissions || [];
-
+    const userPermissions: string[] = user.permissions;
     const hasPermission = requiredPermissions.some((permission) => userPermissions.includes(permission));
 
     if (!hasPermission) {

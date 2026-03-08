@@ -1,3 +1,4 @@
 export enum PermissionType {
-  ViewUsers = "user:view", // get list user
+  /** get list user */
+  ViewUsers = "users:view",
 }

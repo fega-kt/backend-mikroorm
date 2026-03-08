@@ -92,7 +92,6 @@ export class AuthService extends BaseService<UserEntity> {
     if (!user) throw new UnauthorizedException();
 
     const match = await bcrypt.compare(dto.password, user.setting?.password);
-    console.log("match", match);
 
     if (!match) throw new UnauthorizedException();
 

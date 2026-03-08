@@ -1,4 +1,4 @@
-import { EntityData, EntityField, FromEntityType, RequiredEntityData, wrap } from "@mikro-orm/core";
+import { EntityData, EntityField, FindOptions, FromEntityType, RequiredEntityData, wrap } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery, ObjectId } from "@mikro-orm/mongodb";
 import { Inject, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
@@ -61,6 +61,30 @@ export abstract class BaseService<T extends BaseEntity> {
 
   /* ================= FIND ALL ================= */
   async findAll(filter: FilterQuery<T> = {}, query: PaginationQuery<T> = {}) {
+    const { page = 1, limit, fields = ["id"], populate = [] } = query;
+
+    const options: FindOptions<T> = {
+      fields: fields as never[],
+      populate: populate as never[],
+      disableIdentityMap: true,
+    };
+
+    if (limit) {
+      options.limit = limit;
+      options.offset = (page - 1) * limit;
+    }
+
+    const data = await this.repo.find(filter, options);
+
+    return {
+      data,
+      page,
+      limit,
+    };
+  }
+
+  /* ================= PAGINATE ================= */
+  async paginate(filter: FilterQuery<T> = {}, query: PaginationQuery<T> = {}) {
     const { page = 1, limit = 10, fields = ["id"], populate = [] } = query;
 
     const [data, total] = await this.repo.findAndCount(filter, {
