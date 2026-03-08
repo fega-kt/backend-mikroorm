@@ -1,5 +1,5 @@
 import { BaseEntity } from "@common/base/base.entity";
-import { Entity, Enum, OneToOne, Property } from "@mikro-orm/core";
+import { Entity, Enum, OneToOne, Property, types } from "@mikro-orm/core";
 import { GroupEntity } from "@modules/group/entity/group.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
 
@@ -35,4 +35,7 @@ export class PrincipalEntity extends BaseEntity {
     nullable: true,
   })
   public user?: UserEntity;
+
+  @Property({ type: types.string, nullable: true })
+  description?: string;
 }
