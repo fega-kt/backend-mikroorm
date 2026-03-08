@@ -26,10 +26,12 @@ async function bootstrap() {
   app.useGlobalGuards(new PermissionsGuard(reflector));
   const port = ENV.PORT || 3000;
 
-  await app.listen(port);
   if (ENV.NODE_ENV === NodeEnv.DEVELOPMENT) {
     await handleApplySwagger(app, port);
   }
+
+  await app.listen(port);
+
   logger.log(`
     ========================================
     🚀 MODE       : ${ENV.NODE_ENV}
