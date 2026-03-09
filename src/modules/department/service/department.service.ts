@@ -4,6 +4,7 @@ import { EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
+import { Request } from "express";
 import z from "zod";
 import { DepartmentEntity } from "../entity/department.entity";
 import { createDepartmentValidation, updateDepartmentValidation } from "../validation/department.validation";

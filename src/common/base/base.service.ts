@@ -2,7 +2,9 @@ import { EntityData, EntityField, FindOptions, FromEntityType, RequiredEntityDat
 import { EntityRepository, FilterQuery, ObjectId } from "@mikro-orm/mongodb";
 import { Inject, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
+import { Request } from "express";
 import { BaseEntity } from "./base.entity";
+import { IUserResponse } from "./consts";
 
 export interface PaginationQuery<T> {
   page?: number;
@@ -11,21 +13,18 @@ export interface PaginationQuery<T> {
   populate?: readonly EntityField<T>[];
 }
 
-interface IUser {
-  id: string;
-}
 export abstract class BaseService<T extends BaseEntity> {
   private readonly baseLogger = new Logger(BaseService.name);
 
   public constructor(
     protected readonly repo: EntityRepository<T>,
-    @Inject(REQUEST) protected readonly request: (Request & { user?: IUser }) | undefined
+    @Inject(REQUEST) protected readonly request: Request | undefined
   ) {
     // Empty
   }
 
   /* ================= CURRENT USER ================= */
-  getCurrentUser(options?: { user?: IUser }): IUser {
+  getCurrentUser(options?: { user?: IUserResponse }): IUserResponse {
     const user = this.request?.user || options?.user;
     if (!user) {
       throw new InternalServerErrorException("User not found in request context");
@@ -33,7 +32,7 @@ export abstract class BaseService<T extends BaseEntity> {
     return user;
   }
 
-  getDefaultValuesForCreate(options?: { user?: IUser }) {
+  getDefaultValuesForCreate(options?: { user?: IUserResponse }) {
     const { id } = this.getCurrentUser(options);
     return {
       createdAt: new Date(),
@@ -43,7 +42,7 @@ export abstract class BaseService<T extends BaseEntity> {
     };
   }
 
-  getDefaultValuesForUpdate(options?: { user?: IUser }) {
+  getDefaultValuesForUpdate(options?: { user?: IUserResponse }) {
     const { id } = this.getCurrentUser(options);
     return {
       updatedAt: new Date(),
@@ -52,7 +51,7 @@ export abstract class BaseService<T extends BaseEntity> {
   }
 
   /* ================= CREATE ================= */
-  async addOne(data: RequiredEntityData<T>, options?: { user?: IUser }): Promise<T> {
+  async addOne(data: RequiredEntityData<T>, options?: { user?: IUserResponse }): Promise<T> {
     const { id } = this.getCurrentUser(options);
     const entity = this.repo.create({ ...data, createdBy: id, updatedBy: id });
     await this.repo.getEntityManager().persistAndFlush(entity);
@@ -123,7 +122,7 @@ export abstract class BaseService<T extends BaseEntity> {
   }
 
   /* ================= UPDATE ================= */
-  async updateOne(id: string, data: EntityData<FromEntityType<T>>, options?: { user?: IUser }): Promise<T> {
+  async updateOne(id: string, data: EntityData<FromEntityType<T>>, options?: { user?: IUserResponse }): Promise<T> {
     const entity = await this.findById(id);
     const { id: userId } = this.getCurrentUser(options);
     wrap(entity).assign({
