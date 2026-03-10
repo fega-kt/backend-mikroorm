@@ -8,6 +8,7 @@
     "build": "export GIT_COMMIT=$(git rev-parse --short HEAD) && nest build"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1004.0",
     "@mikro-orm/core": "^6.0.0",
     "@mikro-orm/mongodb": "^6.0.0",
     "@mikro-orm/nestjs": "^6.0.0",
@@ -16,23 +17,27 @@
     "@nestjs/core": "^10.0.0",
     "@nestjs/jwt": "^10.0.0",
     "@nestjs/passport": "^10.0.0",
-    "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/platform-express": "^11.1.16",
     "@nestjs/swagger": "^11.2.6",
     "bcrypt": "^5.1.0",
     "lodash": "^4.17.23",
+    "multer": "^2.1.1",
     "nest-winston": "^1.10.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
+    "url-join": "4.x",
     "winston": "^3.19.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
     "@types/lodash": "^4",
+    "@types/multer": "^2.1.0",
     "@types/node": "^20.0.0",
+    "@types/url-join": "^4.0.3",
     "typescript": "^5.0.0"
   },
   "packageManager": "yarn@4.1.1+sha512.ec40d0639bb307441b945d9467139cbb88d14394baac760b52eca038b330d16542d66fef61574271534ace5a200518dabf3b53a85f1f9e4bfa37141b538a9590"

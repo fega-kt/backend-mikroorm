@@ -3,6 +3,7 @@ import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Inject, Injectable } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
+import { Request } from "express";
 import { PrincipalEntity } from "../entity/principal.entity";
 
 @Injectable()

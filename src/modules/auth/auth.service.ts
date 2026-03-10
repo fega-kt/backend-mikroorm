@@ -10,6 +10,7 @@ import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/princi
 import { UserSettingEntity } from "@modules/user-setting/entity/user-setting.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
 import { REQUEST } from "@nestjs/core";
+import { Request } from "express";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { JwtPayload } from "./strategies/jwt.strategy";
