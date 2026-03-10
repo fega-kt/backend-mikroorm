@@ -28,6 +28,7 @@
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
+    "url-join": "4.x",
     "winston": "^3.19.0",
     "zod": "^4.3.6"
   },
@@ -36,6 +37,7 @@
     "@types/lodash": "^4",
     "@types/multer": "^2.1.0",
     "@types/node": "^20.0.0",
+    "@types/url-join": "^4.0.3",
     "typescript": "^5.0.0"
   },
   "packageManager": "yarn@4.1.1+sha512.ec40d0639bb307441b945d9467139cbb88d14394baac760b52eca038b330d16542d66fef61574271534ace5a200518dabf3b53a85f1f9e4bfa37141b538a9590"
