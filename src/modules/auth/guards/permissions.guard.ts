@@ -26,7 +26,7 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException("User not found");
     }
 
-    const userPermissions: string[] = user.permissions;
+    const userPermissions: string[] = user.permissions || [];
     const hasPermission = requiredPermissions.some((permission) => userPermissions.includes(permission));
 
     if (!hasPermission) {
