@@ -1,24 +1,22 @@
 import { MikroOrmModule } from "@mikro-orm/nestjs";
 import { Module } from "@nestjs/common";
-import { JwtModule } from "@nestjs/jwt";
 
 import { RoleEntity } from "@modules/role/entity/role.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
+import { APP_GUARD } from "@nestjs/core";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
-import { JwtStrategy } from "./strategies/jwt.strategy";
+import { SupabaseAuthGuard } from "./guards/supabase-auth.guard";
 
 @Module({
-  imports: [
-    MikroOrmModule.forFeature([UserEntity, RoleEntity]),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || "secret",
-      signOptions: {
-        expiresIn: "15m", // 15 minutes
-      },
-    }),
+  imports: [MikroOrmModule.forFeature([UserEntity, RoleEntity])],
+  providers: [
+    AuthService,
+    {
+      provide: APP_GUARD,
+      useClass: SupabaseAuthGuard,
+    },
   ],
-  providers: [AuthService, JwtStrategy],
   controllers: [AuthController],
 })
 export class AuthModule {}
