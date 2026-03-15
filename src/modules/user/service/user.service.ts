@@ -33,7 +33,7 @@ export class UserService extends BaseService<UserEntity> {
       {
         limit,
         page,
-        fields: ["id", "name", "email"],
+        fields: ["id", "fullName", 'workEmail'],
       }
     );
 

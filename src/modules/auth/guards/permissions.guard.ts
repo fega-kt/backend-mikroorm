@@ -31,7 +31,7 @@ export class PermissionsGuard implements CanActivate {
 
     if (!hasPermission) {
       this.permissionLogger.debug(
-        `User ${user.id} has email ${user.email} does not have required permissions: ${requiredPermissions.join(", ")}`
+        `User ${user.id} has email ${user.loginName} does not have required permissions: ${requiredPermissions.join(", ")}`
       );
       throw new ForbiddenException("You do not have permission");
     }
