@@ -27,6 +27,13 @@ async function bootstrap() {
   if (ENV.NODE_ENV === NodeEnv.DEVELOPMENT) {
     await handleApplySwagger(app, port);
   }
+  app.enableCors({
+    origin: [
+      'http://localhost:3333',
+    ],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+  });
 
   await app.listen(port);
 

@@ -18,7 +18,7 @@ export abstract class BaseService<T extends BaseEntity> {
 
   public constructor(
     protected readonly repo: EntityRepository<T>,
-    @Inject(REQUEST) protected readonly request: Request | undefined
+    @Inject(REQUEST) protected readonly request: Request | undefined,
   ) {
     // Empty
   }
@@ -52,8 +52,8 @@ export abstract class BaseService<T extends BaseEntity> {
 
   /* ================= CREATE ================= */
   async addOne(data: RequiredEntityData<T>, options?: { user?: IUserResponse }): Promise<T> {
-    const { id } = this.getCurrentUser(options);
-    const entity = this.repo.create({ ...data, createdBy: id, updatedBy: id });
+    const baseCreate = this.getDefaultValuesForCreate(options);
+    const entity = this.repo.create({ ...data, ...baseCreate });
     await this.repo.getEntityManager().persistAndFlush(entity);
     return entity;
   }
@@ -100,7 +100,7 @@ export abstract class BaseService<T extends BaseEntity> {
   /* ================= FIND ONE ================= */
   async findOne(
     filter: FilterQuery<T>,
-    dataQuery: { fields?: readonly EntityField<T>[]; populate?: readonly EntityField<T>[] }
+    dataQuery: { fields?: readonly EntityField<T>[]; populate?: readonly EntityField<T>[] },
   ): Promise<T> {
     const { fields = ["id"], populate = [] } = dataQuery || {};
     const entity = await this.repo.findOne(filter, { fields: fields as never[], populate: populate as never[] });
@@ -123,11 +123,12 @@ export abstract class BaseService<T extends BaseEntity> {
 
   /* ================= UPDATE ================= */
   async updateOne(id: string, data: EntityData<FromEntityType<T>>, options?: { user?: IUserResponse }): Promise<T> {
+    const baseUpdate = this.getDefaultValuesForUpdate(options);
     const entity = await this.findById(id);
-    const { id: userId } = this.getCurrentUser(options);
+
     wrap(entity).assign({
       ...data,
-      updatedBy: userId,
+      ...baseUpdate,
     } as any);
 
     await this.repo.getEntityManager().flush();

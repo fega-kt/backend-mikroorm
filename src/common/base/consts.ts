@@ -1,5 +1,5 @@
 export interface IUserResponse {
   id: string;
-  email: string;
+  loginName: string;
   permissions: string[];
 }

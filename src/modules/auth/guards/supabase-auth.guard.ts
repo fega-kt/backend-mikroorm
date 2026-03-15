@@ -91,10 +91,10 @@ export class SupabaseAuthGuard implements CanActivate {
     const user = await this.userRepo.findOne(
       {
         deleted: { $ne: true }, // nếu bạn đang dùng soft delete
-        email: email,
+        loginName: email,
       },
       {
-        fields: ["id", "email", "deleted"],
+        fields: ["id", "loginName", "deleted"],
         populate: ["principal", "groups", "groups.principal"],
       }
     );
@@ -134,7 +134,7 @@ export class SupabaseAuthGuard implements CanActivate {
 
     return {
       id: user.id,
-      email: user.email,
+      loginName: user.loginName,
       permissions,
     };
   }
