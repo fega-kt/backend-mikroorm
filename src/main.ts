@@ -1,4 +1,5 @@
 import { HttpExceptionFilter } from "@common/filters/http-exception.filter";
+import { ResponseInterceptor } from "@common/interceptors/response.interceptor";
 import { ENV, NodeEnv } from "@config/env.config";
 import handleApplySwagger from "@config/swagger.config";
 import { MikroORM } from "@mikro-orm/core";
@@ -22,16 +23,17 @@ async function bootstrap() {
 
   const reflector = app.get(Reflector);
   app.useGlobalGuards(new PermissionsGuard(reflector));
+
+  app.useGlobalInterceptors(new ResponseInterceptor());
+
   const port = ENV.PORT || 3000;
 
   if (ENV.NODE_ENV === NodeEnv.DEVELOPMENT) {
     await handleApplySwagger(app, port);
   }
   app.enableCors({
-    origin: [
-      'http://localhost:3333',
-    ],
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    origin: ["http://localhost:3333"],
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true,
   });
 

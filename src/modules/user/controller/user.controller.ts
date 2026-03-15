@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
+import { IUserResponse } from "@common/base/consts";
+import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import { PermissionType } from "@modules/auth/enums/permission-type.enum";
 import { CreateUserDto } from "../dto/create-user.dto";
@@ -9,6 +11,11 @@ import { UserService } from "../service/user.service";
 @Controller("user")
 export class UserController {
   constructor(private readonly userService: UserService) {}
+
+  @Get("current-user")
+  currentUser(@CurrentUser() user: IUserResponse) {
+    return user;
+  }
 
   @Post()
   create(@Body() dto: CreateUserDto) {

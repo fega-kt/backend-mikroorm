@@ -4,9 +4,9 @@ import { Module } from "@nestjs/common";
 import { RoleEntity } from "@modules/role/entity/role.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
 import { APP_GUARD } from "@nestjs/core";
-import { AuthController } from "./auth.controller";
-import { AuthService } from "./auth.service";
+import { AuthController } from "./controller/auth.controller";
 import { SupabaseAuthGuard } from "./guards/supabase-auth.guard";
+import { AuthService } from "./service/auth.service";
 
 @Module({
   imports: [MikroOrmModule.forFeature([UserEntity, RoleEntity])],
