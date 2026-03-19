@@ -1,4 +1,4 @@
-import { PermissionType } from "@modules/auth/enums/permission-type.enum";
+import { PermissionType } from "@common/base/permission-type.enum";
 import { z } from "zod";
 
 export const createRoleValidation = z.object({

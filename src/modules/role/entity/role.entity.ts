@@ -1,6 +1,6 @@
 import { BaseEntity } from "@common/base/base.entity";
+import { PermissionType } from "@common/base/permission-type.enum";
 import { Collection, Entity, Enum, ManyToMany, Property, types } from "@mikro-orm/core";
-import { PermissionType } from "@modules/auth/enums/permission-type.enum";
 import { PrincipalEntity } from "@modules/principal/entity/principal.entity";
 
 @Entity({ collection: "roles" })

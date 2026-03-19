@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
+import { compact } from "lodash";
 import { AppRoute } from "../entity";
-import { about, access, home, outside, personalCenter, routeNest, system } from "../extra-info/order";
+import { about, access, home, outside, personalCenter, routeNest } from "../extra-info/order";
+import { SystemManagementService } from "./system-management";
 
 const aboutRouter = {
   path: "/about",
@@ -131,62 +133,9 @@ const routeNestRouter = {
   ],
 };
 
-const systemManagementRouter = {
-  path: "/system",
-  handle: {
-    icon: "SettingOutlined",
-    title: "common.menu.system",
-    order: system,
-    roles: ["admin"],
-  },
-  children: [
-    {
-      path: "/system/user",
-      component: "/system/user/index.tsx",
-      handle: {
-        icon: "UserOutlined",
-        title: "common.menu.user",
-        roles: ["admin"],
-        permissions: ["permission:button:add", "permission:button:update", "permission:button:delete"],
-      },
-    },
-    {
-      path: "/system/role",
-      component: "/system/role/index.tsx",
-      handle: {
-        icon: "TeamOutlined",
-        title: "common.menu.role",
-        roles: ["admin"],
-        permissions: ["permission:button:add", "permission:button:update", "permission:button:delete"],
-      },
-    },
-    {
-      path: "/system/menu",
-      component: "/system/menu/index.tsx",
-      handle: {
-        icon: "MenuOutlined",
-        title: "common.menu.menu",
-        roles: ["admin"],
-        permissions: ["permission:button:add", "permission:button:update", "permission:button:delete"],
-      },
-    },
-    {
-      path: "/system/dept",
-      component: "/system/dept/index.tsx",
-      handle: {
-        keepAlive: false,
-        icon: "ApartmentOutlined",
-        title: "common.menu.dept",
-        roles: ["admin"],
-        permissions: ["permission:button:add", "permission:button:update", "permission:button:delete"],
-      },
-    },
-  ],
-};
-
 @Injectable()
 export class RouteService {
-  constructor() {}
+  constructor(private readonly systemManagementRouteService: SystemManagementService) {}
 
   /**Get route by use */
 
@@ -263,7 +212,8 @@ export class RouteService {
       },
     };
 
-    return [
+    const systemManagementRouter = this.systemManagementRouteService.getRouteUserManagement();
+    return compact([
       homeRouter,
       accessRouter,
       aboutRouter,
@@ -271,6 +221,6 @@ export class RouteService {
       outsideRouter,
       personalCenterRouter,
       routeNestRouter,
-    ];
+    ]);
   }
 }

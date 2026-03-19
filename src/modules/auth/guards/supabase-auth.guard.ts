@@ -24,7 +24,7 @@ export class SupabaseAuthGuard implements CanActivate {
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>,
     @InjectRepository(RoleEntity)
-    private readonly roleEntity: EntityRepository<RoleEntity>
+    private readonly roleEntity: EntityRepository<RoleEntity>,
   ) {
     this.supabase = createClient(this.SUPABASE_URL, this.SUPABASE_JWT_PUBLISHABLE, {});
   }
@@ -96,7 +96,7 @@ export class SupabaseAuthGuard implements CanActivate {
       {
         fields: ["id", "loginName", "deleted"],
         populate: ["principal", "groups", "groups.principal"],
-      }
+      },
     );
     // 2️⃣ Nếu không tồn tại hoặc đã bị xóa
     if (!user) {
@@ -126,7 +126,7 @@ export class SupabaseAuthGuard implements CanActivate {
         usersAndGroups: { $in: principals },
         deleted: { $ne: true },
       },
-      { fields: ["id", "rights"] }
+      { fields: ["id", "rights"] },
     );
 
     const permissions = uniq(compact(roles.map((r) => r.rights || []).flat()));
@@ -136,6 +136,9 @@ export class SupabaseAuthGuard implements CanActivate {
       id: user.id,
       loginName: user.loginName,
       permissions,
+      canAccess: (pers) => {
+        return pers.some((per) => permissions?.map((item) => item).includes(per));
+      },
     };
   }
 }
