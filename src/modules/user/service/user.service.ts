@@ -15,9 +15,8 @@ import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/princi
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
 import z from "zod";
-import { UpdateUserDto } from "../dto/update-user.dto";
 import { UserEntity } from "../entity/user.entity";
-import { createUserValidation } from "../validation/user.validation";
+import { createUserValidation, updateUserValidation } from "../validation/user.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class UserService extends BaseService<UserEntity> {
@@ -98,11 +97,18 @@ export class UserService extends BaseService<UserEntity> {
     return user;
   }
 
-  async update(id: string, dto: UpdateUserDto) {
-    return await this.update(id, dto);
+  async update(id: string, data: z.infer<typeof updateUserValidation>) {
+    const { department, ...rest } = data;
+    const result = createUserValidation.safeParse(data);
+
+    if (!result.success) {
+      throw new BadRequestException(result.error.format());
+    }
+
+    return await this.updateOne(id, data);
   }
 
   async remove(id: string) {
-    return await this.remove(id);
+    return await super.remove(id);
   }
 }
