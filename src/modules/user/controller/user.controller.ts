@@ -4,9 +4,11 @@ import { IUserResponse } from "@common/base/consts";
 import { PermissionType } from "@common/base/permission-type.enum";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
-import { CreateUserDto } from "../dto/create-user.dto";
+import { ZodValidationPipe } from "@common/pipes";
+import z from "zod";
 import { UpdateUserDto } from "../dto/update-user.dto";
 import { UserService } from "../service/user.service";
+import { createUserValidation } from "../validation/user.validation";
 
 @Controller("user")
 export class UserController {
@@ -18,8 +20,11 @@ export class UserController {
   }
 
   @Post()
-  create(@Body() dto: CreateUserDto) {
-    return this.userService.create(dto);
+  create(
+    @Body(new ZodValidationPipe(createUserValidation))
+    data: z.infer<typeof createUserValidation>
+  ): Promise<void> {
+    return this.userService.create(data);
   }
 
   @Get()

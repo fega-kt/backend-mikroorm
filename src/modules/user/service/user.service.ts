@@ -1,30 +1,75 @@
-import { EntityRepository } from "@mikro-orm/mongodb";
+import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  Scope,
+  UnauthorizedException,
+} from "@nestjs/common";
 
 import { BaseService } from "@common/base/base.service";
+import { SYSTEM_DEPARTMENT_ID } from "@common/constants/system.constant";
+import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
-import { CreateUserDto } from "../dto/create-user.dto";
+import z from "zod";
 import { UpdateUserDto } from "../dto/update-user.dto";
 import { UserEntity } from "../entity/user.entity";
+import { createUserValidation } from "../validation/user.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class UserService extends BaseService<UserEntity> {
   constructor(
     @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(UserEntity)
-    private readonly userRepo: EntityRepository<UserEntity>
+    private readonly userRepo: EntityRepository<UserEntity>,
+    private readonly em: EntityManager
   ) {
     super(userRepo, request);
   }
 
-  async create(dto: CreateUserDto) {
-    const user = this.userRepo.create(dto);
+  async create(data: z.infer<typeof createUserValidation>): Promise<void> {
+    const result = createUserValidation.safeParse(data);
 
-    await this.userRepo.getEntityManager().persistAndFlush(user);
+    if (!result.success) {
+      throw new BadRequestException(result.error.format());
+    }
 
-    return user;
+    const { loginName, fullName } = data;
+    const exist = await this.userRepo.findOne({
+      loginName,
+    });
+
+    if (exist) {
+      throw new UnauthorizedException("Email already exists");
+    }
+
+    const defaulValueBase = this.getDefaultValuesForCreate();
+    return this.em.transactional(async (em) => {
+      // 1️⃣ create user
+      const user = this.userRepo.create({
+        fullName,
+        loginName,
+        department: new ObjectId(SYSTEM_DEPARTMENT_ID),
+        ...defaulValueBase,
+      });
+
+      em.persist(user);
+
+      // 2️⃣ create principal
+      const principal = em.create(PrincipalEntity, {
+        name: fullName,
+        type: PrincipalType.User,
+        user,
+        ...defaulValueBase,
+      });
+
+      em.persist(principal);
+
+      await em.flush();
+    });
   }
 
   async findAllUser(page = 1, limit = 10) {
@@ -33,7 +78,7 @@ export class UserService extends BaseService<UserEntity> {
       {
         limit,
         page,
-        fields: ["id", "fullName", 'workEmail'],
+        fields: ["id", "fullName", "workEmail"],
       }
     );
 
