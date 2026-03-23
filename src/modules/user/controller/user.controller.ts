@@ -6,9 +6,8 @@ import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import { ZodValidationPipe } from "@common/pipes";
 import z from "zod";
-import { UpdateUserDto } from "../dto/update-user.dto";
 import { UserService } from "../service/user.service";
-import { createUserValidation } from "../validation/user.validation";
+import { createUserValidation, updateUserValidation } from "../validation/user.validation";
 
 @Controller("user")
 export class UserController {
@@ -20,6 +19,7 @@ export class UserController {
   }
 
   @Post()
+  @Permissions(PermissionType.CreateUser)
   create(
     @Body(new ZodValidationPipe(createUserValidation))
     data: z.infer<typeof createUserValidation>
@@ -39,11 +39,17 @@ export class UserController {
   }
 
   @Patch(":id")
-  update(@Param("id") id: string, @Body() dto: UpdateUserDto) {
-    return this.userService.update(id, dto);
+  @Permissions(PermissionType.UpdateUser)
+  update(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateUserValidation))
+    data: z.infer<typeof updateUserValidation>
+  ) {
+    return this.userService.update(id, data);
   }
 
   @Delete(":id")
+  @Permissions(PermissionType.DeleteUser)
   remove(@Param("id") id: string) {
     return this.userService.remove(id);
   }
