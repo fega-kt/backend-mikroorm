@@ -1,13 +1,6 @@
 import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  NotFoundException,
-  Scope,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
 
 import { BaseService } from "@common/base/base.service";
 import { SYSTEM_DEPARTMENT_ID } from "@common/constants/system.constant";
@@ -42,7 +35,7 @@ export class UserService extends BaseService<UserEntity> {
     });
 
     if (exist) {
-      throw new UnauthorizedException("Email already exists");
+      throw new ConflictException("Email already exists");
     }
 
     const defaulValueBase = this.getDefaultValuesForCreate();
