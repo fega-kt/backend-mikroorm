@@ -49,4 +49,38 @@ export enum PermissionType {
 
   /** xóa department */
   DeleteDeparment = "permission:department:delete",
+
+  /** ===== PROJECT ===== */
+
+  /** vào menu project */
+  MenuProject = "permission:menu:project",
+
+  /** xem chi tiết project */
+  ViewProjectDetail = "permission:project:view",
+
+  /** tạo project */
+  CreateProject = "permission:project:create",
+
+  /** cập nhật project */
+  UpdateProject = "permission:project:update",
+
+  /** xóa project */
+  DeleteProject = "permission:project:delete",
+
+  /** ===== TASK ===== */
+
+  /** vào menu task */
+  MenuTask = "permission:menu:task",
+
+  /** xem chi tiết task */
+  ViewTaskDetail = "permission:task:view",
+
+  /** tạo task */
+  CreateTask = "permission:task:create",
+
+  /** cập nhật task */
+  UpdateTask = "permission:task:update",
+
+  /** xóa task */
+  DeleteTask = "permission:task:delete",
 }
