@@ -90,4 +90,11 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
 
     return updated;
   }
+  async getList(): Promise<DepartmentEntity[]> {
+    const { data } = await this.findAll(
+      { deleted: { $ne: true } },
+      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status"] }
+    );
+    return data;
+  }
 }
