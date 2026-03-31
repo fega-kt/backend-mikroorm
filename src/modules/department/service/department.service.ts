@@ -14,7 +14,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   constructor(
     @InjectRepository(DepartmentEntity)
     private readonly departmentRepo: EntityRepository<DepartmentEntity>,
-    @Inject(REQUEST) protected request: Request | undefined
+    @Inject(REQUEST) protected request: Request | undefined,
   ) {
     super(departmentRepo, request);
   }
@@ -36,7 +36,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
           $or: [{ parent: { $exists: false } }, { parent: null }],
           deleted: { $ne: true },
         },
-        { fields: ["id", "code"] }
+        { fields: ["id", "code"] },
       );
       if (root) {
         throw new ConflictException("Root department already exists");
@@ -59,7 +59,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
 
     const department = await this.findOne(
       { id, deleted: { $ne: true } },
-      { fields: ["id", "code", "parent", "parentCode"] }
+      { fields: ["id", "code", "parent", "parentCode"] },
     );
 
     if (!department) {
@@ -72,6 +72,9 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       if (parentId === id) {
         throw new ConflictException("Department cannot be its own parent");
       }
+
+      // 🚀 check cycle
+      await this.validateNoCycle(id, parentId);
 
       parent = await this.findOne({ id: parentId, deleted: { $ne: true } }, { fields: ["id", "code", "parentCode"] });
 
@@ -90,10 +93,30 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
 
     return updated;
   }
+
+  private async validateNoCycle(currentId: string, parentId: string): Promise<void> {
+    let currentParentId: string | null = parentId;
+
+    while (currentParentId) {
+      if (currentParentId === currentId) {
+        throw new ConflictException("Cyclic parent detected");
+      }
+
+      const parent = await this.departmentRepo.findOne(
+        { id: currentParentId, deleted: { $ne: true } },
+        { fields: ["id", "parent"], populate: ["parent"] },
+      );
+
+      if (!parent) break;
+
+      currentParentId = parent.parent?.id ?? null;
+    }
+  }
+
   async getList(): Promise<DepartmentEntity[]> {
     const { data } = await this.findAll(
       { deleted: { $ne: true } },
-      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status"] }
+      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status"] },
     );
     return data;
   }
