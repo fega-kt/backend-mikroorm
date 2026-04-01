@@ -1,10 +1,11 @@
-import { EntityData, EntityField, FindOptions, FromEntityType, RequiredEntityData, wrap } from "@mikro-orm/core";
+import { EntityData, EntityField, FindOneOptions, FindOptions, FromEntityType, RequiredEntityData, wrap } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery, ObjectId } from "@mikro-orm/mongodb";
 import { Inject, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
 import { BaseEntity } from "./base.entity";
 import { IUserResponse } from "./consts";
+import { EntityPath } from "./entity-path.type";
 
 export interface PaginationQuery<T> {
   page?: number;
@@ -100,11 +101,12 @@ export abstract class BaseService<T extends BaseEntity> {
   /* ================= FIND ONE ================= */
   async findOne(
     filter: FilterQuery<T>,
-    dataQuery: { fields?: readonly EntityField<T>[]; populate?: readonly EntityField<T>[] },
+    options?: Omit<FindOneOptions<T>, "fields" | "populate"> & {
+      fields?: readonly EntityPath<T>[];
+      populate?: readonly EntityPath<T>[];
+    },
   ): Promise<T> {
-    const { fields = ["id"], populate = [] } = dataQuery || {};
-    const entity = await this.repo.findOne(filter, { fields: fields as never[], populate: populate as never[] });
-
+    const entity = await this.repo.findOne(filter, (options ?? {}) as any);
     return entity;
   }
 
