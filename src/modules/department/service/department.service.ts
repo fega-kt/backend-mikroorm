@@ -116,7 +116,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   async getList(): Promise<DepartmentEntity[]> {
     const { data } = await this.findAll(
       { deleted: { $ne: true } },
-      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status"] },
+      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status", 'parentCode'] },
     );
     return data;
   }
