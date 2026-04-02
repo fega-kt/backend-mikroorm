@@ -20,7 +20,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   }
 
   async create(data: z.infer<typeof createDepartmentValidation>) {
-    const { parentId, ...rest } = data;
+    let { parent: parentId, ...rest } = data;
 
     let parent: DepartmentEntity | null = null;
 
@@ -55,7 +55,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   }
 
   async update(id: string, data: z.infer<typeof updateDepartmentValidation>) {
-    const { parentId, ...rest } = data;
+    let { parent: parentId, ...rest } = data;
 
     const department = await this.findOne(
       { id, deleted: { $ne: true } },
@@ -116,8 +116,21 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   async getList(): Promise<DepartmentEntity[]> {
     const { data } = await this.findAll(
       { deleted: { $ne: true } },
-      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status"] },
+      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status", 'parentCode'] },
     );
     return data;
+  }
+
+  async getDetail(id: string): Promise<DepartmentEntity> {
+    const department = await this.findOne(
+      { id, deleted: { $ne: true } },
+      {
+        fields: ["id", "code", "name", "parent", 'status'],
+      },
+    );
+    if (!department) {
+      throw new NotFoundException("Department not found");
+    }
+    return department;
   }
 }

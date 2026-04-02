@@ -36,4 +36,10 @@ export class DepartmentController {
   getList(): Promise<DepartmentEntity[]> {
     return this.departmentService.getList();
   }
+
+  @Get(":id")
+  @Permissions(PermissionType.ViewDeparmentDetail)
+  getDetail(@Param("id", IdValidationPipe) id: string): Promise<DepartmentEntity> {
+    return this.departmentService.getDetail(id);
+  }
 }
