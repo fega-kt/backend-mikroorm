@@ -34,6 +34,7 @@ export class UserController {
   }
 
   @Get(":id")
+  @Permissions(PermissionType.ViewUserDetail)
   findOne(@Param("id") id: string) {
     return this.userService.findOne(id);
   }
