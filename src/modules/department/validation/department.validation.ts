@@ -14,6 +14,8 @@ export const createDepartmentValidation = z.object({
     .max(255, "Name must be less than 255 characters")
     .regex(/^[\p{L}]+(?:\s[\p{L}]+)*$/u, "Name must contain only letters and single spaces between words"),
   parent: z.string().optional().nullable(),
+  manager: z.string().optional().nullable(),
+  deputy: z.string().optional().nullable(),
   status: z.nativeEnum(DepartmentStatus).optional().default(DepartmentStatus.ACTIVE),
 });
 
@@ -25,5 +27,7 @@ export const updateDepartmentValidation = z.object({
     .regex(/^[\p{L}]+(?:\s[\p{L}]+)*$/u, "Name must contain only letters and single spaces between words")
     .optional(),
   parent: z.string().optional().nullable(),
+  manager: z.string().optional().nullable(),
+  deputy: z.string().optional().nullable(),
   status: z.nativeEnum(DepartmentStatus).optional().default(DepartmentStatus.ACTIVE),
 });

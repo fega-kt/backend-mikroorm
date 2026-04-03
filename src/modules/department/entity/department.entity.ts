@@ -25,6 +25,12 @@ export class DepartmentEntity extends BaseEntity {
   @OneToMany({ cascade: [], entity: () => UserEntity, mappedBy: "department" })
   users = new Collection<UserEntity>(this);
 
+  @ManyToOne({ cascade: [], entity: () => UserEntity, nullable: true })
+  manager?: UserEntity; // trưởng phòng
+
+  @ManyToOne({ cascade: [], entity: () => UserEntity, nullable: true })
+  deputy?: UserEntity; // phó phòng
+
   @Property({ type: types.integer, default: DepartmentStatus.ACTIVE })
   status!: DepartmentStatus;
 }
