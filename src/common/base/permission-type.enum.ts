@@ -83,4 +83,8 @@ export enum PermissionType {
 
   /** xóa task */
   DeleteTask = "permission:task:delete",
+
+  /** giao task */
+AssignTask = "permission:task:assign",
+
 }
