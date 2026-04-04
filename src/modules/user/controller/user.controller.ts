@@ -4,7 +4,7 @@ import { IUserResponse } from "@common/base/consts";
 import { PermissionType } from "@common/base/permission-type.enum";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
-import { ZodValidationPipe } from "@common/pipes";
+import { IdValidationPipe, ZodValidationPipe } from "@common/pipes";
 import z from "zod";
 import { UserService } from "../service/user.service";
 import { createUserValidation, updateUserValidation } from "../validation/user.validation";
@@ -35,14 +35,14 @@ export class UserController {
 
   @Get(":id")
   @Permissions(PermissionType.ViewUserDetail)
-  findOne(@Param("id") id: string) {
-    return this.userService.findOne(id);
+  getDetail(@Param("id", new IdValidationPipe()) id: string) {
+    return this.userService.getDetail(id);
   }
 
   @Patch(":id")
   @Permissions(PermissionType.UpdateUser)
   update(
-    @Param("id") id: string,
+    @Param("id", new IdValidationPipe()) id: string,
     @Body(new ZodValidationPipe(updateUserValidation))
     data: z.infer<typeof updateUserValidation>
   ) {
@@ -51,7 +51,7 @@ export class UserController {
 
   @Delete(":id")
   @Permissions(PermissionType.DeleteUser)
-  remove(@Param("id") id: string) {
+  remove(@Param("id", new IdValidationPipe()) id: string) {
     return this.userService.remove(id);
   }
 }

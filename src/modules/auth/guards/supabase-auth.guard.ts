@@ -94,7 +94,7 @@ export class SupabaseAuthGuard implements CanActivate {
         loginName: email,
       },
       {
-        fields: ["id", "loginName", "deleted"],
+        fields: ["id", "loginName", "deleted", "isActive"],
         populate: ["principal", "groups", "groups.principal"],
       },
     );
@@ -108,6 +108,11 @@ export class SupabaseAuthGuard implements CanActivate {
     if (user.deleted) {
       this.handleLogging(email);
       throw new UnauthorizedException("User deleted");
+    }
+
+    if (!user.isActive) {
+      this.handleLogging(email);
+      throw new UnauthorizedException("User is inactive");
     }
 
     // 4️⃣ lấy role từ user.groups -> group.principal -> principal.roles -> roleEntity để gán vào req.user.permissions

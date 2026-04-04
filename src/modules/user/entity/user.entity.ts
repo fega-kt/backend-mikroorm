@@ -28,6 +28,9 @@ export class UserEntity extends BaseEntity {
   })
   public principal!: PrincipalEntity;
 
+  @Property({ type: types.boolean, default: true })
+  isActive: boolean = true;
+
   @ManyToMany({ cascade: [], entity: () => GroupEntity, inversedBy: "users" })
   public groups = new Collection<GroupEntity>(this);
 }

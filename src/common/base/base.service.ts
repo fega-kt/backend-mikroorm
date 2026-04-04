@@ -140,7 +140,14 @@ export abstract class BaseService<T extends BaseEntity> {
 
   /* ================= SOFT DELETE ================= */
   async remove(id: string): Promise<{ message: string }> {
-    const entity = await this.findById(id);
+    const entity = await this.repo.findOne({
+      id,
+      deleted: { $ne: true },
+    } as FilterQuery<T>);
+
+    if (!entity) {
+      throw new NotFoundException(`${this.repo.getEntityName()} not found or already deleted`);
+    }
 
     this.repo.assign(entity, { deleted: true } as any);
     await this.repo.getEntityManager().flush();
