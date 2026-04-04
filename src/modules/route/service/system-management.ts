@@ -19,6 +19,8 @@ export class SystemManagementService {
     const canViewUserList = currentUser.canAccess([PermissionType.MenuUser]);
     const canViewRoleList = currentUser.canAccess([PermissionType.MenuRole]);
     const canViewDepartmentList = currentUser.canAccess([PermissionType.MenuDeparment]);
+    const canViewGroupList = currentUser.canAccess([PermissionType.MenuGroup]);
+
     // {
     //           path: "/system/menu",
     //           component: "/system/menu/index.tsx",
@@ -30,6 +32,19 @@ export class SystemManagementService {
     //           },
     //         },
     const children = [];
+
+    if (canViewGroupList) {
+      children.push({
+        path: "/system/group",
+        component: "/system/group/index.tsx",
+        handle: {
+          icon: "UserOutlined",
+          title: "common.menu.group",
+          roles: [PermissionType.MenuGroup],
+          permissions: [],
+        },
+      });
+    }
 
     if (canViewUserList) {
       children.push({
