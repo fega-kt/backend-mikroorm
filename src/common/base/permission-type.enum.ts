@@ -87,4 +87,23 @@ export enum PermissionType {
   /** giao task */
 AssignTask = "permission:task:assign",
 
+
+ /** ===== GROUP ===== */
+
+  /** vào menu group */
+  MenuGroup = "permission:menu:group",
+
+  /** xem chi tiết group */
+  ViewGroupDetail = "permission:group:view",
+
+  /** tạo group */
+  CreateGroup = "permission:group:create",
+
+  /** cập nhật group */
+  UpdateGroup= "permission:group:update",
+
+  /** xóa group */
+  DeleteGroup= "permission:group:delete",
+
+
 }

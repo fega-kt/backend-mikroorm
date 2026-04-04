@@ -3,7 +3,7 @@ import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
 import z from "zod";
@@ -126,5 +126,31 @@ export class GroupService extends BaseService<GroupEntity> {
 
       return true;
     });
+  }
+  async getList(page = 1, limit = 10) {
+    const { data, total } = await this.paginate(
+      { deleted: { $ne: true } },
+      {
+        limit,
+        page,
+        fields: ["id", "name", "description", "createdAt"],
+      }
+    );
+
+    return { data, total };
+  }
+  async getDetail(id: string): Promise<GroupEntity> {
+    const group = await this.findOne(
+      { id, deleted: { $ne: true } },
+      {
+        populate: ["users"],
+      }
+    );
+
+    if (!group) {
+      throw new NotFoundException("Group not found or deleted");
+    }
+
+    return group;
   }
 }
