@@ -1,6 +1,8 @@
+import { ENV } from "@config/env.config";
 import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
+import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
 
 import { BaseService } from "@common/base/base.service";
 import { SYSTEM_DEPARTMENT_ID } from "@common/constants/system.constant";
@@ -13,6 +15,8 @@ import { createUserValidation, updateUserValidation } from "../validation/user.v
 
 @Injectable({ scope: Scope.REQUEST })
 export class UserService extends BaseService<UserEntity> {
+  private readonly supabaseAdmin: SupabaseClient;
+
   constructor(
     @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(UserEntity)
@@ -20,7 +24,16 @@ export class UserService extends BaseService<UserEntity> {
     private readonly em: EntityManager
   ) {
     super(userRepo, request);
+    this.supabaseAdmin = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
   }
+
+
+
 
   async create(data: z.infer<typeof createUserValidation>): Promise<void> {
     const result = createUserValidation.safeParse(data);
@@ -29,13 +42,39 @@ export class UserService extends BaseService<UserEntity> {
       throw new BadRequestException(result.error.format());
     }
 
-    const { loginName, fullName } = data;
+    const { loginName, fullName, workEmail, password, department, isActive } = data;
     const exist = await this.userRepo.findOne({
       loginName,
     });
 
     if (exist) {
-      throw new ConflictException("Email already exists");
+      throw new ConflictException("Email already exists in local database");
+    }
+
+    // 2️⃣ Check in Supabase (Fallback to listUsers if auth schema is restricted)
+    const { data: supabaseResponse, error: supabaseError } = await this.supabaseAdmin.auth.admin.listUsers();
+
+    if (supabaseError || !supabaseResponse) {
+      throw new BadRequestException("Failed to check Supabase user: " + supabaseError?.message);
+    }
+
+    const supabaseUser = supabaseResponse.users.find((u: User) => u.email === loginName);
+
+    let authUser = supabaseUser;
+
+    if (!authUser) {
+      const { data: createdAuthUser, error: createSupabaseError } = await this.supabaseAdmin.auth.admin.createUser({
+        email: loginName,
+        password: password,
+        email_confirm: true,
+        user_metadata: { fullName },
+      });
+
+      if (createSupabaseError) {
+        throw new BadRequestException("Failed to create user in Supabase Auth: " + createSupabaseError.message);
+      }
+
+      authUser = createdAuthUser.user;
     }
 
     const defaulValueBase = this.getDefaultValuesForCreate();
@@ -44,7 +83,9 @@ export class UserService extends BaseService<UserEntity> {
       const user = this.userRepo.create({
         fullName,
         loginName,
-        department: new ObjectId(SYSTEM_DEPARTMENT_ID),
+        workEmail,
+        isActive: isActive !== undefined ? isActive : true,
+        department: department ? new ObjectId(department) : new ObjectId(SYSTEM_DEPARTMENT_ID),
         ...defaulValueBase,
       });
 
@@ -70,7 +111,7 @@ export class UserService extends BaseService<UserEntity> {
       {
         limit,
         page,
-        fields: ["id", "fullName", "workEmail"],
+        fields: ["id", "fullName", "workEmail", 'createdAt', 'isActive', 'loginName'],
       }
     );
 
