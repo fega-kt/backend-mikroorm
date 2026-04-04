@@ -7,3 +7,10 @@ export const createRoleValidation = z.object({
   rights: z.array(z.nativeEnum(PermissionType)).min(1, "Role must have at least one permission"),
   usersAndGroups: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid user ID format")),
 });
+
+export const updateRoleValidation = z.object({
+  name: z.string().min(1, "Role name is required").max(100).optional(),
+  description: z.string().max(500).optional(),
+  rights: z.array(z.nativeEnum(PermissionType)).min(1, "Role must have at least one permission").optional(),
+  usersAndGroups: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid user ID format")).optional(),
+});
