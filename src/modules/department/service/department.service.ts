@@ -146,7 +146,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     const department = await this.findOne(
       { id, deleted: { $ne: true } },
       {
-        fields: ["id", "code", "name", "parent", 'status', 'manager', 'deputy', 'manager.id', 'manager.fullName', 'deputy.id', 'deputy.fullName'],
+        fields: ["id", "code", "name", "parent", 'status', 'manager', 'deputy', 'manager.id', 'manager.fullName', 'manager.avatar', 'deputy.id', 'deputy.fullName', 'deputy.avatar', 'deputy.workEmail', 'manager.workEmail'],
         populate: ['manager', 'deputy']
       },
     );
