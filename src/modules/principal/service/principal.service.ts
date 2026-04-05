@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { FilterQuery } from "@mikro-orm/core";
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Inject, Injectable } from "@nestjs/common";
@@ -14,5 +15,28 @@ export class PrincipalService extends BaseService<PrincipalEntity> {
     @Inject(REQUEST) protected request: Request | undefined
   ) {
     super(principalRepo, request);
+  }
+
+  async findAllPrincipal(page = 1, limit = 10, search?: string) {
+    const filter: FilterQuery<PrincipalEntity> = { deleted: { $ne: true } };
+    if (search) {
+      filter.name = { $re: search, $options: "i" } as any;
+    }
+
+    const { data, total } = await this.paginate(filter, {
+      page,
+      limit,
+      populate: ["user", "group"],
+      fields: [
+        "id",
+        "name",
+        "type",
+        "description",
+        "user",
+        "group"
+      ],
+    });
+
+    return { data, total };
   }
 }
