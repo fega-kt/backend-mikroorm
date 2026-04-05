@@ -114,7 +114,7 @@ export class UserService extends BaseService<UserEntity> {
       {
         limit,
         page,
-        fields: ["id", "fullName", "workEmail", 'createdAt', 'isActive', 'loginName'],
+        fields: ["id", "fullName", "workEmail", 'createdAt', 'isActive', 'loginName', 'avatar'],
       }
     );
 
