@@ -3,6 +3,7 @@ import { z } from "zod";
 export const createUserValidation = z.object({
   loginName: z.string().trim().min(1, "Email is required").email("Invalid email format"),
   workEmail: z.string().trim().email("Invalid email format").optional(),
+  phoneNumber: z.string().trim().regex(/^[0-9+ ]+$/, "Invalid phone number format").optional(),
   fullName: z
     .string()
     .trim()
@@ -30,5 +31,7 @@ export const updateUserValidation = z.object({
     .optional(),
   workEmail: z.string().trim().email("Invalid email format").optional(),
   avatar: z.string().trim().optional(),
+  phoneNumber: z.string().trim().regex(/^[0-9+ ]+$/, "Invalid phone number format").optional(),
+  description: z.string().trim().max(1000).optional(),
   department: z.string().trim().optional(),
 });

@@ -5,8 +5,10 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
 
 import { BaseService } from "@common/base/base.service";
+import { STORAGE_PATH } from "@common/constants/storage.constant";
 import { SYSTEM_DEPARTMENT_ID } from "@common/constants/system.constant";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
+import { UploadService } from "@modules/upload/service/upload.service";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
 import z from "zod";
@@ -21,7 +23,8 @@ export class UserService extends BaseService<UserEntity> {
     @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>,
-    private readonly em: EntityManager
+    private readonly em: EntityManager,
+    private readonly uploadService: UploadService
   ) {
     super(userRepo, request);
     this.supabaseAdmin = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY, {
@@ -137,8 +140,7 @@ export class UserService extends BaseService<UserEntity> {
   }
 
   async update(id: string, data: z.infer<typeof updateUserValidation>) {
-    const { department, ...rest } = data;
-    const result = createUserValidation.safeParse(data);
+    const result = updateUserValidation.safeParse(data);
 
     if (!result.success) {
       throw new BadRequestException(result.error.format());
@@ -149,5 +151,11 @@ export class UserService extends BaseService<UserEntity> {
 
   async remove(id: string) {
     return await super.remove(id);
+  }
+
+  async uploadAvatar(id: string, file: Express.Multer.File) {
+    const { url } = await this.uploadService.upload(file, `${STORAGE_PATH.USER_AVATAR}/${id}`);
+    await this.updateOne(id, { avatar: url });
+    return url;
   }
 }

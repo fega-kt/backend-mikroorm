@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, FileTypeValidator, Get, MaxFileSizeValidator, Param, ParseFilePipe, Patch, Post, Query, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 
 import { IUserResponse } from "@common/base/consts";
 import { PermissionType } from "@common/base/permission-type.enum";
@@ -16,6 +17,15 @@ export class UserController {
   @Get("current-user")
   currentUser(@CurrentUser() user: IUserResponse) {
     return user;
+  }
+
+  @Patch("profile")
+  updateProfile(
+    @CurrentUser() user: IUserResponse,
+    @Body(new ZodValidationPipe(updateUserValidation))
+    data: z.infer<typeof updateUserValidation>
+  ) {
+    return this.userService.update(user.id, data);
   }
 
   @Post()
@@ -53,5 +63,22 @@ export class UserController {
   @Permissions(PermissionType.DeleteUser)
   remove(@Param("id", new IdValidationPipe()) id: string) {
     return this.userService.remove(id);
+  }
+
+  @Post("avatar")
+  @UseInterceptors(FileInterceptor("file"))
+  async uploadAvatar(
+    @CurrentUser() user: IUserResponse,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 2 }), // 2MB
+          new FileTypeValidator({ fileType: "image/*" }),
+        ],
+      })
+    )
+    file: Express.Multer.File
+  ) {
+    return this.userService.uploadAvatar(user.id, file);
   }
 }

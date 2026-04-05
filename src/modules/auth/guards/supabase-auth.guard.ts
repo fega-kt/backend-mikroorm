@@ -94,8 +94,8 @@ export class SupabaseAuthGuard implements CanActivate {
         loginName: email,
       },
       {
-        fields: ["id", "loginName", "deleted", "isActive"],
-        populate: ["principal", "groups", "groups.principal"],
+        fields: ["id", "loginName", "deleted", "isActive", "fullName", "workEmail", "avatar", "phoneNumber", "description", 'department.id', 'department.name', 'department.code'],
+        populate: ["principal", "groups", "groups.principal", 'department'],
       },
     );
     // 2️⃣ Nếu không tồn tại hoặc đã bị xóa
@@ -140,7 +140,13 @@ export class SupabaseAuthGuard implements CanActivate {
     return {
       id: user.id,
       loginName: user.loginName,
+      fullName: user.fullName,
+      avatar: user.avatar,
+      workEmail: user.workEmail,
+      phoneNumber: user.phoneNumber,
+      description: user.description,
       permissions,
+      department: user.department,
       canAccess: (pers) => {
         return pers.some((per) => permissions?.map((item) => item).includes(per));
       },
