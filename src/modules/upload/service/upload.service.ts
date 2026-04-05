@@ -15,7 +15,7 @@ export class UploadService {
     forcePathStyle: true,
   });
 
-  async upload(file: Express.Multer.File, path: string = "test") {
+  async upload(file: Express.Multer.File, path: string = "uploads") {
     const key = urlJoin([path, `${randomUUID()}-${file.originalname}`], {
       removeLeadingSlash: true,
       removeTrailingSlash: true,

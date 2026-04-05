@@ -12,6 +12,9 @@ export class UserEntity extends BaseEntity {
   @Property({ type: types.string, nullable: true })
   workEmail?: string;
 
+  @Property({ type: types.string, nullable: true })
+  phoneNumber?: string;
+
   @Property({ type: types.string })
   fullName!: string;
 
@@ -33,4 +36,7 @@ export class UserEntity extends BaseEntity {
 
   @ManyToMany({ cascade: [], entity: () => GroupEntity, inversedBy: "users" })
   public groups = new Collection<GroupEntity>(this);
+
+  @Property({ type: types.string, nullable: true })
+  description?: string;
 }
