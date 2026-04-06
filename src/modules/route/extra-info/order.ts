@@ -1,5 +1,6 @@
 export const home = 1;
 export const access = 10;
+export const projectTask = 15;
 export const routeNest = 20;
 
 export const outside = 40;

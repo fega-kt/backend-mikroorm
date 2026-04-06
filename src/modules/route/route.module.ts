@@ -2,12 +2,13 @@ import { MikroOrmModule } from "@mikro-orm/nestjs";
 import { Module } from "@nestjs/common";
 
 import { RouteController } from "./controller/route.controller";
+import { ProjectManagementRouteService } from "./service/project-management";
 import { RouteService } from "./service/route.service";
 import { SystemManagementService } from "./service/system-management";
 
 @Module({
   imports: [MikroOrmModule.forFeature([])],
-  providers: [RouteService, SystemManagementService],
+  providers: [RouteService, SystemManagementService, ProjectManagementRouteService],
   controllers: [RouteController],
   exports: [RouteService],
 })
