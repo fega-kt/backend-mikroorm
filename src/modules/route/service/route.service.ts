@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { compact } from "lodash";
 import { AppRoute } from "../entity";
 import { about, access, home, outside, personalCenter, routeNest } from "../extra-info/order";
+import { ProjectManagementRouteService } from "./project-management";
 import { SystemManagementService } from "./system-management";
 
 const aboutRouter = {
@@ -135,7 +136,10 @@ const routeNestRouter = {
 
 @Injectable()
 export class RouteService {
-  constructor(private readonly systemManagementRouteService: SystemManagementService) {}
+  constructor(
+    private readonly systemManagementRouteService: SystemManagementService,
+    private readonly projectManagementRouteService: ProjectManagementRouteService
+  ) {}
 
   /**Get route by use */
 
@@ -213,10 +217,12 @@ export class RouteService {
     };
 
     const systemManagementRouter = this.systemManagementRouteService.getRouteUserManagement();
+    const projectManagementRouter = this.projectManagementRouteService.getRouteProjectManagement();
     return compact([
       homeRouter,
       accessRouter,
       aboutRouter,
+      projectManagementRouter,
       systemManagementRouter,
       outsideRouter,
       personalCenterRouter,
