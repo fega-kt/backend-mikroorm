@@ -1,4 +1,4 @@
-import { EntityData, EntityField, FindOneOptions, FindOptions, FromEntityType, RequiredEntityData, wrap } from "@mikro-orm/core";
+import { EntityData, FindOneOptions, FindOptions, FromEntityType, RequiredEntityData, wrap } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery, ObjectId } from "@mikro-orm/mongodb";
 import { Inject, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
@@ -10,8 +10,8 @@ import { EntityPath } from "./entity-path.type";
 export interface PaginationQuery<T> {
   page?: number;
   limit?: number;
-  fields?: readonly EntityField<T>[];
-  populate?: readonly EntityField<T>[];
+  fields?: readonly EntityPath<T>[];
+  populate?: readonly EntityPath<T>[];
 }
 
 export abstract class BaseService<T extends BaseEntity> {
