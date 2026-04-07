@@ -1,6 +1,7 @@
 import { BaseEntity } from "@common/base/base.entity";
-import { Entity, Enum, ManyToOne, Property, types } from "@mikro-orm/core";
+import { Collection, Entity, Enum, ManyToMany, ManyToOne, Property, types } from "@mikro-orm/core";
 import { ProjectEntity } from "@modules/project/entity/project.entity";
+import { AttachmentEntity } from "@modules/upload/entity/attachment.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
 
 export enum TaskStatus {
@@ -49,4 +50,7 @@ export class TaskEntity extends BaseEntity {
 
   @Property({ type: types.integer, default: 0 })
   order: number = 0;
+
+  @ManyToMany({ entity: () => AttachmentEntity, cascade: [] })
+  attachments = new Collection<AttachmentEntity>(this);
 }
