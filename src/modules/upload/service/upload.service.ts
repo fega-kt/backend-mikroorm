@@ -1,8 +1,12 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { urlJoin } from "@common/utils/url-join";
 import { ENV } from "@config/env.config";
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "crypto";
+import * as path from "path";
+import { fromBuffer } from "file-type";
+import { ALLOWED_MIME_TYPES, EXT_MIME_MAP, INVALID_FILENAME_CHARS, MAX_FILENAME_LENGTH } from "../upload.constants";
+
 @Injectable()
 export class UploadService {
   private s3 = new S3Client({
@@ -15,8 +19,51 @@ export class UploadService {
     forcePathStyle: true,
   });
 
-  async upload(file: Express.Multer.File, path: string = "uploads") {
-    const key = urlJoin([path, `${randomUUID()}-${file.originalname}`], {
+  private async validateFile(file: Express.Multer.File): Promise<void> {
+    const filename = file.originalname.trim();
+
+    if (!filename || filename.trim().length === 0) {
+      throw new BadRequestException("Filename cannot be empty");
+    }
+
+    if (filename.length > MAX_FILENAME_LENGTH) {
+      throw new BadRequestException(`Filename must not exceed ${MAX_FILENAME_LENGTH} characters`);
+    }
+
+    if (INVALID_FILENAME_CHARS.test(filename)) {
+      throw new BadRequestException("Filename contains invalid characters");
+    }
+
+    const ext = path.extname(filename).toLowerCase();
+    if (!ext) {
+      throw new BadRequestException("Filename must have an extension");
+    }
+
+    const allowedMimesForExt = EXT_MIME_MAP[ext];
+    if (!allowedMimesForExt) {
+      throw new BadRequestException(`Extension "${ext}" is not allowed`);
+    }
+
+    const detected = await fromBuffer(file.buffer);
+    const actualMime = detected?.mime;
+
+    if (!actualMime || !ALLOWED_MIME_TYPES.includes(actualMime)) {
+      throw new BadRequestException(
+        `Actual file content type "${actualMime ?? "unknown"}" is not allowed`,
+      );
+    }
+
+    if (!allowedMimesForExt.includes(actualMime)) {
+      throw new BadRequestException(
+        `File content type "${actualMime}" does not match extension "${ext}"`,
+      );
+    }
+  }
+
+  async upload(file: Express.Multer.File, filePath: string = "uploads") {
+    await this.validateFile(file);
+
+    const key = urlJoin([filePath, `${randomUUID()}-${file.originalname}`], {
       removeLeadingSlash: true,
       removeTrailingSlash: true,
     });
@@ -27,7 +74,7 @@ export class UploadService {
         Key: key,
         Body: file.buffer,
         ContentType: file.mimetype,
-      })
+      }),
     );
 
     return {
