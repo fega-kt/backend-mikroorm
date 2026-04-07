@@ -16,26 +16,19 @@ export class ProjectController {
     @Body(new ZodValidationPipe(createProjectValidation))
     data: z.infer<typeof createProjectValidation>
   ) {
-    return this.projectService.addOne(data);
+    return this.projectService.createProject(data);
   }
 
   @Get()
   @Permissions(PermissionType.MenuProject)
   findAll(@Query("page") page = 1, @Query("limit") limit = 10) {
-    return this.projectService.paginate(
-      { deleted: { $ne: true } },
-      {
-        limit: Number(limit),
-        page: Number(page),
-        fields: ["id", "name", "description", "owner", "startDate", "dueDate"],
-      }
-    );
+    return this.projectService.getProjects(Number(page), Number(limit));
   }
 
   @Get(":id")
   @Permissions(PermissionType.ViewProjectDetail)
   findOne(@Param("id") id: string) {
-    return this.projectService.findById(id);
+    return this.projectService.getProjectById(id);
   }
 
   @Patch(":id")
