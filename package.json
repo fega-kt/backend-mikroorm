@@ -21,6 +21,7 @@
     "@nestjs/swagger": "^11.2.6",
     "@supabase/supabase-js": "^2.99.1",
     "bcrypt": "^5.1.0",
+    "file-type": "16",
     "jose": "5",
     "lodash": "^4.17.23",
     "multer": "^2.1.1",
