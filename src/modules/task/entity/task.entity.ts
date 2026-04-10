@@ -1,6 +1,7 @@
 import { BaseEntity } from "@common/base/base.entity";
 import { Collection, Entity, Enum, ManyToMany, ManyToOne, Property, types } from "@mikro-orm/core";
 import { ProjectEntity } from "@modules/project/entity/project.entity";
+import { SectionEntity } from "@modules/project/entity/section.entity";
 import { AttachmentEntity } from "@modules/upload/entity/attachment.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
 
@@ -30,6 +31,12 @@ export class TaskEntity extends BaseEntity {
   @ManyToOne({ cascade: [], entity: () => ProjectEntity })
   project!: ProjectEntity;
 
+  @ManyToOne({ cascade: [], entity: () => SectionEntity, nullable: true })
+  section?: SectionEntity;
+
+  @ManyToOne({ cascade: [], entity: () => TaskEntity, nullable: true })
+  parentTask?: TaskEntity;
+
   @Enum(() => TaskStatus)
   status!: TaskStatus;
 
@@ -50,6 +57,19 @@ export class TaskEntity extends BaseEntity {
 
   @Property({ type: types.integer, default: 0 })
   order: number = 0;
+
+  @Property({ type: types.float, nullable: true })
+  estimatedHours?: number;
+
+  @Property({ type: types.float, nullable: true })
+  actualHours?: number;
+
+  @Property({ type: types.array, nullable: true })
+  labels?: string[];
+
+  /** Materialized path: /<id> hoặc /<parentId>/.../<id> */
+  @Property({ type: types.string })
+  path!: string;
 
   @ManyToMany({ entity: () => AttachmentEntity, cascade: [] })
   attachments = new Collection<AttachmentEntity>(this);

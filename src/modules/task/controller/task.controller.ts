@@ -4,7 +4,13 @@ import { ZodValidationPipe } from "@common/pipes";
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import z from "zod";
 import { TaskService } from "../service/task.service";
-import { createTaskValidation, updateTaskValidation } from "../validation/task.validation";
+import {
+  createTaskValidation,
+  moveTaskValidation,
+  reorderTasksValidation,
+  taskFilterValidation,
+  updateTaskValidation,
+} from "../validation/task.validation";
 
 @Controller("task")
 export class TaskController {
@@ -14,28 +20,42 @@ export class TaskController {
   @Permissions(PermissionType.CreateTask)
   create(
     @Body(new ZodValidationPipe(createTaskValidation))
-    data: z.infer<typeof createTaskValidation>
+    data: z.infer<typeof createTaskValidation>,
   ) {
-    return this.taskService.addOne(data as any);
+    return this.taskService.createTask(data);
   }
 
-  @Get()
+  @Get("by-project/:projectId")
   @Permissions(PermissionType.MenuTask)
-  findAll(@Query("page") page = 1, @Query("limit") limit = 10) {
-    return this.taskService.paginate(
-      { deleted: { $ne: true } },
-      {
-        limit: Number(limit),
-        page: Number(page),
-        fields: ["id", "title", "status", "priority", "assignee", "project", "order"],
-      }
-    );
+  findByProject(
+    @Param("projectId") projectId: string,
+    @Query(new ZodValidationPipe(taskFilterValidation)) query: z.infer<typeof taskFilterValidation>,
+  ) {
+    return this.taskService.getTasksByProject(projectId, query);
+  }
+
+  @Get(":id/subtasks")
+  @Permissions(PermissionType.ViewTaskDetail)
+  getSubtasks(@Param("id") id: string) {
+    return this.taskService.getSubtasks(id);
   }
 
   @Get(":id")
   @Permissions(PermissionType.ViewTaskDetail)
   findOne(@Param("id") id: string) {
-    return this.taskService.findById(id);
+    return this.taskService.getTaskById(id);
+  }
+
+  @Patch("reorder")
+  @Permissions(PermissionType.UpdateTask)
+  reorder(@Body(new ZodValidationPipe(reorderTasksValidation)) body: z.infer<typeof reorderTasksValidation>) {
+    return this.taskService.reorder(body.orders);
+  }
+
+  @Patch(":id/move")
+  @Permissions(PermissionType.UpdateTask)
+  move(@Param("id") id: string, @Body(new ZodValidationPipe(moveTaskValidation)) body: z.infer<typeof moveTaskValidation>) {
+    return this.taskService.moveTask(id, body.sectionId);
   }
 
   @Patch(":id")
@@ -43,14 +63,14 @@ export class TaskController {
   update(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateTaskValidation))
-    data: z.infer<typeof updateTaskValidation>
+    data: z.infer<typeof updateTaskValidation>,
   ) {
-    return this.taskService.updateOne(id, data);
+    return this.taskService.updateTask(id, data);
   }
 
   @Delete(":id")
   @Permissions(PermissionType.DeleteTask)
   remove(@Param("id") id: string) {
-    return this.taskService.remove(id);
+    return this.taskService.deleteTask(id);
   }
 }

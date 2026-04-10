@@ -14,7 +14,7 @@ export class ProjectController {
   @Permissions(PermissionType.CreateProject)
   create(
     @Body(new ZodValidationPipe(createProjectValidation))
-    data: z.infer<typeof createProjectValidation>
+    data: z.infer<typeof createProjectValidation>,
   ) {
     return this.projectService.createProject(data);
   }
@@ -36,14 +36,20 @@ export class ProjectController {
   update(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateProjectValidation))
-    data: z.infer<typeof updateProjectValidation>
+    data: z.infer<typeof updateProjectValidation>,
   ) {
-    return this.projectService.updateOne(id, data as any);
+    return this.projectService.updateProject(id, data);
+  }
+
+  @Get(":id/stats")
+  @Permissions(PermissionType.ViewProjectDetail)
+  getStats(@Param("id") id: string) {
+    return this.projectService.getProjectStats(id);
   }
 
   @Delete(":id")
   @Permissions(PermissionType.DeleteProject)
   remove(@Param("id") id: string) {
-    return this.projectService.remove(id);
+    return this.projectService.deleteProject(id);
   }
 }
