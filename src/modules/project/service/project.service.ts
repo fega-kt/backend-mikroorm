@@ -1,13 +1,14 @@
 import { BaseService } from "@common/base/base.service";
 import { EntityManager, EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
+import { TaskEntity, TaskPriority, TaskStatus } from "@modules/task/entity/task.entity";
 import { Inject, Injectable, Scope } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
 import { z } from "zod";
-import { TaskEntity, TaskPriority, TaskStatus } from "@modules/task/entity/task.entity";
 import { ProjectEntity, ProjectStatus } from "../entity/project.entity";
 import { createProjectValidation, updateProjectValidation } from "../validation/project.validation";
+import { ProjectPermissionService } from "./project-permission.service";
 
 @Injectable({ scope: Scope.REQUEST })
 export class ProjectService extends BaseService<ProjectEntity> {
@@ -16,6 +17,7 @@ export class ProjectService extends BaseService<ProjectEntity> {
     @InjectRepository(ProjectEntity)
     private readonly projectRepo: EntityRepository<ProjectEntity>,
     private readonly em: EntityManager,
+    private readonly projectPermissionService: ProjectPermissionService,
   ) {
     super(projectRepo, request);
   }
@@ -94,11 +96,15 @@ export class ProjectService extends BaseService<ProjectEntity> {
     };
   }
 
-  updateProject(id: string, data: z.infer<typeof updateProjectValidation>) {
+  async updateProject(id: string, data: z.infer<typeof updateProjectValidation>) {
+    const user = this.getCurrentUser();
+    await this.projectPermissionService.assertOwner(id, user);
     return this.updateOne(id, data as any);
   }
 
-  deleteProject(id: string) {
+  async deleteProject(id: string) {
+    const user = this.getCurrentUser();
+    await this.projectPermissionService.assertOwner(id, user);
     return this.remove(id);
   }
 
