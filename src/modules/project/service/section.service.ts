@@ -23,7 +23,7 @@ export class SectionService extends BaseService<SectionEntity> {
   async createSection(projectId: string, data: z.infer<typeof createSectionValidation>) {
     const user = this.getCurrentUser();
     await this.projectPermissionService.assertMember(projectId, user);
-    return this.addOne({ ...data, project: projectId } as any);
+    return this.addOne({ ...data, project: projectId });
   }
 
   async getSectionsByProject(projectId: string) {
@@ -53,16 +53,16 @@ export class SectionService extends BaseService<SectionEntity> {
     const user = this.getCurrentUser();
     const section = await this.sectionRepo.findOne({ id, deleted: { $ne: true } });
     if (!section) throw new NotFoundException("Section not found");
-    const projectId = (section.project as any)?.id ?? section.project.toString();
+    const projectId = section.project.id;
     await this.projectPermissionService.assertMember(projectId, user);
-    return this.updateOne(id, data as any);
+    return this.updateOne(id, data);
   }
 
   async deleteSection(id: string) {
     const user = this.getCurrentUser();
     const section = await this.sectionRepo.findOne({ id, deleted: { $ne: true } });
     if (!section) throw new NotFoundException("Section not found");
-    const projectId = (section.project as any)?.id ?? section.project.toString();
+    const projectId = section.project.id;
     await this.projectPermissionService.assertMember(projectId, user);
     return this.remove(id);
   }

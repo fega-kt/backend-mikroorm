@@ -109,8 +109,9 @@ export class ProjectService extends BaseService<ProjectEntity> {
   }
 
   getProjects(page: number, limit: number) {
+    const user = this.getCurrentUser();
     return this.paginate(
-      { deleted: { $ne: true } },
+      { deleted: { $ne: true }, $or: [{ owner: user.id }, { members: user.id }] },
       {
         page,
         limit,
