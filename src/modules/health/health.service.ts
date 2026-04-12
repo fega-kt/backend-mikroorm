@@ -23,12 +23,16 @@ export class HealthService {
     };
   }
 
-  async version() {
-    return {
-      commit: process.env.GIT_COMMIT || "dev",
-      version: process.env.npm_package_version,
-      uptime: process.uptime(),
-      timestamp: new Date(),
-    };
-  }
+async version() {
+  return {
+    commit: process.env.GIT_COMMIT || "dev",
+    author: process.env.GIT_AUTHOR || "unknown",
+    branch: process.env.GIT_BRANCH,
+    message: process.env.GIT_MESSAGE,
+    buildTime: process.env.BUILD_TIME, // 🔥 quan trọng
+    version: process.env.npm_package_version,
+    uptime: process.uptime(),
+    timestamp: new Date(),
+  };
+}
 }
