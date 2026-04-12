@@ -32,7 +32,7 @@ async function bootstrap() {
     await handleApplySwagger(app, port);
   }
   app.enableCors({
-    origin: ["http://localhost:3333"],
+    origin: ENV.CORS_ORIGINS ? ENV.CORS_ORIGINS.split(",") : ["http://localhost:3333"],
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true,
   });
