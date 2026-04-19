@@ -138,7 +138,7 @@ const routeNestRouter = {
 export class RouteService {
   constructor(
     private readonly systemManagementRouteService: SystemManagementService,
-    private readonly projectManagementRouteService: ProjectManagementRouteService
+    private readonly projectManagementRouteService: ProjectManagementRouteService,
   ) {}
 
   /**Get route by use */
@@ -220,13 +220,13 @@ export class RouteService {
     const projectManagementRouter = this.projectManagementRouteService.getRouteProjectManagement();
     return compact([
       homeRouter,
-      accessRouter,
+      // accessRouter,
       aboutRouter,
       projectManagementRouter,
       systemManagementRouter,
-      outsideRouter,
-      personalCenterRouter,
-      routeNestRouter,
+      // outsideRouter,
+      // personalCenterRouter,
+      // routeNestRouter,
     ]);
   }
 }
