@@ -5,6 +5,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestj
 import z from "zod";
 import { TaskService } from "../service/task.service";
 import {
+  createSubTaskValidation,
   createTaskValidation,
   moveTaskValidation,
   reorderTasksValidation,
@@ -34,6 +35,15 @@ export class TaskController {
     return this.taskService.getTasksByProject(projectId, query);
   }
 
+  @Post(":id/subtasks")
+  @Permissions(PermissionType.CreateTask)
+  createSubTask(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(createSubTaskValidation)) data: z.infer<typeof createSubTaskValidation>,
+  ) {
+    return this.taskService.createSubTask(id, data);
+  }
+
   @Get(":id/subtasks")
   @Permissions(PermissionType.ViewTaskDetail)
   getSubtasks(@Param("id") id: string) {
@@ -43,7 +53,7 @@ export class TaskController {
   @Get(":id")
   @Permissions(PermissionType.ViewTaskDetail)
   findOne(@Param("id") id: string) {
-    return this.taskService.getTaskById(id);
+    return this.taskService.getTask(id);
   }
 
   @Patch("reorder")

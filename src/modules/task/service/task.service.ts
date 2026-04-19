@@ -6,8 +6,13 @@ import { Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
 import { z } from "zod";
-import { TaskEntity } from "../entity/task.entity";
-import { createTaskValidation, taskFilterValidation, updateTaskValidation } from "../validation/task.validation";
+import { TaskEntity, TaskStatus } from "../entity/task.entity";
+import {
+  createSubTaskValidation,
+  createTaskValidation,
+  taskFilterValidation,
+  updateTaskValidation,
+} from "../validation/task.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class TaskService extends BaseService<TaskEntity> {
@@ -37,8 +42,52 @@ export class TaskService extends BaseService<TaskEntity> {
     return entity;
   }
 
-  getTaskById(id: string) {
-    return this.findById(id);
+  async getTask(id: string) {
+    const user = this.getCurrentUser();
+    const task = await this.taskRepo.findOne(
+      { id, deleted: { $ne: true } },
+      { populate: ["assignee", "section", "parentTask", "project"] },
+    );
+    if (!task) throw new NotFoundException("Task not found");
+
+    const projectId = task.project.id;
+    const assigneeId = task.assignee.id;
+
+    if (assigneeId !== user.id) {
+      await this.projectPermissionService.assertOwner(projectId, user);
+    }
+
+    return task;
+  }
+
+  async createSubTask(parentTaskId: string, data: z.infer<typeof createSubTaskValidation>) {
+    const em = this.taskRepo.getEntityManager();
+    const baseCreate = this.getDefaultValuesForCreate();
+
+    const parent = await this.taskRepo.findOne(
+      { id: parentTaskId, deleted: { $ne: true } },
+      { populate: ["project", "section", "assignee"] },
+    );
+    if (!parent) throw new NotFoundException("Parent task not found");
+
+    const entity = this.taskRepo.create({
+      title: data.title,
+      description: "",
+      project: parent.project.id,
+      section: parent.section.id,
+      assignee: parent.assignee.id,
+      priority: parent.priority,
+      labels: parent.labels,
+      status: TaskStatus.DRAFT,
+      parentTask: parentTaskId,
+      path: "",
+      ...baseCreate,
+    });
+
+    entity.path = `${parent.path}/${entity.id}`;
+
+    await em.persistAndFlush(entity);
+    return entity;
   }
 
   async updateTask(id: string, data: z.infer<typeof updateTaskValidation>) {
