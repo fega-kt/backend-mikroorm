@@ -47,6 +47,10 @@ export const moveTaskValidation = z.object({
   sectionId: z.string().trim().nullable(),
 });
 
+export const createSubTaskValidation = z.object({
+  title: z.string().trim().min(1, "Title is required").max(255),
+});
+
 export const taskFilterValidation = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),

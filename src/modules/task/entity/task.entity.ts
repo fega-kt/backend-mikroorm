@@ -6,12 +6,12 @@ import { AttachmentEntity } from "@modules/upload/entity/attachment.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
 
 export enum TaskStatus {
+  DRAFT = "DRAFT",
   TODO = "TODO",
   IN_PROGRESS = "IN_PROGRESS",
   DONE = "DONE",
   CANCELLED = "CANCELLED",
   REJECTED = "REJECTED",
-
 }
 
 export enum TaskPriority {
