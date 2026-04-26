@@ -1,7 +1,8 @@
 import { BaseEntity } from "@common/base/base.entity";
-import { Collection, Entity, Enum, ManyToMany, ManyToOne, Property, types } from "@mikro-orm/core";
+import { Collection, Entity, Enum, ManyToMany, ManyToOne, OneToMany, Property, types } from "@mikro-orm/core";
 import { AttachmentEntity } from "@modules/upload/entity/attachment.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
+import { ProjectMemberEntity } from "./project-member.entity";
 
 export enum ProjectStatus {
   PLANNING = "PLANNING",
@@ -59,8 +60,8 @@ export class ProjectEntity extends BaseEntity {
   @Property({ type: types.string })
   folderId!: string;
 
-  @ManyToMany({ entity: () => UserEntity, cascade: [] })
-  members = new Collection<UserEntity>(this);
+  @OneToMany({ entity: () => ProjectMemberEntity, mappedBy: "project" })
+  projectMembers = new Collection<ProjectMemberEntity>(this);
 
   @ManyToMany({ entity: () => AttachmentEntity, cascade: [] })
   attachments = new Collection<AttachmentEntity>(this);
