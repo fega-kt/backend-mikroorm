@@ -12,6 +12,7 @@ export interface PaginationQuery<T> {
   limit?: number;
   fields?: readonly EntityPath<T>[];
   populate?: readonly EntityPath<T>[];
+  sort?: Record<string, "ASC" | "DESC" | 1 | -1>;
 }
 
 export abstract class BaseService<T extends BaseEntity> {
@@ -85,13 +86,14 @@ export abstract class BaseService<T extends BaseEntity> {
 
   /* ================= PAGINATE ================= */
   async paginate(filter: FilterQuery<T> = {}, query: PaginationQuery<T> = {}) {
-    const { page = 1, limit = 10, fields = ["id"], populate = [] } = query;
+    const { page = 1, limit = 10, fields = ["id"], populate = [], sort } = query;
 
     const [data, total] = await this.repo.findAndCount(filter, {
       limit,
       offset: (page - 1) * limit,
       fields: fields as never[],
       populate: populate as never[],
+      orderBy: sort as any,
       disableIdentityMap: true,
     });
 

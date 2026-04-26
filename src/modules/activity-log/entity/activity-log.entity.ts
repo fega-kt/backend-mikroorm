@@ -6,10 +6,24 @@ export enum ActivityLogType {
   User = "user",
 }
 
+export enum ActivityLogAction {
+  CREATE = "CREATE",
+  UPDATE = "UPDATE",
+  DELETE = "DELETE",
+  RESTORE = "RESTORE",
+  STATUS_CHANGE = "STATUS_CHANGE",
+  ASSIGN = "ASSIGN",
+  APPROVE = "APPROVE",
+  REJECT = "REJECT",
+}
+
 @Entity({ collection: "activity-logs" })
 export class ActivityLogEntity extends BaseEntity {
   @Property({ type: types.string })
   parentId!: string;
+
+  @Enum(() => ActivityLogAction)
+  action!: ActivityLogAction;
 
   @Property({ type: types.json, nullable: true })
   oldData?: Record<string, any>;

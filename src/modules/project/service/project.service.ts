@@ -1,6 +1,8 @@
 import { BaseService } from "@common/base/base.service";
 import { EntityManager, EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
+import { ActivityLogAction, ActivityLogType } from "@modules/activity-log/entity/activity-log.entity";
+import { ActivityLogService } from "@modules/activity-log/service/activity-log.service";
 import { TaskEntity, TaskPriority, TaskStatus } from "@modules/task/entity/task.entity";
 import { Inject, Injectable, Scope } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
@@ -10,6 +12,18 @@ import { ProjectEntity, ProjectStatus } from "../entity/project.entity";
 import { createProjectValidation, updateProjectValidation } from "../validation/project.validation";
 import { ProjectPermissionService } from "./project-permission.service";
 
+const PROJECT_TRACKED_FIELDS = [
+  "name",
+  "description",
+  "status",
+  "priority",
+  "visibility",
+  "startDate",
+  "dueDate",
+  "budget",
+  "tags",
+] as const;
+
 @Injectable({ scope: Scope.REQUEST })
 export class ProjectService extends BaseService<ProjectEntity> {
   constructor(
@@ -18,15 +32,21 @@ export class ProjectService extends BaseService<ProjectEntity> {
     private readonly projectRepo: EntityRepository<ProjectEntity>,
     private readonly em: EntityManager,
     private readonly projectPermissionService: ProjectPermissionService,
+    private readonly activityLogService: ActivityLogService,
   ) {
     super(projectRepo, request);
   }
 
-  createProject(data: z.infer<typeof createProjectValidation>) {
-    return this.addOne({
-      ...data,
-      status: ProjectStatus.PLANNING,
-    });
+  async createProject(data: z.infer<typeof createProjectValidation>) {
+    const project = await this.addOne({ ...data, status: ProjectStatus.PLANNING });
+
+    const newData: Record<string, any> = {};
+    for (const field of PROJECT_TRACKED_FIELDS) {
+      newData[field] = (project as any)[field];
+    }
+    await this.activityLogService.addOne({ parentId: project.id, type: ActivityLogType.User, action: ActivityLogAction.CREATE, oldData: null, newData });
+
+    return project;
   }
 
   getProjectById(id: string) {
@@ -99,7 +119,33 @@ export class ProjectService extends BaseService<ProjectEntity> {
   async updateProject(id: string, data: z.infer<typeof updateProjectValidation>) {
     const user = this.getCurrentUser();
     await this.projectPermissionService.assertOwner(id, user);
-    return this.updateOne(id, data as any);
+
+    const project = await this.projectRepo.findOne({ id, deleted: { $ne: true } });
+
+    const oldData: Record<string, any> = {};
+    const newData: Record<string, any> = {};
+
+    for (const field of PROJECT_TRACKED_FIELDS) {
+      const incoming = (data as any)[field];
+      if (incoming === undefined) continue;
+      const current = (project as any)[field];
+      const changed = JSON.stringify(current) !== JSON.stringify(incoming);
+      if (changed) {
+        oldData[field] = current;
+        newData[field] = incoming;
+      }
+    }
+
+    const updated = await this.updateOne(id, data);
+
+    if (Object.keys(oldData).length > 0) {
+      const action = newData.status && newData.status !== oldData.status
+        ? ActivityLogAction.STATUS_CHANGE
+        : ActivityLogAction.UPDATE;
+      await this.activityLogService.addOne({ parentId: id, type: ActivityLogType.User, action, oldData, newData });
+    }
+
+    return updated;
   }
 
   async deleteProject(id: string) {
@@ -108,10 +154,15 @@ export class ProjectService extends BaseService<ProjectEntity> {
     return this.remove(id);
   }
 
-  getProjects(page: number, limit: number) {
+  async getProjects(page: number, limit: number) {
     const user = this.getCurrentUser();
+    const memberProjectIds = await this.projectPermissionService.getMemberProjectIds(user.id);
+
     return this.paginate(
-      { deleted: { $ne: true }, $or: [{ owner: user.id }, { members: user.id }] },
+      {
+        deleted: { $ne: true },
+        $or: [{ owner: user.id }, { id: { $in: memberProjectIds } }],
+      },
       {
         page,
         limit,

@@ -148,7 +148,7 @@ export class TaskService extends BaseService<TaskEntity> {
     const user = this.getCurrentUser();
     await this.projectPermissionService.assertMember(projectId, user);
 
-    const { page, limit, status, priority, assignee, section, dueDateFrom, dueDateTo, parentTask } = filter;
+    const { page, limit, status, priority, assignee, section, sprint, dueDateFrom, dueDateTo, parentTask } = filter;
 
     const where: Record<string, any> = {
       project: projectId,
@@ -159,6 +159,7 @@ export class TaskService extends BaseService<TaskEntity> {
     if (priority) where.priority = priority;
     if (assignee) where.assignee = assignee;
     if (section) where.section = section;
+    if (sprint) where.sprint = sprint;
     if (parentTask) where.parentTask = parentTask;
     if (dueDateFrom || dueDateTo) {
       where.dueDate = {};

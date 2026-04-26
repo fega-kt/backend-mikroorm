@@ -2,6 +2,7 @@ import { BaseEntity } from "@common/base/base.entity";
 import { Collection, Entity, Enum, ManyToMany, ManyToOne, Property, types } from "@mikro-orm/core";
 import { ProjectEntity } from "@modules/project/entity/project.entity";
 import { SectionEntity } from "@modules/project/entity/section.entity";
+import { SprintEntity } from "@modules/sprint/entity/sprint.entity";
 import { AttachmentEntity } from "@modules/upload/entity/attachment.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
 
@@ -33,6 +34,9 @@ export class TaskEntity extends BaseEntity {
 
   @ManyToOne({ cascade: [], entity: () => SectionEntity, nullable: true })
   section?: SectionEntity;
+
+  @ManyToOne({ cascade: [], entity: () => SprintEntity, nullable: true })
+  sprint?: SprintEntity;
 
   @ManyToOne({ cascade: [], entity: () => TaskEntity, nullable: true })
   parentTask?: TaskEntity;
