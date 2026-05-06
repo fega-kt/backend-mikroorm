@@ -7,11 +7,7 @@ import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
 import { z } from "zod";
 import { MilestoneEntity, MilestoneStatus } from "../entity/milestone.entity";
-import {
-  createMilestoneValidation,
-  milestoneFilterValidation,
-  updateMilestoneValidation,
-} from "../validation/milestone.validation";
+import { createMilestoneValidation, milestoneFilterValidation, updateMilestoneValidation } from "../validation/milestone.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class MilestoneService extends BaseService<MilestoneEntity> {

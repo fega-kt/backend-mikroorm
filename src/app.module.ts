@@ -6,11 +6,7 @@ import { ConfigModule } from "@nestjs/config";
 import { modules } from "./app.imports";
 
 @Module({
-  imports: [
-    ...modules,
-    ConfigModule.forRoot({ isGlobal: true }),
-    MikroOrmModule.forRoot({ ...mikroConfig, autoLoadEntities: true }),
-  ],
+  imports: [...modules, ConfigModule.forRoot({ isGlobal: true }), MikroOrmModule.forRoot({ ...mikroConfig, autoLoadEntities: true })],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

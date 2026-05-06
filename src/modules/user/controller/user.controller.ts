@@ -1,4 +1,18 @@
-import { Body, Controller, Delete, FileTypeValidator, Get, MaxFileSizeValidator, Param, ParseFilePipe, Patch, Post, Query, UploadedFile, UseInterceptors } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  FileTypeValidator,
+  Get,
+  MaxFileSizeValidator,
+  Param,
+  ParseFilePipe,
+  Patch,
+  Post,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 
 import { IUserResponse } from "@common/base/consts";
@@ -23,7 +37,7 @@ export class UserController {
   updateProfile(
     @CurrentUser() user: IUserResponse,
     @Body(new ZodValidationPipe(updateUserValidation))
-    data: z.infer<typeof updateUserValidation>
+    data: z.infer<typeof updateUserValidation>,
   ) {
     return this.userService.update(user.id, data);
   }
@@ -32,7 +46,7 @@ export class UserController {
   @Permissions(PermissionType.CreateUser)
   create(
     @Body(new ZodValidationPipe(createUserValidation))
-    data: z.infer<typeof createUserValidation>
+    data: z.infer<typeof createUserValidation>,
   ): Promise<void> {
     return this.userService.create(data);
   }
@@ -54,7 +68,7 @@ export class UserController {
   update(
     @Param("id", new IdValidationPipe()) id: string,
     @Body(new ZodValidationPipe(updateUserValidation))
-    data: z.infer<typeof updateUserValidation>
+    data: z.infer<typeof updateUserValidation>,
   ) {
     return this.userService.update(id, data);
   }
@@ -75,9 +89,9 @@ export class UserController {
           new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 2 }), // 2MB
           new FileTypeValidator({ fileType: "image/*" }),
         ],
-      })
+      }),
     )
-    file: Express.Multer.File
+    file: Express.Multer.File,
   ) {
     return this.userService.uploadAvatar(user.id, file);
   }

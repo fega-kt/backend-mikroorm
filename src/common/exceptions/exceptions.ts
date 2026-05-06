@@ -7,7 +7,7 @@ export class ExceptionBase extends HttpException {
   public constructor(
     httpStatus: HttpStatus,
     private readonly errorCode: ResponseCode,
-    private readonly ref?: ExceptionRef
+    private readonly ref?: ExceptionRef,
   ) {
     super("", httpStatus);
   }
@@ -44,5 +44,3 @@ export class C403Exception extends ExceptionBase {
     super(HttpStatus.FORBIDDEN, errorCode, ref);
   }
 }
-
-/* eslint-enable max-classes-per-file -- Bật lại */

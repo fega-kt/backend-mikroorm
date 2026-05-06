@@ -1,5 +1,5 @@
-import { HttpException, HttpStatus, Injectable, PipeTransform, Scope } from '@nestjs/common';
-import { ZodTypeAny } from 'zod';
+import { HttpException, HttpStatus, Injectable, PipeTransform, Scope } from "@nestjs/common";
+import { ZodTypeAny } from "zod";
 
 @Injectable({ scope: Scope.REQUEST })
 export class ZodValidationPipe implements PipeTransform {

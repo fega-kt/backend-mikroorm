@@ -10,13 +10,8 @@ type Prev = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...0[]];
  * Loại bỏ các kiểu không phải relation object:
  * primitive, Date, ObjectId, MikroORM Collection, v.v.
  */
-type IsRelation<T> = T extends Collection<any>
-  ? true
-  : T extends object
-    ? T extends Date | bigint | symbol | null | undefined
-      ? false
-      : true
-    : false;
+type IsRelation<T> =
+  T extends Collection<any> ? true : T extends object ? (T extends Date | bigint | symbol | null | undefined ? false : true) : false;
 
 /**
  * Sinh ra tất cả dot-notation path từ entity T.
@@ -30,4 +25,3 @@ export type EntityPath<T, D extends number = 5> = [D] extends [never]
           ? K | `${K}.${EntityPath<NonNullable<T[K]>, Prev[D]> & string}`
           : K;
     }[keyof T & string];
-

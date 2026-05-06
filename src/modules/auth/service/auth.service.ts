@@ -12,7 +12,7 @@ export class AuthService extends BaseService<UserEntity> {
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>,
-    @Inject(REQUEST) protected request: Request | undefined
+    @Inject(REQUEST) protected request: Request | undefined,
   ) {
     super(userRepo, request);
   }

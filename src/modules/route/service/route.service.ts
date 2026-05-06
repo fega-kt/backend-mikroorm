@@ -179,12 +179,7 @@ export class RouteService {
             icon: "LockOutlined",
             title: "common.menu.buttonControl",
             permissions: isAdmin
-              ? [
-                  "permission:button:get",
-                  "permission:button:update",
-                  "permission:button:delete",
-                  "permission:button:add",
-                ]
+              ? ["permission:button:get", "permission:button:update", "permission:button:delete", "permission:button:add"]
               : ["permission:button:get"],
           },
         },

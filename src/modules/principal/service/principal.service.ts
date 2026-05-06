@@ -12,7 +12,7 @@ export class PrincipalService extends BaseService<PrincipalEntity> {
   constructor(
     @InjectRepository(PrincipalEntity)
     private readonly principalRepo: EntityRepository<PrincipalEntity>,
-    @Inject(REQUEST) protected request: Request | undefined
+    @Inject(REQUEST) protected request: Request | undefined,
   ) {
     super(principalRepo, request);
   }
@@ -27,14 +27,7 @@ export class PrincipalService extends BaseService<PrincipalEntity> {
       page,
       limit,
       populate: ["user", "group"],
-      fields: [
-        "id",
-        "name",
-        "type",
-        "description",
-        "user",
-        "group"
-      ],
+      fields: ["id", "name", "type", "description", "user", "group"],
     });
 
     return { data, total };

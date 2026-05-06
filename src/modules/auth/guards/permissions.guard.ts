@@ -11,10 +11,7 @@ export class PermissionsGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [context.getHandler(), context.getClass()]);
     if (!requiredPermissions?.length) {
       return true;
     }
@@ -31,7 +28,7 @@ export class PermissionsGuard implements CanActivate {
 
     if (!hasPermission) {
       this.permissionLogger.debug(
-        `User ${user.id} has email ${user.loginName} does not have required permissions: ${requiredPermissions.join(", ")}`
+        `User ${user.id} has email ${user.loginName} does not have required permissions: ${requiredPermissions.join(", ")}`,
       );
       throw new ForbiddenException("You do not have permission");
     }

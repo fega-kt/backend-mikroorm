@@ -48,15 +48,11 @@ export class UploadService {
     const actualMime = detected?.mime;
 
     if (!actualMime || !ALLOWED_MIME_TYPES.includes(actualMime)) {
-      throw new BadRequestException(
-        `Actual file content type "${actualMime ?? "unknown"}" is not allowed`,
-      );
+      throw new BadRequestException(`Actual file content type "${actualMime ?? "unknown"}" is not allowed`);
     }
 
     if (!allowedMimesForExt.includes(actualMime)) {
-      throw new BadRequestException(
-        `File content type "${actualMime}" does not match extension "${ext}"`,
-      );
+      throw new BadRequestException(`File content type "${actualMime}" does not match extension "${ext}"`);
     }
   }
 

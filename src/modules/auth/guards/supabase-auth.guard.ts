@@ -30,10 +30,7 @@ export class SupabaseAuthGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
 
     const request = context.switchToHttp().getRequest();
 
@@ -94,8 +91,21 @@ export class SupabaseAuthGuard implements CanActivate {
         loginName: email,
       },
       {
-        fields: ["id", "loginName", "deleted", "isActive", "fullName", "workEmail", "avatar", "phoneNumber", "description", 'department.id', 'department.name', 'department.code'],
-        populate: ["principal", "groups", "groups.principal", 'department'],
+        fields: [
+          "id",
+          "loginName",
+          "deleted",
+          "isActive",
+          "fullName",
+          "workEmail",
+          "avatar",
+          "phoneNumber",
+          "description",
+          "department.id",
+          "department.name",
+          "department.code",
+        ],
+        populate: ["principal", "groups", "groups.principal", "department"],
       },
     );
     // 2️⃣ Nếu không tồn tại hoặc đã bị xóa

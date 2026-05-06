@@ -4,11 +4,7 @@ import { ZodValidationPipe } from "@common/pipes";
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { z } from "zod";
 import { MilestoneService } from "../service/milestone.service";
-import {
-  createMilestoneValidation,
-  milestoneFilterValidation,
-  updateMilestoneValidation,
-} from "../validation/milestone.validation";
+import { createMilestoneValidation, milestoneFilterValidation, updateMilestoneValidation } from "../validation/milestone.validation";
 
 @Controller("milestone")
 export class MilestoneController {

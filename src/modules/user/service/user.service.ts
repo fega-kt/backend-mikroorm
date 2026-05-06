@@ -24,7 +24,7 @@ export class UserService extends BaseService<UserEntity> {
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>,
     private readonly em: EntityManager,
-    private readonly uploadService: UploadService
+    private readonly uploadService: UploadService,
   ) {
     super(userRepo, request);
     this.supabaseAdmin = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY, {
@@ -34,9 +34,6 @@ export class UserService extends BaseService<UserEntity> {
       },
     });
   }
-
-
-
 
   async create(data: z.infer<typeof createUserValidation>): Promise<void> {
     const result = createUserValidation.safeParse(data);
@@ -114,14 +111,12 @@ export class UserService extends BaseService<UserEntity> {
       {
         limit,
         page,
-        fields: ["id", "fullName", "workEmail", 'createdAt', 'isActive', 'loginName', 'avatar'],
-      }
+        fields: ["id", "fullName", "workEmail", "createdAt", "isActive", "loginName", "avatar"],
+      },
     );
 
-    return {data, total};
+    return { data, total };
   }
-
-
 
   async getDetail(id: string): Promise<UserEntity> {
     const user = await this.findOne(
@@ -129,7 +124,7 @@ export class UserService extends BaseService<UserEntity> {
       {
         fields: ["id", "fullName", "loginName", "workEmail", "avatar", "isActive", "department", "groups"],
         populate: ["department", "groups"],
-      }
+      },
     );
 
     if (!user) {

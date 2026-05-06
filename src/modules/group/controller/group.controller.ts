@@ -14,7 +14,7 @@ export class GroupController {
   @Post()
   create(
     @Body(new ZodValidationPipe(createGroupValidation))
-    data: z.infer<typeof createGroupValidation>
+    data: z.infer<typeof createGroupValidation>,
   ): Promise<boolean> {
     return this.groupService.createGroup(data);
   }
@@ -23,7 +23,7 @@ export class GroupController {
   update(
     @Param("id", new IdValidationPipe()) id: string,
     @Body(new ZodValidationPipe(createGroupValidation))
-    data: z.infer<typeof createGroupValidation>
+    data: z.infer<typeof createGroupValidation>,
   ): Promise<boolean> {
     return this.groupService.updateGroup(id, data);
   }

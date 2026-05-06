@@ -2,11 +2,7 @@ import { ZodValidationPipe } from "@common/pipes";
 import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import z from "zod";
 import { SectionService } from "../service/section.service";
-import {
-  createSectionValidation,
-  reorderSectionsValidation,
-  updateSectionValidation,
-} from "../validation/section.validation";
+import { createSectionValidation, reorderSectionsValidation, updateSectionValidation } from "../validation/section.validation";
 
 @Controller("project/:projectId/sections")
 export class SectionController {
@@ -34,10 +30,7 @@ export class SectionController {
   }
 
   @Patch(":id")
-  update(
-    @Param("id") id: string,
-    @Body(new ZodValidationPipe(updateSectionValidation)) body: z.infer<typeof updateSectionValidation>,
-  ) {
+  update(@Param("id") id: string, @Body(new ZodValidationPipe(updateSectionValidation)) body: z.infer<typeof updateSectionValidation>) {
     return this.sectionService.updateSection(id, body);
   }
 

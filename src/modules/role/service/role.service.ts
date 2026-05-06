@@ -14,7 +14,7 @@ export class RoleService extends BaseService<RoleEntity> {
     @InjectRepository(RoleEntity)
     private readonly roleEntity: EntityRepository<RoleEntity>,
     @Inject(REQUEST) protected request: Request | undefined,
-    private readonly em: EntityManager
+    private readonly em: EntityManager,
   ) {
     super(roleEntity, request);
   }
@@ -35,8 +35,8 @@ export class RoleService extends BaseService<RoleEntity> {
       {
         limit,
         page,
-        fields: ["id", "name", "description", "rights", 'createdAt'],
-      }
+        fields: ["id", "name", "description", "rights", "createdAt"],
+      },
     );
 
     return { data, total };
@@ -47,7 +47,7 @@ export class RoleService extends BaseService<RoleEntity> {
       { id, deleted: { $ne: true } },
       {
         populate: ["usersAndGroups", "usersAndGroups.user", "usersAndGroups.group"],
-      }
+      },
     );
 
     if (!role) {
