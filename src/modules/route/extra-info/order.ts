@@ -8,4 +8,5 @@ export const outside = 40;
 export const exception = 90;
 export const system = 100;
 export const personalCenter = 110;
-export const about = 120;
+export const setting = 120;
+export const about = 150;
