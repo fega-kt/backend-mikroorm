@@ -4,11 +4,12 @@ import { Module } from "@nestjs/common";
 import { RouteController } from "./controller/route.controller";
 import { ProjectManagementRouteService } from "./service/project-management";
 import { RouteService } from "./service/route.service";
+import { SettingManagementRouteService } from "./service/setting-management";
 import { SystemManagementService } from "./service/system-management";
 
 @Module({
   imports: [MikroOrmModule.forFeature([])],
-  providers: [RouteService, SystemManagementService, ProjectManagementRouteService],
+  providers: [RouteService, SystemManagementService, ProjectManagementRouteService, SettingManagementRouteService],
   controllers: [RouteController],
   exports: [RouteService],
 })

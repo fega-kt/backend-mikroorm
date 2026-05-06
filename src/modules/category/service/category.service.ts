@@ -26,7 +26,7 @@ export class CategoryService extends BaseService<CategoryEntity> {
       throw new ConflictException(`Category with code "${data.code}" already exists`);
     }
     const em = this.categoryRepo.getEntityManager();
-    const department = em.getReference(DepartmentEntity, data.departmentId);
+    const department = em.getReference(DepartmentEntity, data.department);
     return this.addOne({ code: data.code, name: data.name, icon: data.icon, department });
   }
 
@@ -50,12 +50,16 @@ export class CategoryService extends BaseService<CategoryEntity> {
   }
 
   async updateCategory(id: string, data: z.infer<typeof updateCategoryValidation>) {
-    const category = await this.findOne({ id, deleted: { $ne: true } });
+    const category = await this.categoryRepo.findOne({ id, deleted: { $ne: true } });
     if (!category) throw new NotFoundException("Category not found");
-    const { departmentId, ...rest } = data;
+    if (data.code && data.code !== category.code) {
+      const duplicate = await this.categoryRepo.findOne({ code: data.code, deleted: { $ne: true } });
+      if (duplicate) throw new ConflictException(`Category with code "${data.code}" already exists`);
+    }
+    const { department, ...rest } = data;
     const update: EntityData<CategoryEntity> = { ...rest };
-    if (departmentId) {
-      update.department = this.categoryRepo.getEntityManager().getReference(DepartmentEntity, departmentId);
+    if (department) {
+      update.department = this.categoryRepo.getEntityManager().getReference(DepartmentEntity, department);
     }
     return this.updateOne(id, update);
   }

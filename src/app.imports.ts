@@ -1,6 +1,7 @@
 import { LoggerModule } from "@common/logger/logger.module";
 import { ActivityLogModule } from "@modules/activity-log/activity-log.module";
 import { AuthModule } from "@modules/auth/auth.module";
+import { CategoryModule } from "@modules/category/category.module";
 import { CommentModule } from "@modules/comment/comment.module";
 import { DepartmentModule } from "@modules/department/department.module";
 import { GroupModule } from "@modules/group/group.module";
@@ -38,5 +39,6 @@ export const modules: ModuleMetadata["imports"] = [
   TimeLogModule,
   CommentModule,
   NotificationModule,
+  CategoryModule,
   RequestTypeModule,
 ];

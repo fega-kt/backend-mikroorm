@@ -3,6 +3,7 @@ import { compact } from "lodash";
 import { AppRoute } from "../entity";
 import { about, access, home, outside, personalCenter, routeNest } from "../extra-info/order";
 import { ProjectManagementRouteService } from "./project-management";
+import { SettingManagementRouteService } from "./setting-management";
 import { SystemManagementService } from "./system-management";
 
 const aboutRouter = {
@@ -139,6 +140,7 @@ export class RouteService {
   constructor(
     private readonly systemManagementRouteService: SystemManagementService,
     private readonly projectManagementRouteService: ProjectManagementRouteService,
+    private readonly settingManagementRouteService: SettingManagementRouteService,
   ) {}
 
   /**Get route by use */
@@ -213,11 +215,13 @@ export class RouteService {
 
     const systemManagementRouter = this.systemManagementRouteService.getRouteUserManagement();
     const projectManagementRouter = this.projectManagementRouteService.getRouteProjectManagement();
+    const settingManagementRouter = this.settingManagementRouteService.getRouteSettingManagement();
     return compact([
       homeRouter,
       // accessRouter,
       aboutRouter,
       projectManagementRouter,
+      settingManagementRouter,
       systemManagementRouter,
       // outsideRouter,
       // personalCenterRouter,
