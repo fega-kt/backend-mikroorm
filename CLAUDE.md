@@ -4,49 +4,97 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Git conventions
 
-Commit message follow pattern: `type(scope): description` — ví dụ: `feat(category): add category module`.
+Commit message follow pattern: `type(scope): description` — e.g. `feat(category): add category module`.
 Commit message is clean and minimal — no extra metadata or attribution lines beyond the description.
 
 ## Commands
 
 ```bash
-yarn start:dev          # Dev server với hot reload
-yarn build              # Build production (chạy prebuild trước)
+yarn start:dev     # Dev server with hot reload
+yarn build         # Production build (runs prebuild first)
+yarn lint          # Check lint errors
+yarn lint:fix      # Auto-fix lint errors
+yarn format        # Format all src/
 ```
 
-Không có test runner được cấu hình. Không có migration CLI — MikroORM dùng `autoLoadEntities: true` và `orm.getSchemaGenerator().ensureIndexes()` khi khởi động (MongoDB schemaless).
+No test runner configured. No migration CLI — MikroORM uses `autoLoadEntities: true` and `orm.getSchemaGenerator().ensureIndexes()` on startup (MongoDB schemaless).
 
 ## Environment
 
-Copy `.env.example` thành `.env`. Các biến bắt buộc:
-- `MONGO_URI`, `DB_NAME` — kết nối MongoDB
-- `SUPABASE_URL`, `SUPABASE_JWT_PUBLISHABLE` — xác thực token
-- `PORT`, `API_PREFIX` — cấu hình server
+Copy `.env.example` to `.env`. Required variables:
+- `MONGO_URI`, `DB_NAME` — MongoDB connection
+- `SUPABASE_URL`, `SUPABASE_JWT_PUBLISHABLE` — token auth
+- `PORT`, `API_PREFIX` — server config
+
+## Project structure
+
+```
+src/
+├── app.imports.ts              ← register all feature modules here
+├── app.module.ts
+├── main.ts
+├── common/
+│   ├── base/
+│   │   ├── base.entity.ts      ← BaseEntity (all entities extend this)
+│   │   ├── base.service.ts     ← BaseService<T> (CRUD + soft delete)
+│   │   ├── base.repository.ts
+│   │   └── permission-type.enum.ts
+│   ├── decorators/             ← @CurrentUser, @Permissions, @Public
+│   ├── exceptions/             ← ResponseCode enum, HttpExceptionFilter
+│   ├── filters/
+│   ├── interceptors/           ← ResponseInterceptor, LoggingInterceptor
+│   ├── pipes/                  ← ZodValidationPipe, IdValidationPipe
+│   ├── pagination/
+│   └── utils/
+├── config/                     ← env.config, mikro-orm.config, swagger.config
+├── modules/
+│   ├── activity-log/           ← audit trail for entity changes
+│   ├── auth/                   ← Supabase auth guard, permissions guard
+│   ├── category/               ← task/project categories
+│   ├── comment/                ← threaded comments on tasks
+│   ├── department/             ← organizational departments
+│   ├── group/                  ← user groups
+│   ├── health/                 ← health check endpoint
+│   ├── milestone/              ← project milestones
+│   ├── notification/           ← in-app notifications
+│   ├── principal/              ← User/Group wrapper for role assignment
+│   ├── project/                ← projects, members, sections
+│   ├── role/                   ← roles with rights (PermissionType[])
+│   ├── route/                  ← navigation routes / menu structure
+│   ├── sprint/                 ← agile sprints
+│   ├── task/                   ← tasks within projects/sections
+│   ├── timelog/                ← time tracking on tasks
+│   ├── upload/                 ← file uploads + attachments (R2 storage)
+│   └── user/                   ← user accounts
+└── types/
+    └── express.d.ts            ← extends Request with user
+```
 
 ## Architecture
 
 ### Module pattern
 
-Mỗi feature module nằm tại `src/modules/<name>/` với cấu trúc:
+Each feature module lives at `src/modules/<name>/`:
 
 ```
 <name>.module.ts
 entity/<name>.entity.ts
 service/<name>.service.ts
 controller/<name>.controller.ts
-validation/<name>.validation.ts   ← Zod schemas (không dùng class-validator)
+validation/<name>.validation.ts   ← Zod schemas (not class-validator)
 ```
 
-Để thêm module mới vào app: import vào `src/app.imports.ts` trong mảng `modules`.
+To register a new module: import into `src/app.imports.ts` in the `modules` array.
 
 ### BaseEntity & BaseService
 
-Tất cả entity kế thừa `BaseEntity` (`src/common/base/base.entity.ts`):
+All entities extend `BaseEntity` (`src/common/base/base.entity.ts`):
+
 - `_id` (ObjectId) + `id` (string serialized)
 - `createdAt`, `updatedAt`, `createdBy`, `updatedBy` (auto-set)
-- `deleted: boolean` — soft delete
+- `deleted: boolean` — soft delete flag
 
-`BaseService<T>` (`src/common/base/base.service.ts`) cung cấp: `addOne`, `findAll`, `paginate`, `findById`, `updateOne`, `remove` (soft delete). Service phải khai báo `scope: Scope.REQUEST` để inject `REQUEST` (dùng lấy current user).
+`BaseService<T>` provides: `addOne`, `findAll`, `paginate`, `findById`, `updateOne`, `remove` (soft delete). Services must declare `scope: Scope.REQUEST` to inject `REQUEST` (for current user).
 
 ```typescript
 @Injectable({ scope: Scope.REQUEST })
@@ -60,16 +108,47 @@ export class FooService extends BaseService<FooEntity> {
 }
 ```
 
+#### MikroORM typing in services — minimize type casts
+
+**Rule: always declare the correct type; use `as` as little as possible. Never use `as any` or `Record<string, any>` unless there is no alternative.**
+
+Use the proper MikroORM types:
+
+```typescript
+import { EntityData, RequiredEntityData } from "@mikro-orm/core";
+import { FilterQuery } from "@mikro-orm/mongodb";
+
+// where clauses — use FilterQuery<T>, not Record<string, any>
+const where: FilterQuery<FooEntity> = { deleted: { $ne: true } };
+
+// updateOne — type the update object directly, no cast needed on the call site
+const update: EntityData<FooEntity> = { name: data.name };
+if (data.relationId) update.relation = em.getReference(RelationEntity, data.relationId);
+this.updateOne(id, update);
+
+// addOne — createdBy/updatedBy are set internally by BaseService, narrow cast is unavoidable
+this.addOne({ ...fields } as RequiredEntityData<FooEntity>);
+```
+
+Priority when hitting a type error:
+
+1. Declare the correct type upfront (`FilterQuery<T>`, `EntityData<T>`, ...)
+2. Cast at the value level, not the whole object (`value as SpecificType`)
+3. Cast to a narrow type (`as RequiredEntityData<T>`) rather than `as any`
+4. `as any` only as a last resort — add a comment explaining why
+
+When a validation schema uses `fooId: z.string()` (client sends an ID), resolve it to an entity reference via `em.getReference(FooEntity, id)` before passing to `addOne`/`updateOne` — no extra DB query needed.
+
 ### Authentication & Authorization
 
-- **Auth**: `SupabaseAuthGuard` — verify Bearer token qua Supabase, load user + permissions vào `req.user`
-- **Guard**: `PermissionsGuard` áp dụng global, kiểm tra `@Permissions(PermissionType.Xxx)` decorator
-- **Public routes**: dùng `@Public()` decorator để bypass auth
-- Thêm permission mới vào enum `PermissionType` tại `src/common/base/permission-type.enum.ts` theo pattern `permission:<action>:<resource>`
+- **Auth**: `SupabaseAuthGuard` — verifies Bearer token via Supabase, loads user + permissions into `req.user`
+- **Guard**: `PermissionsGuard` applied globally, checks `@Permissions(PermissionType.Xxx)` decorator
+- **Public routes**: use `@Public()` decorator to bypass auth
+- New permissions go in `PermissionType` enum at `src/common/base/permission-type.enum.ts`, pattern: `permission:<action>:<resource>`
 
 ### Validation
 
-Dùng **Zod** (không dùng class-validator). Validation schema định nghĩa trong `validation/` và áp dụng qua `ZodValidationPipe`:
+Use **Zod** (not class-validator). Define schemas in `validation/`, apply via `ZodValidationPipe`:
 
 ```typescript
 @Post()
@@ -81,45 +160,37 @@ findAll(@Query(new ZodValidationPipe(fooFilterValidation)) query: z.infer<typeof
 
 ### Response format
 
-Mọi response được wrap bởi `ResponseInterceptor`:
+All responses are wrapped by `ResponseInterceptor`:
 ```json
 { "result": <data> }
 ```
 
-Lỗi xử lý qua `HttpExceptionFilter` với `ResponseCode` enum (`src/common/exceptions/response-code.ts`).
+Errors handled by `HttpExceptionFilter` with `ResponseCode` enum (`src/common/exceptions/response-code.ts`).
 
 ### Path aliases
 
-```
+```text
 @config/*   → src/config/*
 @common/*   → src/common/*
 @modules/*  → src/modules/*
 @types/*    → src/types/*
 ```
 
-### Key entities & relationships
+### Key entity relationships
 
-- **UserEntity** — has `loginName` (unique, = Supabase email), belongs to `DepartmentEntity`, linked to `PrincipalEntity` (1-1), belongs to many `GroupEntity`
-- **PrincipalEntity** — wrapper cho User hoặc Group để gán Role
-- **RoleEntity** — có `rights: string[]` (mảng `PermissionType` values), gán cho principals
-- **ProjectEntity** — có `ProjectMemberEntity` (many), `owner`, `folderId` (UUID cho R2 storage)
+- **UserEntity** — `loginName` (unique, = Supabase email), belongs to `DepartmentEntity`, linked to `PrincipalEntity` (1-1), belongs to many `GroupEntity`
+- **PrincipalEntity** — wrapper for User or Group to assign roles
+- **RoleEntity** — `rights: string[]` (array of `PermissionType` values), assigned to principals
+- **ProjectEntity** — has `ProjectMemberEntity` (many), `owner`, `folderId` (UUID for R2 storage)
+- **TaskEntity** — belongs to `ProjectEntity`, optionally to `SectionEntity`, `SprintEntity`, `MilestoneEntity`
 
-### Linting & Formatting
+## Checklist for new modules
 
-ESLint + Prettier được cấu hình tại `.eslintrc.js` và `.prettierrc`. Chạy:
-```bash
-yarn lint          # kiểm tra lỗi
-yarn lint:fix      # tự động fix
-yarn format        # format toàn bộ src/
-```
-
-## Checklist khi thêm module mới
-
-1. Tạo entity kế thừa `BaseEntity`, dùng `@Entity({ collection: '<plural>' })`
-2. Tạo Zod schemas trong `validation/`
-3. Tạo service với `Scope.REQUEST`, kế thừa `BaseService<Entity>`
-4. Tạo controller với `@Permissions()` decorator trên mỗi endpoint
-5. Thêm permissions vào `PermissionType` enum
-6. Tạo `.module.ts` với `MikroOrmModule.forFeature([Entity])`
-7. Import module vào `src/app.imports.ts`
-8. Cập nhật `CLAUDE.md` phần modules
+1. Create entity extending `BaseEntity`, use `@Entity({ collection: '<plural>' })`
+2. Create Zod schemas in `validation/`
+3. Create service with `Scope.REQUEST`, extending `BaseService<Entity>`
+4. Create controller with `@Permissions()` decorator on each endpoint
+5. Add permissions to `PermissionType` enum
+6. Create `.module.ts` with `MikroOrmModule.forFeature([Entity])`
+7. Import module into `src/app.imports.ts`
+8. Update `CLAUDE.md` modules section

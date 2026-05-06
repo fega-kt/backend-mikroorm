@@ -179,6 +179,23 @@ export enum PermissionType {
   /** xem notification */
   MenuNotification = "permission:menu:notification",
 
+  /** ===== CATEGORY ===== */
+
+  /** vào menu category */
+  MenuCategory = "permission:menu:category",
+
+  /** xem chi tiết category */
+  ViewCategoryDetail = "permission:category:view",
+
+  /** tạo category */
+  CreateCategory = "permission:category:create",
+
+  /** cập nhật category */
+  UpdateCategory = "permission:category:update",
+
+  /** xóa category */
+  DeleteCategory = "permission:category:delete",
+
   /** ===== GROUP ===== */
 
   /** vào menu group */
