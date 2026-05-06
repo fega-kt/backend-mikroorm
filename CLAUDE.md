@@ -51,6 +51,7 @@ src/
 │   ├── activity-log/           ← audit trail for entity changes
 │   ├── auth/                   ← Supabase auth guard, permissions guard
 │   ├── category/               ← task/project categories
+│   ├── request-type/           ← request types (linked to category)
 │   ├── comment/                ← threaded comments on tasks
 │   ├── department/             ← organizational departments
 │   ├── group/                  ← user groups
