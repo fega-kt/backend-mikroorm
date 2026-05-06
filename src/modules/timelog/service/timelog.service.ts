@@ -84,10 +84,7 @@ export class TimeLogService extends BaseService<TimeLogEntity> {
   async reviewTimeLog(id: string, data: z.infer<typeof reviewTimeLogValidation>) {
     const user = this.getCurrentUser();
 
-    const timelog = await this.timelogRepo.findOne(
-      { id, deleted: { $ne: true } },
-      { populate: ["task", "task.project"] },
-    );
+    const timelog = await this.timelogRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["task", "task.project"] });
     if (!timelog) throw new NotFoundException("TimeLog not found");
     if (timelog.status !== TimeLogStatus.PENDING) {
       throw new BadRequestException("Only pending timelogs can be reviewed");

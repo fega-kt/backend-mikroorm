@@ -17,14 +17,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
   }
 
   /** Tạo notification — gọi nội bộ từ các service khác */
-  async notify(payload: {
-    userId: string;
-    type: NotificationType;
-    title: string;
-    message: string;
-    refId?: string;
-    refType?: string;
-  }) {
+  async notify(payload: { userId: string; type: NotificationType; title: string; message: string; refId?: string; refType?: string }) {
     const em = this.notifRepo.getEntityManager();
     const entity = this.notifRepo.create({
       user: payload.userId,
@@ -68,10 +61,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
     const em = this.notifRepo.getEntityManager();
     const collection = em.getConnection().getCollection("notifications");
 
-    await collection.updateMany(
-      { user: user.id, isRead: false, deleted: { $ne: true } },
-      { $set: { isRead: true, readAt: new Date() } },
-    );
+    await collection.updateMany({ user: user.id, isRead: false, deleted: { $ne: true } }, { $set: { isRead: true, readAt: new Date() } });
 
     return { message: "All notifications marked as read" };
   }

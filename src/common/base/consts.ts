@@ -11,6 +11,6 @@ export interface IUserResponse {
   phoneNumber?: string;
   description?: string;
   permissions: string[];
-  department?:Loaded<DepartmentEntity, never, "code" | "id" | "name", never>;
+  department?: Loaded<DepartmentEntity, never, "code" | "id" | "name", never>;
   canAccess: (pers: PermissionType[]) => boolean;
 }

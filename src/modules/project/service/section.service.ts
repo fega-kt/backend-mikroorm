@@ -29,10 +29,7 @@ export class SectionService extends BaseService<SectionEntity> {
   async getSectionsByProject(projectId: string) {
     const user = this.getCurrentUser();
     await this.projectPermissionService.assertMember(projectId, user);
-    return this.findAll(
-      { project: projectId, deleted: { $ne: true } },
-      { fields: ["id", "name", "order", "project"], populate: [] },
-    );
+    return this.findAll({ project: projectId, deleted: { $ne: true } }, { fields: ["id", "name", "order", "project"], populate: [] });
   }
 
   async reorder(projectId: string, orders: { id: string; order: number }[]) {

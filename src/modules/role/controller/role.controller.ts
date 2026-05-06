@@ -15,7 +15,7 @@ export class RoleController {
   @Post()
   create(
     @Body(new ZodValidationPipe(createRoleValidation))
-    data: z.infer<typeof createRoleValidation>
+    data: z.infer<typeof createRoleValidation>,
   ): Promise<RoleEntity> {
     return this.roleService.createRole(data);
   }
@@ -25,7 +25,7 @@ export class RoleController {
   update(
     @Param("id", new IdValidationPipe()) id: string,
     @Body(new ZodValidationPipe(updateRoleValidation))
-    data: z.infer<typeof updateRoleValidation>
+    data: z.infer<typeof updateRoleValidation>,
   ): Promise<RoleEntity> {
     return this.roleService.updateRole(id, data);
   }

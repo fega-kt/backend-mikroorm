@@ -37,12 +37,14 @@ export const updateTaskValidation = z.object({
 });
 
 export const reorderTasksValidation = z.object({
-  orders: z.array(
-    z.object({
-      id: z.string().trim().min(1),
-      order: z.number().int().min(0),
-    })
-  ).min(1),
+  orders: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1),
+        order: z.number().int().min(0),
+      }),
+    )
+    .min(1),
 });
 
 export const moveTaskValidation = z.object({

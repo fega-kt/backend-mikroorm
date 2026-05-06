@@ -58,16 +58,7 @@ export class ProjectMemberService extends BaseService<ProjectMemberEntity> {
     return this.findAll(
       { project: projectId, deleted: { $ne: true } },
       {
-        fields: [
-          "id",
-          "role",
-          "joinedAt",
-          "user.id",
-          "user.fullName",
-          "user.avatar",
-          "user.workEmail",
-          "user.loginName",
-        ],
+        fields: ["id", "role", "joinedAt", "user.id", "user.fullName", "user.avatar", "user.workEmail", "user.loginName"],
         populate: ["user"],
       },
     );

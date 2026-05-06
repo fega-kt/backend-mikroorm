@@ -6,7 +6,10 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "prebuild": "node scripts/build-info.js",
-    "build": "yarn prebuild && nest build"
+    "build": "yarn prebuild && nest build",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
+    "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1004.0",
@@ -42,6 +45,12 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^20.0.0",
     "@types/url-join": "^4.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.59.2",
+    "@typescript-eslint/parser": "^8.59.2",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.8.3",
     "typescript": "^5.0.0"
   },
   "packageManager": "yarn@4.1.1+sha512.ec40d0639bb307441b945d9467139cbb88d14394baac760b52eca038b330d16542d66fef61574271534ace5a200518dabf3b53a85f1f9e4bfa37141b538a9590"

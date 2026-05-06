@@ -9,11 +9,7 @@ export class NotificationController {
 
   @Get()
   @Permissions(PermissionType.MenuNotification)
-  getMyNotifications(
-    @Query("page") page = 1,
-    @Query("limit") limit = 20,
-    @Query("onlyUnread") onlyUnread = "false",
-  ) {
+  getMyNotifications(@Query("page") page = 1, @Query("limit") limit = 20, @Query("onlyUnread") onlyUnread = "false") {
     return this.notificationService.getMyNotifications(Number(page), Number(limit), onlyUnread === "true");
   }
 

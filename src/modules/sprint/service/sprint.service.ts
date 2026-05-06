@@ -47,10 +47,7 @@ export class SprintService extends BaseService<SprintEntity> {
   }
 
   async getSprintById(id: string) {
-    const sprint = await this.sprintRepo.findOne(
-      { id, deleted: { $ne: true } },
-      { populate: ["project"] },
-    );
+    const sprint = await this.sprintRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
     if (!sprint) throw new NotFoundException("Sprint not found");
 
     const user = this.getCurrentUser();

@@ -191,10 +191,8 @@ export enum PermissionType {
   CreateGroup = "permission:group:create",
 
   /** cập nhật group */
-  UpdateGroup= "permission:group:update",
+  UpdateGroup = "permission:group:update",
 
   /** xóa group */
-  DeleteGroup= "permission:group:delete",
-
-
+  DeleteGroup = "permission:group:delete",
 }

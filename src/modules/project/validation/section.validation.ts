@@ -9,10 +9,12 @@ export const updateSectionValidation = z.object({
 });
 
 export const reorderSectionsValidation = z.object({
-  orders: z.array(
-    z.object({
-      id: z.string().trim().min(1),
-      order: z.number().int().min(0),
-    })
-  ).min(1),
+  orders: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1),
+        order: z.number().int().min(0),
+      }),
+    )
+    .min(1),
 });

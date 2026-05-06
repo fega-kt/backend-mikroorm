@@ -7,12 +7,7 @@ import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
 import { z } from "zod";
 import { TaskEntity, TaskStatus } from "../entity/task.entity";
-import {
-  createSubTaskValidation,
-  createTaskValidation,
-  taskFilterValidation,
-  updateTaskValidation,
-} from "../validation/task.validation";
+import { createSubTaskValidation, createTaskValidation, taskFilterValidation, updateTaskValidation } from "../validation/task.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class TaskService extends BaseService<TaskEntity> {

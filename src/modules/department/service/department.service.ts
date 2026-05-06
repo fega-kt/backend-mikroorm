@@ -71,10 +71,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   async update(id: string, data: z.infer<typeof updateDepartmentValidation>) {
     let { parent: parentId, manager: managerId, deputy: deputyId, ...rest } = data;
 
-    const department = await this.findOne(
-      { id, deleted: { $ne: true } },
-      { fields: ["id", "code", "parent", "parentCode"] },
-    );
+    const department = await this.findOne({ id, deleted: { $ne: true } }, { fields: ["id", "code", "parent", "parentCode"] });
 
     if (!department) {
       throw new NotFoundException("Department not found");
@@ -137,7 +134,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   async getList(): Promise<DepartmentEntity[]> {
     const { data } = await this.findAll(
       { deleted: { $ne: true } },
-      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status", 'parentCode'] },
+      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status", "parentCode"] },
     );
     return data;
   }
@@ -146,8 +143,24 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     const department = await this.findOne(
       { id, deleted: { $ne: true } },
       {
-        fields: ["id", "code", "name", "parent", 'status', 'manager', 'deputy', 'manager.id', 'manager.fullName', 'manager.avatar', 'deputy.id', 'deputy.fullName', 'deputy.avatar', 'deputy.workEmail', 'manager.workEmail'],
-        populate: ['manager', 'deputy']
+        fields: [
+          "id",
+          "code",
+          "name",
+          "parent",
+          "status",
+          "manager",
+          "deputy",
+          "manager.id",
+          "manager.fullName",
+          "manager.avatar",
+          "deputy.id",
+          "deputy.fullName",
+          "deputy.avatar",
+          "deputy.workEmail",
+          "manager.workEmail",
+        ],
+        populate: ["manager", "deputy"],
       },
     );
     if (!department) {

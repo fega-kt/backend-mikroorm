@@ -44,7 +44,13 @@ export class ProjectService extends BaseService<ProjectEntity> {
     for (const field of PROJECT_TRACKED_FIELDS) {
       newData[field] = (project as any)[field];
     }
-    await this.activityLogService.addOne({ parentId: project.id, type: ActivityLogType.User, action: ActivityLogAction.CREATE, oldData: null, newData });
+    await this.activityLogService.addOne({
+      parentId: project.id,
+      type: ActivityLogType.User,
+      action: ActivityLogAction.CREATE,
+      oldData: null,
+      newData,
+    });
 
     return project;
   }
@@ -139,9 +145,7 @@ export class ProjectService extends BaseService<ProjectEntity> {
     const updated = await this.updateOne(id, data);
 
     if (Object.keys(oldData).length > 0) {
-      const action = newData.status && newData.status !== oldData.status
-        ? ActivityLogAction.STATUS_CHANGE
-        : ActivityLogAction.UPDATE;
+      const action = newData.status && newData.status !== oldData.status ? ActivityLogAction.STATUS_CHANGE : ActivityLogAction.UPDATE;
       await this.activityLogService.addOne({ parentId: id, type: ActivityLogType.User, action, oldData, newData });
     }
 

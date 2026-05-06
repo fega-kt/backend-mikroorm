@@ -16,7 +16,7 @@ export class GroupService extends BaseService<GroupEntity> {
     @InjectRepository(GroupEntity)
     private readonly groupRepo: EntityRepository<GroupEntity>,
     @Inject(REQUEST) protected request: Request | undefined,
-    private readonly em: EntityManager
+    private readonly em: EntityManager,
   ) {
     super(groupRepo, request);
   }
@@ -34,7 +34,7 @@ export class GroupService extends BaseService<GroupEntity> {
           ...groupData,
           ...defaultValueBase,
         },
-        { persist: false }
+        { persist: false },
       );
 
       em.persist(group);
@@ -134,7 +134,7 @@ export class GroupService extends BaseService<GroupEntity> {
         limit,
         page,
         fields: ["id", "name", "description", "createdAt"],
-      }
+      },
     );
 
     return { data, total };
@@ -144,7 +144,7 @@ export class GroupService extends BaseService<GroupEntity> {
       { id, deleted: { $ne: true } },
       {
         populate: ["users"],
-      }
+      },
     );
 
     if (!group) {
