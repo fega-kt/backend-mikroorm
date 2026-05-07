@@ -38,13 +38,19 @@ export class CategoryService extends BaseService<CategoryEntity> {
     return this.paginate(where, {
       page,
       limit,
-      fields: ["id", "department", "code", "name", "icon", "createdAt"],
+      fields: ["id", "code", "department", "name", "icon", "createdAt", "department.id", "department.name"],
       populate: ["department"],
     });
   }
 
   async getCategoryById(id: string) {
-    const category = await this.findOne({ id, deleted: { $ne: true } });
+    const category = await this.findOne(
+      { id, deleted: { $ne: true } },
+      {
+        fields: ["id", "code", "name", "icon", "createdAt", "department", "department.id", "department.name"],
+        populate: ["department"],
+      },
+    );
     if (!category) throw new NotFoundException("Category not found");
     return category;
   }
