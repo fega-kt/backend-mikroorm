@@ -122,7 +122,7 @@ export class UserService extends BaseService<UserEntity> {
     const user = await this.findOne(
       { id, deleted: { $ne: true } },
       {
-        fields: ["id", "fullName", "loginName", "workEmail", "avatar", "isActive", "department", "groups"],
+        fields: ["id", "fullName", "loginName", "workEmail", "avatar", "isActive", "department", "groups", "department.name"],
         populate: ["department", "groups"],
       },
     );
