@@ -18,6 +18,7 @@ export class SettingManagementRouteService {
     }
 
     const canViewCategoryList = currentUser.canAccess([PermissionType.MenuCategory]);
+    const canViewRequestList = currentUser.canAccess([PermissionType.MenuRequestType]);
 
     const children = [];
 
@@ -29,6 +30,17 @@ export class SettingManagementRouteService {
           icon: "TagsOutlined",
           title: "common.menu.category",
           roles: [PermissionType.MenuCategory],
+          permissions: [],
+        },
+      });
+    }
+    if (canViewRequestList) {
+      children.push({
+        path: "/setting/request-type",
+        component: "/setting/request-type/index.tsx",
+        handle: {
+          icon: "FileTextOutlined",
+          title: "common.menu.requestType",
           permissions: [],
         },
       });
