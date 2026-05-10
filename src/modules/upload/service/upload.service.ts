@@ -3,8 +3,8 @@ import { urlJoin } from "@common/utils/url-join";
 import { ENV } from "@config/env.config";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "crypto";
-import * as path from "path";
 import { fromBuffer } from "file-type";
+import * as path from "path";
 import { ALLOWED_MIME_TYPES, EXT_MIME_MAP, INVALID_FILENAME_CHARS, MAX_FILENAME_LENGTH } from "../upload.constants";
 
 @Injectable()
@@ -45,7 +45,7 @@ export class UploadService {
     }
 
     const detected = await fromBuffer(file.buffer);
-    const actualMime = detected?.mime;
+    const actualMime = detected?.mime || file.mimetype;
 
     if (!actualMime || !ALLOWED_MIME_TYPES.includes(actualMime)) {
       throw new BadRequestException(`Actual file content type "${actualMime ?? "unknown"}" is not allowed`);
