@@ -30,7 +30,8 @@ export class RequestTypeService extends BaseService<RequestTypeEntity> {
       throw new ConflictException(`Request type with code "${data.code}" already exists`);
     }
     const em = this.requestTypeRepo.getEntityManager();
-    const category = em.getReference(CategoryEntity, data.categoryId);
+    const category = em.getReference(CategoryEntity, data.category);
+
     return this.addOne({
       code: data.code,
       name: data.name,
@@ -50,7 +51,7 @@ export class RequestTypeService extends BaseService<RequestTypeEntity> {
     return this.paginate(where, {
       page,
       limit,
-      fields: ["id", "code", "name", "category", "prefix", "description", "status", "createdAt"],
+      fields: ["id", "code", "name", "category", "prefix", "description", "status", "createdAt", "category.name"],
       populate: ["category"],
     });
   }
@@ -64,10 +65,10 @@ export class RequestTypeService extends BaseService<RequestTypeEntity> {
   async updateRequestType(id: string, data: z.infer<typeof updateRequestTypeValidation>) {
     const requestType = await this.requestTypeRepo.findOne({ id, deleted: { $ne: true } });
     if (!requestType) throw new NotFoundException("Request type not found");
-    const { categoryId, ...rest } = data;
+    const { category, ...rest } = data;
     const update: EntityData<RequestTypeEntity> = { ...rest };
-    if (categoryId) {
-      update.category = this.requestTypeRepo.getEntityManager().getReference(CategoryEntity, categoryId);
+    if (category) {
+      update.category = this.requestTypeRepo.getEntityManager().getReference(CategoryEntity, category);
     }
     return this.updateOne(id, update);
   }

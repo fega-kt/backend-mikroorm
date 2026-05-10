@@ -10,7 +10,7 @@ export const createRequestTypeValidation = z.object({
     .regex(/^[A-Z0-9_]+$/, "Code must contain only uppercase letters, digits and underscores")
     .transform((v) => v.toUpperCase()),
   name: z.string().trim().min(1, "Name is required").max(255),
-  categoryId: z.string().trim().min(1, "Category is required"),
+  category: z.string().trim().min(1, "Category is required"),
   prefix: z.string().trim().min(1, "Prefix is required").max(20),
   description: z.string().trim().max(1000).optional().nullable(),
   status: z.nativeEnum(RequestTypeStatus).optional(),
@@ -18,7 +18,7 @@ export const createRequestTypeValidation = z.object({
 
 export const updateRequestTypeValidation = z.object({
   name: z.string().trim().min(1).max(255).optional(),
-  categoryId: z.string().trim().min(1).optional(),
+  category: z.string().trim().min(1).optional(),
   prefix: z.string().trim().min(1).max(20).optional(),
   description: z.string().trim().max(1000).optional().nullable(),
   status: z.nativeEnum(RequestTypeStatus).optional(),
