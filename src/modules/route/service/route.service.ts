@@ -224,7 +224,7 @@ export class RouteService {
       settingManagementRouter,
       systemManagementRouter,
       // outsideRouter,
-      // personalCenterRouter,
+      personalCenterRouter,
       // routeNestRouter,
     ]);
   }
