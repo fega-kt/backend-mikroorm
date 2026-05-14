@@ -1,13 +1,12 @@
-import { ENV } from "@config/env.config";
 import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Scope } from "@nestjs/common";
-import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
 
 import { BaseService } from "@common/base/base.service";
 import { STORAGE_PATH } from "@common/constants/storage.constant";
 import { SYSTEM_DEPARTMENT_ID } from "@common/constants/system.constant";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
+import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UploadService } from "@modules/upload/service/upload.service";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
@@ -17,7 +16,6 @@ import { createUserValidation, updateUserValidation } from "../validation/user.v
 
 @Injectable({ scope: Scope.REQUEST })
 export class UserService extends BaseService<UserEntity> {
-  private readonly supabaseAdmin: SupabaseClient;
   private logger = new Logger(UserService.name);
 
   constructor(
@@ -26,14 +24,9 @@ export class UserService extends BaseService<UserEntity> {
     private readonly userRepo: EntityRepository<UserEntity>,
     private readonly em: EntityManager,
     private readonly uploadService: UploadService,
+    private readonly supabaseService: SupabaseService,
   ) {
     super(userRepo, request);
-    this.supabaseAdmin = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
   }
 
   async create(data: z.infer<typeof createUserValidation>): Promise<void> {
@@ -52,30 +45,16 @@ export class UserService extends BaseService<UserEntity> {
       throw new ConflictException("Email already exists in local database");
     }
 
-    // 2️⃣ Check in Supabase (Fallback to listUsers if auth schema is restricted)
-    const { data: supabaseResponse, error: supabaseError } = await this.supabaseAdmin.auth.admin.listUsers();
+    const users = await this.supabaseService.listUsers().catch((error: Error) => {
+      throw new BadRequestException("Failed to check Supabase user: " + error.message);
+    });
 
-    if (supabaseError || !supabaseResponse) {
-      throw new BadRequestException("Failed to check Supabase user: " + supabaseError?.message);
-    }
-
-    const supabaseUser = supabaseResponse.users.find((u: User) => u.email === loginName);
-
-    let authUser = supabaseUser;
-
-    if (!authUser) {
-      const { data: createdAuthUser, error: createSupabaseError } = await this.supabaseAdmin.auth.admin.createUser({
-        email: loginName,
-        password: password,
-        email_confirm: true,
-        user_metadata: { fullName },
-      });
-
-      if (createSupabaseError) {
-        throw new BadRequestException("Failed to create user in Supabase Auth: " + createSupabaseError.message);
-      }
-
-      authUser = createdAuthUser.user;
+    if (!users.find((u) => u.email === loginName)) {
+      await this.supabaseService
+        .createUser({ email: loginName, password, emailConfirm: true, userMetadata: { fullName } })
+        .catch((error: Error) => {
+          throw new BadRequestException("Failed to create user in Supabase Auth: " + error.message);
+        });
     }
 
     const defaulValueBase = this.getDefaultValuesForCreate();
@@ -104,13 +83,9 @@ export class UserService extends BaseService<UserEntity> {
 
       await em.flush();
     });
-    try {
-      await this.supabaseAdmin.auth.signInWithOtp({
-        email: loginName,
-      });
-    } catch (error) {
-      this.logger.error("Failed to generate magic link for new user: " + (error as Error).message);
-    }
+    await this.supabaseService.sendOtp(loginName).catch((error: Error) => {
+      this.logger.error("Failed to generate magic link for new user: " + error.message);
+    });
     return res;
   }
 
