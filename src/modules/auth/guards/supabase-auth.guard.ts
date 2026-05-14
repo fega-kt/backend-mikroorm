@@ -3,31 +3,25 @@ import { Reflector } from "@nestjs/core";
 
 import { IUserResponse } from "@common/base/consts";
 import { IS_PUBLIC_KEY } from "@common/decorators/public.decorator";
-import { ENV } from "@config/env.config";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { RoleEntity } from "@modules/role/entity/role.entity";
+import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UserEntity } from "@modules/user/entity/user.entity";
-import { createClient, SupabaseClient, UserResponse } from "@supabase/supabase-js";
 import { compact, uniq } from "lodash";
 
 @Injectable()
 export class SupabaseAuthGuard implements CanActivate {
   private readonly logger = new Logger(SupabaseAuthGuard.name);
-  private readonly SUPABASE_URL = ENV.SUPABASE_URL;
-  private readonly SUPABASE_JWT_PUBLISHABLE = ENV.SUPABASE_JWT_PUBLISHABLE;
-
-  private supabase: SupabaseClient;
 
   constructor(
     private reflector: Reflector,
+    private readonly supabaseService: SupabaseService,
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>,
     @InjectRepository(RoleEntity)
     private readonly roleEntity: EntityRepository<RoleEntity>,
-  ) {
-    this.supabase = createClient(this.SUPABASE_URL, this.SUPABASE_JWT_PUBLISHABLE, {});
-  }
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
@@ -71,11 +65,11 @@ export class SupabaseAuthGuard implements CanActivate {
   }
 
   private async verifyToken(token: string): Promise<string | undefined> {
-    const payload: UserResponse = await this.supabase.auth.getUser(token);
-    if (payload?.data.user.banned_until) {
+    const user = await this.supabaseService.getUserByToken(token);
+    if (user.banned_until) {
       throw new UnauthorizedException("User is banned");
     }
-    return payload?.data.user.email;
+    return user.email;
   }
 
   private handleLogging(email: string): void {
