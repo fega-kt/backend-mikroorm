@@ -1,7 +1,7 @@
 import { ENV } from "@config/env.config";
 import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Scope } from "@nestjs/common";
 import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
 
 import { BaseService } from "@common/base/base.service";
@@ -18,6 +18,7 @@ import { createUserValidation, updateUserValidation } from "../validation/user.v
 @Injectable({ scope: Scope.REQUEST })
 export class UserService extends BaseService<UserEntity> {
   private readonly supabaseAdmin: SupabaseClient;
+  private logger = new Logger(UserService.name);
 
   constructor(
     @Inject(REQUEST) protected request: Request | undefined,
@@ -78,7 +79,7 @@ export class UserService extends BaseService<UserEntity> {
     }
 
     const defaulValueBase = this.getDefaultValuesForCreate();
-    return this.em.transactional(async (em) => {
+    const res = await this.em.transactional(async (em) => {
       // 1️⃣ create user
       const user = this.userRepo.create({
         fullName,
@@ -103,6 +104,19 @@ export class UserService extends BaseService<UserEntity> {
 
       await em.flush();
     });
+    try {
+      const { data: linkData, error: linkError } = await this.supabaseAdmin.auth.admin.generateLink({
+        type: "magiclink",
+        email: loginName,
+      });
+      this.logger.log(`Magic link generated for new user ${loginName}: ${linkData}`);
+      if (linkError) {
+        this.logger.error("Failed to generate magic link for new user: " + linkError.message);
+      }
+    } catch (error) {
+      this.logger.error("Failed to generate magic link for new user: " + (error as Error).message);
+    }
+    return res;
   }
 
   async findAllUser(page = 1, limit = 10) {
