@@ -1,6 +1,8 @@
 import { LoggerModule } from "@common/logger/logger.module";
 import { ActivityLogModule } from "@modules/activity-log/activity-log.module";
+import { AppSettingModule } from "@modules/app-setting/app-setting.module";
 import { AuthModule } from "@modules/auth/auth.module";
+import { MailModule } from "@modules/mail/mail.module";
 import { SupabaseModule } from "@modules/supabase/supabase.module";
 import { CategoryModule } from "@modules/category/category.module";
 import { CommentModule } from "@modules/comment/comment.module";
@@ -23,6 +25,8 @@ import { ModuleMetadata } from "@nestjs/common";
 
 export const modules: ModuleMetadata["imports"] = [
   SupabaseModule,
+  MailModule,
+  AppSettingModule,
   UploadModule,
   HealthModule,
   LoggerModule,
