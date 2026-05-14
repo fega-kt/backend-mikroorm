@@ -105,14 +105,9 @@ export class UserService extends BaseService<UserEntity> {
       await em.flush();
     });
     try {
-      const { data: linkData, error: linkError } = await this.supabaseAdmin.auth.admin.generateLink({
-        type: "magiclink",
+      await this.supabaseAdmin.auth.signInWithOtp({
         email: loginName,
       });
-      this.logger.log(`Magic link generated for new user ${loginName}: ${linkData}`);
-      if (linkError) {
-        this.logger.error("Failed to generate magic link for new user: " + linkError.message);
-      }
     } catch (error) {
       this.logger.error("Failed to generate magic link for new user: " + (error as Error).message);
     }
