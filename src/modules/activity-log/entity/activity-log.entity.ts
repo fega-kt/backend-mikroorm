@@ -1,5 +1,5 @@
-import { Entity, Enum, Property, types } from "@mikro-orm/core";
 import { BaseEntity } from "@common/base/base.entity";
+import { Entity, Enum, Property, types } from "@mikro-orm/core";
 
 export enum ActivityLogType {
   System = "system",
@@ -15,9 +15,10 @@ export enum ActivityLogAction {
   ASSIGN = "ASSIGN",
   APPROVE = "APPROVE",
   REJECT = "REJECT",
+  CHANGE_PASSWORD = "CHANGE_PASSWORD",
 }
 
-@Entity({ collection: "activity-logs" })
+@Entity({ collection: "activity_logs" })
 export class ActivityLogEntity extends BaseEntity {
   @Property({ type: types.string })
   parentId!: string;

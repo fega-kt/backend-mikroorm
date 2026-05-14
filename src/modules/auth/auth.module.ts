@@ -1,6 +1,8 @@
 import { MikroOrmModule } from "@mikro-orm/nestjs";
 import { Module } from "@nestjs/common";
 
+import { ActivityLogModule } from "@modules/activity-log/activity-log.module";
+import { AppSettingModule } from "@modules/app-setting/app-setting.module";
 import { RoleEntity } from "@modules/role/entity/role.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
 import { APP_GUARD } from "@nestjs/core";
@@ -9,7 +11,7 @@ import { SupabaseAuthGuard } from "./guards/supabase-auth.guard";
 import { AuthService } from "./service/auth.service";
 
 @Module({
-  imports: [MikroOrmModule.forFeature([UserEntity, RoleEntity])],
+  imports: [MikroOrmModule.forFeature([UserEntity, RoleEntity]), AppSettingModule, ActivityLogModule],
   providers: [
     AuthService,
     {

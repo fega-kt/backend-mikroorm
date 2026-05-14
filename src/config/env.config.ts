@@ -20,6 +20,11 @@ export const ENV = {
   R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_KEY,
   R2_BUCKET: process.env.R2_BUCKET,
   R2_PUBLIC_URL: process.env.R2_PUBLIC_URL,
+  FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:3333",
+
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  MAIL_FROM: process.env.MAIL_FROM || "noreply@example.com",
+
   SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET,
   SUPABASE_JWT_PUBLISHABLE: process.env.SUPABASE_JWT_PUBLISHABLE,
   SUPABASE_URL: process.env.SUPABASE_URL,

@@ -213,6 +213,14 @@ export enum PermissionType {
   /** xóa request type */
   DeleteRequestType = "permission:request-type:delete",
 
+  /** ===== APP SETTING ===== */
+
+  /** vào menu app setting */
+  MenuAppSetting = "permission:menu:app-setting",
+
+  /** cập nhật app setting */
+  UpdateAppSetting = "permission:app-setting:update",
+
   /** ===== GROUP ===== */
 
   /** vào menu group */
