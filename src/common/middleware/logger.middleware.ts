@@ -37,6 +37,10 @@ export class LoggerMiddleware implements NestMiddleware {
   }
 
   private getClientIp(req: Request): string {
-    return (req.headers["x-forwarded-for"] as string)?.split(",")[0] || req.socket.remoteAddress || req.ip || "unknown";
+    const raw = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.ip || req.socket.remoteAddress || "unknown";
+
+    // normalize IPv6-mapped IPv4 (::ffff:1.2.3.4 → 1.2.3.4) and loopback (::1 → 127.0.0.1)
+    if (raw === "::1") return "127.0.0.1";
+    return raw.startsWith("::ffff:") ? raw.slice(7) : raw;
   }
 }
