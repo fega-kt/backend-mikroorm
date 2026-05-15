@@ -10,11 +10,11 @@ Commit message is clean and minimal — no extra metadata or attribution lines b
 ## Commands
 
 ```bash
-yarn start:dev     # Dev server with hot reload
-yarn build         # Production build (runs prebuild first)
-yarn lint          # Check lint errors
-yarn lint:fix      # Auto-fix lint errors
-yarn format        # Format all src/
+pnpm start:dev     # Dev server with hot reload
+pnpm build         # Production build (runs prebuild first)
+pnpm lint          # Check lint errors
+pnpm lint:fix      # Auto-fix lint errors
+pnpm format        # Format all src/
 ```
 
 No test runner configured. No migration CLI — MikroORM uses `autoLoadEntities: true` and `orm.getSchemaGenerator().ensureIndexes()` on startup (MongoDB schemaless).
