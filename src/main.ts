@@ -17,6 +17,8 @@ async function bootstrap() {
 
   await orm.getSchemaGenerator().ensureIndexes();
 
+  app.getHttpAdapter().getInstance().set("trust proxy", 1);
+
   app.useGlobalFilters(new HttpExceptionFilter());
 
   app.setGlobalPrefix(ENV.API_PREFIX);
