@@ -12,7 +12,7 @@ This project provides a clean and scalable architecture suitable for production-
 - 🗄 MikroORM
 - 🍃 MongoDB
 - 🔐 JWT Authentication
-- 📦 Yarn
+- 📦 pnpm
 - 🐳 Docker (MongoDB)
 - ☁️ Cloud Upload (ready)
 
@@ -48,7 +48,7 @@ src
 ## ⚙️ Requirements
 
 - Node.js >= 18
-- Yarn
+- pnpm >= 10
 - MongoDB
 
 ---
@@ -65,7 +65,7 @@ cd backend-mikroorm
 Install dependencies:
 
 ```bash
-yarn install
+pnpm install
 ```
 
 ---
@@ -101,7 +101,7 @@ docker run -d -p 27017:27017 mongo
 Development mode:
 
 ```bash
-yarn start:dev
+pnpm start:dev
 ```
 
 Application running at:
