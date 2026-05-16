@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+export const forgotPasswordValidation = z.object({
+  email: z.email("Invalid email address"),
+});
+
+export const verifyOtpValidation = z.object({
+  email: z.email("Invalid email address"),
+  otp: z.string().trim().length(6, "OTP must be 6 digits"),
+});
+
 export const changePasswordValidation = z
   .object({
     oldPassword: z.string().min(1, "Old password is required"),

@@ -32,4 +32,8 @@ export const ENV = {
 
   THROTTLE_TTL: Number(process.env.THROTTLE_TTL) || 60,
   THROTTLE_LIMIT: Number(process.env.THROTTLE_LIMIT) || 100,
+
+  CF_ACCOUNT_ID: process.env.CF_ACCOUNT_ID,
+  CF_KV_NAMESPACE_ID: process.env.CF_KV_NAMESPACE_ID,
+  CF_KV_API_TOKEN: process.env.CF_KV_API_TOKEN,
 };
