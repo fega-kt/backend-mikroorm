@@ -16,6 +16,7 @@ export enum ActivityLogAction {
   APPROVE = "APPROVE",
   REJECT = "REJECT",
   CHANGE_PASSWORD = "CHANGE_PASSWORD",
+  FORGOT_PASSWORD = "FORGOT_PASSWORD",
 }
 
 @Entity({ collection: "activity_logs" })
