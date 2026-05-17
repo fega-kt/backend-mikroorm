@@ -39,7 +39,7 @@ export class DepartmentController {
 
   @Get(":id")
   @Permissions(PermissionType.ViewDeparmentDetail)
-  getDetail(@Param("id", IdValidationPipe) id: string): Promise<DepartmentEntity> {
+  getDetail(@Param("id", IdValidationPipe) id: string) {
     return this.departmentService.getDetail(id);
   }
 }

@@ -1,9 +1,7 @@
 import { EntityData, RequiredEntityData } from "@mikro-orm/core";
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { Inject, Injectable, Logger, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { Injectable, Logger, Scope } from "@nestjs/common";
 import z from "zod";
 
 import { BaseService } from "@common/base/base.service";
@@ -17,15 +15,14 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
   private readonly logger = new Logger(AppSettingService.name);
 
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(AppSettingEntity)
-    private readonly appSettingRepo: EntityRepository<AppSettingEntity>,
+    protected readonly repo: EntityRepository<AppSettingEntity>,
   ) {
-    super(appSettingRepo, request);
+    super();
   }
 
   async getByKey(key: AppSettingType): Promise<SettingValue | undefined> {
-    const setting = await this.appSettingRepo.findOne({ key, deleted: { $ne: true } });
+    const setting = await this.repo.findOne({ key, deleted: { $ne: true } });
     return setting?.value;
   }
 
@@ -76,16 +73,16 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
   }
 
   async getAll(): Promise<AppSettingEntity[]> {
-    return this.appSettingRepo.find({ deleted: { $ne: true } });
+    return this.repo.find({ deleted: { $ne: true } });
   }
 
   async upsert(data: z.infer<typeof upsertAppSettingValidation>): Promise<AppSettingEntity> {
-    const existing = await this.appSettingRepo.findOne({ key: data.key, deleted: { $ne: true } });
+    const existing = await this.repo.findOne({ key: data.key, deleted: { $ne: true } });
 
     if (existing) {
       const update: EntityData<AppSettingEntity> = { value: data.value, description: data.description };
       await this.updateOne(existing.id, update);
-      return this.appSettingRepo.findOne({ key: data.key });
+      return this.repo.findOne({ key: data.key });
     }
 
     return this.addOne({ key: data.key, value: data.value, description: data.description } as RequiredEntityData<AppSettingEntity>);

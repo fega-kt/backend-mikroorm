@@ -1,9 +1,7 @@
 import { BaseService } from "@common/base/base.service";
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { z } from "zod";
 import { SectionEntity } from "../entity/section.entity";
 import { createSectionValidation, updateSectionValidation } from "../validation/section.validation";
@@ -12,12 +10,11 @@ import { ProjectPermissionService } from "./project-permission.service";
 @Injectable({ scope: Scope.REQUEST })
 export class SectionService extends BaseService<SectionEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(SectionEntity)
-    private readonly sectionRepo: EntityRepository<SectionEntity>,
+    protected readonly repo: EntityRepository<SectionEntity>,
     private readonly projectPermissionService: ProjectPermissionService,
   ) {
-    super(sectionRepo, request);
+    super();
   }
 
   async createSection(projectId: string, data: z.infer<typeof createSectionValidation>) {
@@ -36,9 +33,9 @@ export class SectionService extends BaseService<SectionEntity> {
     const user = this.getCurrentUser();
     await this.projectPermissionService.assertMember(projectId, user);
 
-    const em = this.sectionRepo.getEntityManager();
+    const em = this.repo.getEntityManager();
     for (const { id, order } of orders) {
-      const section = await this.sectionRepo.findOne({ id });
+      const section = await this.repo.findOne({ id });
       if (!section) throw new NotFoundException(`Section ${id} not found`);
       section.order = order;
     }
@@ -48,7 +45,7 @@ export class SectionService extends BaseService<SectionEntity> {
 
   async updateSection(id: string, data: z.infer<typeof updateSectionValidation>) {
     const user = this.getCurrentUser();
-    const section = await this.sectionRepo.findOne({ id, deleted: { $ne: true } });
+    const section = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!section) throw new NotFoundException("Section not found");
     const projectId = section.project.id;
     await this.projectPermissionService.assertMember(projectId, user);
@@ -57,7 +54,7 @@ export class SectionService extends BaseService<SectionEntity> {
 
   async deleteSection(id: string) {
     const user = this.getCurrentUser();
-    const section = await this.sectionRepo.findOne({ id, deleted: { $ne: true } });
+    const section = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!section) throw new NotFoundException("Section not found");
     const projectId = section.project.id;
     await this.projectPermissionService.assertMember(projectId, user);

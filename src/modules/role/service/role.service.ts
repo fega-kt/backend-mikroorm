@@ -1,29 +1,23 @@
 import { BaseService } from "@common/base/base.service";
 import { FilterQuery } from "@mikro-orm/core";
-import { EntityManager, EntityRepository } from "@mikro-orm/mongodb";
+import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import z from "zod";
 import { RoleEntity } from "../entity/role.entity";
 import { createRoleValidation, updateRoleValidation } from "../validation/role.validation";
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class RoleService extends BaseService<RoleEntity> {
   constructor(
     @InjectRepository(RoleEntity)
-    private readonly roleEntity: EntityRepository<RoleEntity>,
-    @Inject(REQUEST) protected request: Request | undefined,
-    private readonly em: EntityManager,
+    protected readonly repo: EntityRepository<RoleEntity>,
   ) {
-    super(roleEntity, request);
+    super();
   }
 
   async createRole(data: z.infer<typeof createRoleValidation>): Promise<RoleEntity> {
-    const role = await this.addOne(data);
-
-    return role;
+    return this.addOne(data);
   }
 
   async updateRole(id: string, data: z.infer<typeof updateRoleValidation>): Promise<RoleEntity> {

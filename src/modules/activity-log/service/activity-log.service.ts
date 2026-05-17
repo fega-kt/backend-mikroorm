@@ -3,19 +3,16 @@ import { IUserResponse } from "@common/base/consts";
 import { RequiredEntityData } from "@mikro-orm/core";
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { Inject, Injectable, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { Injectable, Scope } from "@nestjs/common";
 import { ActivityLogAction, ActivityLogEntity } from "../entity/activity-log.entity";
 
 @Injectable({ scope: Scope.REQUEST })
 export class ActivityLogService extends BaseService<ActivityLogEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(ActivityLogEntity)
-    private readonly userRepo: EntityRepository<ActivityLogEntity>,
+    protected readonly repo: EntityRepository<ActivityLogEntity>,
   ) {
-    super(userRepo, request);
+    super();
   }
 
   async addOne(data: RequiredEntityData<ActivityLogEntity>, options?: { user?: IUserResponse }) {

@@ -4,9 +4,7 @@ import { InjectRepository } from "@mikro-orm/nestjs";
 import { ActivityLogAction, ActivityLogType } from "@modules/activity-log/entity/activity-log.entity";
 import { ActivityLogService } from "@modules/activity-log/service/activity-log.service";
 import { TaskEntity, TaskPriority, TaskStatus } from "@modules/task/entity/task.entity";
-import { Inject, Injectable, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { Injectable, Scope } from "@nestjs/common";
 import { z } from "zod";
 import { ProjectEntity, ProjectStatus } from "../entity/project.entity";
 import { createProjectValidation, updateProjectValidation } from "../validation/project.validation";
@@ -27,14 +25,13 @@ const PROJECT_TRACKED_FIELDS = [
 @Injectable({ scope: Scope.REQUEST })
 export class ProjectService extends BaseService<ProjectEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(ProjectEntity)
-    private readonly projectRepo: EntityRepository<ProjectEntity>,
+    protected readonly repo: EntityRepository<ProjectEntity>,
     private readonly em: EntityManager,
     private readonly projectPermissionService: ProjectPermissionService,
     private readonly activityLogService: ActivityLogService,
   ) {
-    super(projectRepo, request);
+    super();
   }
 
   async createProject(data: z.infer<typeof createProjectValidation>) {
@@ -126,7 +123,7 @@ export class ProjectService extends BaseService<ProjectEntity> {
     const user = this.getCurrentUser();
     await this.projectPermissionService.assertOwner(id, user);
 
-    const project = await this.projectRepo.findOne({ id, deleted: { $ne: true } });
+    const project = await this.repo.findOne({ id, deleted: { $ne: true } });
 
     const oldData: Record<string, any> = {};
     const newData: Record<string, any> = {};

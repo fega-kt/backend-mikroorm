@@ -3,9 +3,7 @@ import { EntityData } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { CategoryEntity } from "@modules/category/entity/category.entity";
-import { ConflictException, Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { ConflictException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { z } from "zod";
 import { RequestTypeEntity } from "../entity/request-type.entity";
 import {
@@ -17,19 +15,18 @@ import {
 @Injectable({ scope: Scope.REQUEST })
 export class RequestTypeService extends BaseService<RequestTypeEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(RequestTypeEntity)
-    private readonly requestTypeRepo: EntityRepository<RequestTypeEntity>,
+    protected readonly repo: EntityRepository<RequestTypeEntity>,
   ) {
-    super(requestTypeRepo, request);
+    super();
   }
 
   async createRequestType(data: z.infer<typeof createRequestTypeValidation>) {
-    const existing = await this.requestTypeRepo.findOne({ code: data.code, deleted: { $ne: true } });
+    const existing = await this.repo.findOne({ code: data.code, deleted: { $ne: true } });
     if (existing) {
       throw new ConflictException(`Request type with code "${data.code}" already exists`);
     }
-    const em = this.requestTypeRepo.getEntityManager();
+    const em = this.repo.getEntityManager();
     const category = em.getReference(CategoryEntity, data.category);
 
     return this.addOne({
@@ -57,24 +54,24 @@ export class RequestTypeService extends BaseService<RequestTypeEntity> {
   }
 
   async getRequestTypeById(id: string) {
-    const requestType = await this.requestTypeRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["category"] });
+    const requestType = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["category"] });
     if (!requestType) throw new NotFoundException("Request type not found");
     return requestType;
   }
 
   async updateRequestType(id: string, data: z.infer<typeof updateRequestTypeValidation>) {
-    const requestType = await this.requestTypeRepo.findOne({ id, deleted: { $ne: true } });
+    const requestType = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!requestType) throw new NotFoundException("Request type not found");
     const { category, ...rest } = data;
     const update: EntityData<RequestTypeEntity> = { ...rest };
     if (category) {
-      update.category = this.requestTypeRepo.getEntityManager().getReference(CategoryEntity, category);
+      update.category = this.repo.getEntityManager().getReference(CategoryEntity, category);
     }
     return this.updateOne(id, update);
   }
 
   async deleteRequestType(id: string) {
-    const requestType = await this.requestTypeRepo.findOne({ id, deleted: { $ne: true } });
+    const requestType = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!requestType) throw new NotFoundException("Request type not found");
     return this.remove(id);
   }

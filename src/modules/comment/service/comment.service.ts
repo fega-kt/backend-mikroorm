@@ -3,9 +3,7 @@ import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { ProjectPermissionService } from "@modules/project/service/project-permission.service";
 import { TaskEntity } from "@modules/task/entity/task.entity";
-import { ForbiddenException, Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { ForbiddenException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { z } from "zod";
 import { CommentEntity } from "../entity/comment.entity";
 import { commentFilterValidation, createCommentValidation, updateCommentValidation } from "../validation/comment.validation";
@@ -13,14 +11,13 @@ import { commentFilterValidation, createCommentValidation, updateCommentValidati
 @Injectable({ scope: Scope.REQUEST })
 export class CommentService extends BaseService<CommentEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(CommentEntity)
-    private readonly commentRepo: EntityRepository<CommentEntity>,
+    protected readonly repo: EntityRepository<CommentEntity>,
     @InjectRepository(TaskEntity)
     private readonly taskRepo: EntityRepository<TaskEntity>,
     private readonly projectPermissionService: ProjectPermissionService,
   ) {
-    super(commentRepo, request);
+    super();
   }
 
   private async assertTaskAccess(taskId: string, userId: string) {
@@ -37,7 +34,7 @@ export class CommentService extends BaseService<CommentEntity> {
     await this.assertTaskAccess(data.task, user.id);
 
     if (data.parentComment) {
-      const parent = await this.commentRepo.findOne({ id: data.parentComment, deleted: { $ne: true } });
+      const parent = await this.repo.findOne({ id: data.parentComment, deleted: { $ne: true } });
       if (!parent) throw new NotFoundException("Parent comment not found");
     }
 
@@ -67,7 +64,7 @@ export class CommentService extends BaseService<CommentEntity> {
 
   async updateComment(id: string, data: z.infer<typeof updateCommentValidation>) {
     const user = this.getCurrentUser();
-    const comment = await this.commentRepo.findOne({ id, deleted: { $ne: true } });
+    const comment = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!comment) throw new NotFoundException("Comment not found");
 
     const authorId = (comment.createdBy as any)?.id ?? comment.createdBy?.toString();
@@ -78,7 +75,7 @@ export class CommentService extends BaseService<CommentEntity> {
 
   async deleteComment(id: string) {
     const user = this.getCurrentUser();
-    const comment = await this.commentRepo.findOne({ id, deleted: { $ne: true } });
+    const comment = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!comment) throw new NotFoundException("Comment not found");
 
     const authorId = (comment.createdBy as any)?.id ?? comment.createdBy?.toString();

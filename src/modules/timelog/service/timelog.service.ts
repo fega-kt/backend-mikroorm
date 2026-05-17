@@ -3,9 +3,7 @@ import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { ProjectPermissionService } from "@modules/project/service/project-permission.service";
 import { TaskEntity } from "@modules/task/entity/task.entity";
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { z } from "zod";
 import { TimeLogEntity, TimeLogStatus } from "../entity/timelog.entity";
 import {
@@ -18,14 +16,13 @@ import {
 @Injectable({ scope: Scope.REQUEST })
 export class TimeLogService extends BaseService<TimeLogEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(TimeLogEntity)
-    private readonly timelogRepo: EntityRepository<TimeLogEntity>,
+    protected readonly repo: EntityRepository<TimeLogEntity>,
     @InjectRepository(TaskEntity)
     private readonly taskRepo: EntityRepository<TaskEntity>,
     private readonly projectPermissionService: ProjectPermissionService,
   ) {
-    super(timelogRepo, request);
+    super();
   }
 
   async createTimeLog(data: z.infer<typeof createTimeLogValidation>) {
@@ -84,7 +81,7 @@ export class TimeLogService extends BaseService<TimeLogEntity> {
   async reviewTimeLog(id: string, data: z.infer<typeof reviewTimeLogValidation>) {
     const user = this.getCurrentUser();
 
-    const timelog = await this.timelogRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["task", "task.project"] });
+    const timelog = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["task", "task.project"] });
     if (!timelog) throw new NotFoundException("TimeLog not found");
     if (timelog.status !== TimeLogStatus.PENDING) {
       throw new BadRequestException("Only pending timelogs can be reviewed");
@@ -109,7 +106,7 @@ export class TimeLogService extends BaseService<TimeLogEntity> {
   async updateTimeLog(id: string, data: z.infer<typeof updateTimeLogValidation>) {
     const user = this.getCurrentUser();
 
-    const timelog = await this.timelogRepo.findOne({ id, deleted: { $ne: true } });
+    const timelog = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!timelog) throw new NotFoundException("TimeLog not found");
 
     const ownerId = (timelog.user as any)?.id ?? timelog.user.toString();
@@ -124,7 +121,7 @@ export class TimeLogService extends BaseService<TimeLogEntity> {
   async deleteTimeLog(id: string) {
     const user = this.getCurrentUser();
 
-    const timelog = await this.timelogRepo.findOne({ id, deleted: { $ne: true } });
+    const timelog = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!timelog) throw new NotFoundException("TimeLog not found");
 
     const ownerId = timelog.user.id;
@@ -138,7 +135,7 @@ export class TimeLogService extends BaseService<TimeLogEntity> {
 
   /** Tổng giờ đã log theo task (chỉ tính APPROVED) */
   async getSummaryByTask(taskId: string) {
-    const logs = await this.timelogRepo.find(
+    const logs = await this.repo.find(
       { task: taskId, status: TimeLogStatus.APPROVED, deleted: { $ne: true } },
       { fields: ["hours", "user.id", "user.fullName"] as any, populate: ["user"] },
     );
