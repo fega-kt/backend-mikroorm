@@ -17,10 +17,10 @@ export class PrincipalService extends BaseService<PrincipalEntity> {
     super(principalRepo, request);
   }
 
-  async findAllPrincipal(page = 1, limit = 10, search?: string) {
+  async findAllPrincipal(page = 1, limit = 10, keyword?: string) {
     const filter: FilterQuery<PrincipalEntity> = { deleted: { $ne: true } };
-    if (search) {
-      filter.name = { $re: search, $options: "i" } as any;
+    if (keyword) {
+      filter.name = new RegExp(keyword, "i");
     }
 
     const { data, total } = await this.paginate(filter, {
