@@ -1,6 +1,6 @@
-import { EntityData, FindOneOptions, FindOptions, FromEntityType, RequiredEntityData, wrap } from "@mikro-orm/core";
+import { EntityData, FindOneOptions, FindOptions, FromEntityType, Loaded, QueryOrderMap, RequiredEntityData, wrap } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery, ObjectId } from "@mikro-orm/mongodb";
-import { Inject, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import { Inject, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
 import { BaseEntity } from "./base.entity";
@@ -12,22 +12,19 @@ export interface PaginationQuery<T> {
   limit?: number;
   fields?: readonly EntityPath<T>[];
   populate?: readonly EntityPath<T>[];
-  sort?: Record<string, "ASC" | "DESC" | 1 | -1>;
+  sort?: QueryOrderMap<T>;
 }
 
 export abstract class BaseService<T extends BaseEntity> {
-  private readonly baseLogger = new Logger(BaseService.name);
+  @Inject(REQUEST)
+  protected readonly request: Request | undefined;
 
-  public constructor(
-    protected readonly repo: EntityRepository<T>,
-    @Inject(REQUEST) protected readonly request: Request | undefined,
-  ) {
-    // Empty
-  }
+  protected abstract readonly repo: EntityRepository<T>;
 
   /* ================= CURRENT USER ================= */
   getCurrentUser(options?: { user?: IUserResponse }): IUserResponse {
-    const user = this.request?.user || options?.user;
+    // options.user takes priority — allows system/override callers to bypass request context
+    const user = options?.user ?? this.request?.user;
     if (!user) {
       throw new InternalServerErrorException("User not found in request context");
     }
@@ -64,24 +61,14 @@ export abstract class BaseService<T extends BaseEntity> {
   async findAll(filter: FilterQuery<T> = {}, query: PaginationQuery<T> = {}) {
     const { page = 1, limit, fields = ["id"], populate = [] } = query;
 
-    const options: FindOptions<T> = {
-      fields: fields as never[],
-      populate: populate as never[],
+    const data = await this.repo.find(filter, {
+      fields,
+      populate,
       disableIdentityMap: true,
-    };
+      ...(limit && { limit, offset: (page - 1) * limit }),
+    } as FindOptions<T>);
 
-    if (limit) {
-      options.limit = limit;
-      options.offset = (page - 1) * limit;
-    }
-
-    const data = await this.repo.find(filter, options);
-
-    return {
-      data,
-      page,
-      limit,
-    };
+    return { data, page, limit };
   }
 
   /* ================= PAGINATE ================= */
@@ -91,32 +78,26 @@ export abstract class BaseService<T extends BaseEntity> {
     const [data, total] = await this.repo.findAndCount(filter, {
       limit,
       offset: (page - 1) * limit,
-      fields: fields as never[],
-      populate: populate as never[],
-      orderBy: sort as any,
+      fields,
+      populate,
+      orderBy: sort,
       disableIdentityMap: true,
-    });
+    } as FindOptions<T>);
 
     return { data, total, page, limit };
   }
 
   /* ================= FIND ONE ================= */
-  async findOne(
+  async findOne<P extends string = never, F extends string = "*">(
     filter: FilterQuery<T>,
-    options?: Omit<FindOneOptions<T>, "fields" | "populate"> & {
-      fields?: readonly EntityPath<T>[];
-      populate?: readonly EntityPath<T>[];
-    },
-  ): Promise<T> {
-    const entity = await this.repo.findOne(filter, (options ?? {}) as any);
-    return entity;
+    options?: FindOneOptions<T, P, F>,
+  ): Promise<Loaded<T, P, F> | null> {
+    return this.repo.findOne<P, F>(filter, options);
   }
 
   /* ================= FIND BY ID ================= */
   async findById(id: string): Promise<T> {
-    const entity = await this.repo.findOne({
-      id,
-    } as FilterQuery<T>);
+    const entity = await this.repo.findOne({ id } as FilterQuery<T>);
 
     if (!entity) {
       throw new NotFoundException(`${this.repo.getEntityName()} not found`);
@@ -130,11 +111,8 @@ export abstract class BaseService<T extends BaseEntity> {
     const baseUpdate = this.getDefaultValuesForUpdate(options);
     const entity = await this.findById(id);
 
-    wrap(entity).assign({
-      ...data,
-      ...baseUpdate,
-    } as any);
-
+    // wrap.assign has an IsSubset constraint TypeScript can't verify for generic T
+    wrap(entity).assign({ ...data, ...baseUpdate } as any);
     await this.repo.getEntityManager().flush();
 
     return entity;
@@ -142,16 +120,13 @@ export abstract class BaseService<T extends BaseEntity> {
 
   /* ================= SOFT DELETE ================= */
   async remove(id: string): Promise<{ message: string }> {
-    const entity = await this.repo.findOne({
-      id,
-      deleted: { $ne: true },
-    } as FilterQuery<T>);
+    const entity = await this.repo.findOne({ id, deleted: { $ne: true } } as FilterQuery<T>);
 
     if (!entity) {
       throw new NotFoundException(`${this.repo.getEntityName()} not found or already deleted`);
     }
 
-    this.repo.assign(entity, { deleted: true } as any);
+    wrap(entity).assign({ deleted: true } as any);
     await this.repo.getEntityManager().flush();
 
     return { message: "Deleted successfully" };

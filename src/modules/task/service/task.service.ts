@@ -2,9 +2,7 @@ import { BaseService } from "@common/base/base.service";
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { ProjectPermissionService } from "@modules/project/service/project-permission.service";
-import { Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { z } from "zod";
 import { TaskEntity, TaskStatus } from "../entity/task.entity";
 import { createSubTaskValidation, createTaskValidation, taskFilterValidation, updateTaskValidation } from "../validation/task.validation";
@@ -12,21 +10,20 @@ import { createSubTaskValidation, createTaskValidation, taskFilterValidation, up
 @Injectable({ scope: Scope.REQUEST })
 export class TaskService extends BaseService<TaskEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(TaskEntity)
-    private readonly taskRepo: EntityRepository<TaskEntity>,
+    protected readonly repo: EntityRepository<TaskEntity>,
     private readonly projectPermissionService: ProjectPermissionService,
   ) {
-    super(taskRepo, request);
+    super();
   }
 
   async createTask(data: z.infer<typeof createTaskValidation>) {
-    const em = this.taskRepo.getEntityManager();
+    const em = this.repo.getEntityManager();
     const baseCreate = this.getDefaultValuesForCreate();
-    const entity = this.taskRepo.create({ ...data, path: "", ...baseCreate } as any);
+    const entity = this.repo.create({ ...data, path: "", ...baseCreate } as any);
 
     if (data.parentTask) {
-      const parent = await this.taskRepo.findOne({ id: data.parentTask, deleted: { $ne: true } });
+      const parent = await this.repo.findOne({ id: data.parentTask, deleted: { $ne: true } });
       if (!parent) throw new NotFoundException("Parent task not found");
       entity.path = `${parent.path}/${entity.id}`;
     } else {
@@ -39,7 +36,7 @@ export class TaskService extends BaseService<TaskEntity> {
 
   async getTask(id: string) {
     const user = this.getCurrentUser();
-    const task = await this.taskRepo.findOne(
+    const task = await this.repo.findOne(
       { id, deleted: { $ne: true } },
       { populate: ["assignee", "section", "parentTask", "project"] },
     );
@@ -56,16 +53,16 @@ export class TaskService extends BaseService<TaskEntity> {
   }
 
   async createSubTask(parentTaskId: string, data: z.infer<typeof createSubTaskValidation>) {
-    const em = this.taskRepo.getEntityManager();
+    const em = this.repo.getEntityManager();
     const baseCreate = this.getDefaultValuesForCreate();
 
-    const parent = await this.taskRepo.findOne(
+    const parent = await this.repo.findOne(
       { id: parentTaskId, deleted: { $ne: true } },
       { populate: ["project", "section", "assignee"] },
     );
     if (!parent) throw new NotFoundException("Parent task not found");
 
-    const entity = this.taskRepo.create({
+    const entity = this.repo.create({
       title: data.title,
       description: "",
       project: parent.project.id,
@@ -86,10 +83,10 @@ export class TaskService extends BaseService<TaskEntity> {
   }
 
   async updateTask(id: string, data: z.infer<typeof updateTaskValidation>) {
-    const em = this.taskRepo.getEntityManager();
+    const em = this.repo.getEntityManager();
     const collection = em.getConnection().getCollection<{ id: string; path: string }>("tasks");
 
-    const task = await this.taskRepo.findOne({ id, deleted: { $ne: true } });
+    const task = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!task) throw new NotFoundException("Task not found");
 
     const parentTaskChanged = "parentTask" in data && data.parentTask !== ((task.parentTask as any)?.id ?? null);
@@ -99,7 +96,7 @@ export class TaskService extends BaseService<TaskEntity> {
       let newPath: string;
 
       if (data.parentTask) {
-        const newParent = await this.taskRepo.findOne({ id: data.parentTask, deleted: { $ne: true } });
+        const newParent = await this.repo.findOne({ id: data.parentTask, deleted: { $ne: true } });
         if (!newParent) throw new NotFoundException("Parent task not found");
         newPath = `${newParent.path}/${task.id}`;
       } else {
@@ -119,9 +116,9 @@ export class TaskService extends BaseService<TaskEntity> {
 
   async deleteTask(id: string) {
     const user = this.getCurrentUser();
-    const em = this.taskRepo.getEntityManager();
+    const em = this.repo.getEntityManager();
 
-    const task = await this.taskRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
+    const task = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
     if (!task) throw new NotFoundException("Task not found");
 
     const projectId = (task.project as any)?.id ?? task.project.toString();
@@ -205,9 +202,9 @@ export class TaskService extends BaseService<TaskEntity> {
   }
 
   async reorder(orders: { id: string; order: number }[]) {
-    const em = this.taskRepo.getEntityManager();
+    const em = this.repo.getEntityManager();
     for (const { id, order } of orders) {
-      const task = await this.taskRepo.findOne({ id });
+      const task = await this.repo.findOne({ id });
       if (!task) throw new NotFoundException(`Task ${id} not found`);
       task.order = order;
     }

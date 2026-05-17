@@ -4,22 +4,19 @@ import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import z from "zod";
 import { GroupEntity } from "../entity/group.entity";
 import { createGroupValidation, updateGroupValidation } from "../validation/group.validation";
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class GroupService extends BaseService<GroupEntity> {
   constructor(
     @InjectRepository(GroupEntity)
-    private readonly groupRepo: EntityRepository<GroupEntity>,
-    @Inject(REQUEST) protected request: Request | undefined,
+    protected readonly repo: EntityRepository<GroupEntity>,
     private readonly em: EntityManager,
   ) {
-    super(groupRepo, request);
+    super();
   }
 
   async createGroup(data: z.infer<typeof createGroupValidation>): Promise<boolean> {
@@ -128,6 +125,7 @@ export class GroupService extends BaseService<GroupEntity> {
       return true;
     });
   }
+
   async getList(page = 1, limit = 10, keyword?: string) {
     const filter: FilterQuery<GroupEntity> = { deleted: { $ne: true } };
     if (keyword) {
@@ -142,6 +140,7 @@ export class GroupService extends BaseService<GroupEntity> {
 
     return { data, total };
   }
+
   async getDetail(id: string): Promise<GroupEntity> {
     const group = await this.findOne(
       { id, deleted: { $ne: true } },

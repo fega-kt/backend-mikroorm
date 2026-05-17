@@ -2,9 +2,7 @@ import { BaseService } from "@common/base/base.service";
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { ProjectPermissionService } from "@modules/project/service/project-permission.service";
-import { Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { z } from "zod";
 import { MilestoneEntity, MilestoneStatus } from "../entity/milestone.entity";
 import { createMilestoneValidation, milestoneFilterValidation, updateMilestoneValidation } from "../validation/milestone.validation";
@@ -12,12 +10,11 @@ import { createMilestoneValidation, milestoneFilterValidation, updateMilestoneVa
 @Injectable({ scope: Scope.REQUEST })
 export class MilestoneService extends BaseService<MilestoneEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(MilestoneEntity)
-    private readonly milestoneRepo: EntityRepository<MilestoneEntity>,
+    protected readonly repo: EntityRepository<MilestoneEntity>,
     private readonly projectPermissionService: ProjectPermissionService,
   ) {
-    super(milestoneRepo, request);
+    super();
   }
 
   async createMilestone(data: z.infer<typeof createMilestoneValidation>) {
@@ -42,7 +39,7 @@ export class MilestoneService extends BaseService<MilestoneEntity> {
   }
 
   async getMilestoneById(id: string) {
-    const milestone = await this.milestoneRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
+    const milestone = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
     if (!milestone) throw new NotFoundException("Milestone not found");
 
     const user = this.getCurrentUser();
@@ -53,7 +50,7 @@ export class MilestoneService extends BaseService<MilestoneEntity> {
   }
 
   async updateMilestone(id: string, data: z.infer<typeof updateMilestoneValidation>) {
-    const milestone = await this.milestoneRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
+    const milestone = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
     if (!milestone) throw new NotFoundException("Milestone not found");
 
     const user = this.getCurrentUser();
@@ -69,7 +66,7 @@ export class MilestoneService extends BaseService<MilestoneEntity> {
   }
 
   async deleteMilestone(id: string) {
-    const milestone = await this.milestoneRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
+    const milestone = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
     if (!milestone) throw new NotFoundException("Milestone not found");
 
     const user = this.getCurrentUser();

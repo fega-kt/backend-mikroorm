@@ -1,21 +1,18 @@
 import { BaseService } from "@common/base/base.service";
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { Inject, Injectable, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
-import { UploadService } from "./upload.service";
+import { Injectable, Scope } from "@nestjs/common";
 import { AttachmentEntity } from "../entity/attachment.entity";
+import { UploadService } from "./upload.service";
 
 @Injectable({ scope: Scope.REQUEST })
 export class AttachmentService extends BaseService<AttachmentEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(AttachmentEntity)
-    repo: EntityRepository<AttachmentEntity>,
+    protected readonly repo: EntityRepository<AttachmentEntity>,
     private readonly uploadService: UploadService,
   ) {
-    super(repo, request);
+    super();
   }
 
   async uploadAndCreate(file: Express.Multer.File, path: string): Promise<AttachmentEntity> {

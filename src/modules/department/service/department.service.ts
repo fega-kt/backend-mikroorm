@@ -4,9 +4,8 @@ import { EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { UserService } from "@modules/user/service/user.service";
 import { ConflictException, Inject, Injectable, NotFoundException, Scope, forwardRef } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
 import z from "zod";
+import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "../type/department.types";
 import { DepartmentEntity } from "../entity/department.entity";
 import { createDepartmentValidation, updateDepartmentValidation } from "../validation/department.validation";
 
@@ -14,12 +13,11 @@ import { createDepartmentValidation, updateDepartmentValidation } from "../valid
 export class DepartmentService extends BaseService<DepartmentEntity> {
   constructor(
     @InjectRepository(DepartmentEntity)
-    private readonly departmentRepo: EntityRepository<DepartmentEntity>,
+    protected readonly repo: EntityRepository<DepartmentEntity>,
     @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
-    @Inject(REQUEST) protected request: Request | undefined,
   ) {
-    super(departmentRepo, request);
+    super();
   }
 
   private async resolveUser(userId: string) {
@@ -29,10 +27,10 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   async create(data: z.infer<typeof createDepartmentValidation>) {
     let { parent: parentId, manager: managerId, deputy: deputyId, ...rest } = data;
 
-    let parent: DepartmentEntity | null = null;
+    let parent: DepartmentParent | null = null;
 
     if (parentId) {
-      parent = await this.findOne({ id: parentId, deleted: { $ne: true } }, { fields: ["id", "code"] });
+      parent = await this.findOne({ id: parentId, deleted: { $ne: true } }, { fields: ["id", "code", "parentCode"] });
 
       if (!parent) {
         throw new NotFoundException("Parent department not found");
@@ -77,7 +75,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       throw new NotFoundException("Department not found");
     }
 
-    let parent: DepartmentEntity | null = null;
+    let parent: DepartmentParent | null = null;
 
     if (parentId) {
       if (parentId === id) {
@@ -120,7 +118,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
         throw new ConflictException("Cyclic parent detected");
       }
 
-      const parent = await this.departmentRepo.findOne(
+      const parent = await this.repo.findOne(
         { id: currentParentId, deleted: { $ne: true } },
         { fields: ["id", "parent"], populate: ["parent"] },
       );
@@ -139,29 +137,10 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     return data;
   }
 
-  async getDetail(id: string): Promise<DepartmentEntity> {
+  async getDetail(id: string): Promise<DepartmentDetail> {
     const department = await this.findOne(
       { id, deleted: { $ne: true } },
-      {
-        fields: [
-          "id",
-          "code",
-          "name",
-          "parent",
-          "status",
-          "manager",
-          "deputy",
-          "manager.id",
-          "manager.fullName",
-          "manager.avatar",
-          "deputy.id",
-          "deputy.fullName",
-          "deputy.avatar",
-          "deputy.workEmail",
-          "manager.workEmail",
-        ],
-        populate: ["manager", "deputy"],
-      },
+      { fields: DEPARTMENT_DETAIL_FIELDS, populate: DEPARTMENT_DETAIL_POPULATE },
     );
     if (!department) {
       throw new NotFoundException("Department not found");

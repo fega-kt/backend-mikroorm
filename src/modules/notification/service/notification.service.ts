@@ -1,25 +1,22 @@
 import { BaseService } from "@common/base/base.service";
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { NotificationEntity, NotificationType } from "../entity/notification.entity";
 
 @Injectable({ scope: Scope.REQUEST })
 export class NotificationService extends BaseService<NotificationEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(NotificationEntity)
-    private readonly notifRepo: EntityRepository<NotificationEntity>,
+    protected readonly repo: EntityRepository<NotificationEntity>,
   ) {
-    super(notifRepo, request);
+    super();
   }
 
   /** Tạo notification — gọi nội bộ từ các service khác */
   async notify(payload: { userId: string; type: NotificationType; title: string; message: string; refId?: string; refType?: string }) {
-    const em = this.notifRepo.getEntityManager();
-    const entity = this.notifRepo.create({
+    const em = this.repo.getEntityManager();
+    const entity = this.repo.create({
       user: payload.userId,
       type: payload.type,
       title: payload.title,
@@ -48,7 +45,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
   /** Đánh dấu đã đọc */
   async markAsRead(id: string) {
     const user = this.getCurrentUser();
-    const notif = await this.notifRepo.findOne({ id, user: user.id, deleted: { $ne: true } });
+    const notif = await this.repo.findOne({ id, user: user.id, deleted: { $ne: true } });
     if (!notif) throw new NotFoundException("Notification not found");
     if (notif.isRead) return notif;
 
@@ -58,7 +55,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
   /** Đánh dấu tất cả đã đọc */
   async markAllAsRead() {
     const user = this.getCurrentUser();
-    const em = this.notifRepo.getEntityManager();
+    const em = this.repo.getEntityManager();
     const collection = em.getConnection().getCollection("notifications");
 
     await collection.updateMany({ user: user.id, isRead: false, deleted: { $ne: true } }, { $set: { isRead: true, readAt: new Date() } });
@@ -69,7 +66,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
   /** Số lượng chưa đọc */
   async getUnreadCount() {
     const user = this.getCurrentUser();
-    const count = await this.notifRepo.count({ user: user.id, isRead: false, deleted: { $ne: true } });
+    const count = await this.repo.count({ user: user.id, isRead: false, deleted: { $ne: true } });
     return { count };
   }
 }

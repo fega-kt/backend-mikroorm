@@ -2,9 +2,7 @@ import { BaseService } from "@common/base/base.service";
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { ProjectPermissionService } from "@modules/project/service/project-permission.service";
-import { BadRequestException, Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { BadRequestException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { z } from "zod";
 import { SprintEntity, SprintStatus } from "../entity/sprint.entity";
 import { createSprintValidation, sprintFilterValidation, updateSprintValidation } from "../validation/sprint.validation";
@@ -12,12 +10,11 @@ import { createSprintValidation, sprintFilterValidation, updateSprintValidation 
 @Injectable({ scope: Scope.REQUEST })
 export class SprintService extends BaseService<SprintEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(SprintEntity)
-    private readonly sprintRepo: EntityRepository<SprintEntity>,
+    protected readonly repo: EntityRepository<SprintEntity>,
     private readonly projectPermissionService: ProjectPermissionService,
   ) {
-    super(sprintRepo, request);
+    super();
   }
 
   async createSprint(data: z.infer<typeof createSprintValidation>) {
@@ -47,7 +44,7 @@ export class SprintService extends BaseService<SprintEntity> {
   }
 
   async getSprintById(id: string) {
-    const sprint = await this.sprintRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
+    const sprint = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
     if (!sprint) throw new NotFoundException("Sprint not found");
 
     const user = this.getCurrentUser();
@@ -58,7 +55,7 @@ export class SprintService extends BaseService<SprintEntity> {
   }
 
   async updateSprint(id: string, data: z.infer<typeof updateSprintValidation>) {
-    const sprint = await this.sprintRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
+    const sprint = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
     if (!sprint) throw new NotFoundException("Sprint not found");
 
     const user = this.getCurrentUser();
@@ -73,7 +70,7 @@ export class SprintService extends BaseService<SprintEntity> {
   }
 
   async deleteSprint(id: string) {
-    const sprint = await this.sprintRepo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
+    const sprint = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["project"] });
     if (!sprint) throw new NotFoundException("Sprint not found");
 
     const user = this.getCurrentUser();

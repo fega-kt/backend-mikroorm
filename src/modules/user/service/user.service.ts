@@ -1,7 +1,7 @@
 import { FilterQuery } from "@mikro-orm/core";
 import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Scope } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Scope } from "@nestjs/common";
 
 import { BaseService } from "@common/base/base.service";
 import { STORAGE_PATH } from "@common/constants/storage.constant";
@@ -9,8 +9,6 @@ import { SYSTEM_DEPARTMENT_ID } from "@common/constants/system.constant";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UploadService } from "@modules/upload/service/upload.service";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
 import z from "zod";
 import { UserEntity } from "../entity/user.entity";
 import { createUserValidation, updateUserValidation } from "../validation/user.validation";
@@ -20,14 +18,13 @@ export class UserService extends BaseService<UserEntity> {
   private logger = new Logger(UserService.name);
 
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(UserEntity)
-    private readonly userRepo: EntityRepository<UserEntity>,
+    protected readonly repo: EntityRepository<UserEntity>,
     private readonly em: EntityManager,
     private readonly uploadService: UploadService,
     private readonly supabaseService: SupabaseService,
   ) {
-    super(userRepo, request);
+    super();
   }
 
   async create(data: z.infer<typeof createUserValidation>): Promise<void> {
@@ -38,7 +35,7 @@ export class UserService extends BaseService<UserEntity> {
     }
 
     const { loginName, fullName, workEmail, password, department, isActive } = data;
-    const exist = await this.userRepo.findOne({
+    const exist = await this.repo.findOne({
       loginName,
     });
 
@@ -61,7 +58,7 @@ export class UserService extends BaseService<UserEntity> {
     const defaulValueBase = this.getDefaultValuesForCreate();
     const res = await this.em.transactional(async (em) => {
       // 1️⃣ create user
-      const user = this.userRepo.create({
+      const user = this.repo.create({
         fullName,
         loginName,
         workEmail,
@@ -105,7 +102,7 @@ export class UserService extends BaseService<UserEntity> {
     return { data, total };
   }
 
-  async getDetail(id: string): Promise<UserEntity> {
+  async getDetail(id: string) {
     const user = await this.findOne(
       { id, deleted: { $ne: true } },
       {

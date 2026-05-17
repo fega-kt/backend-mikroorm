@@ -3,9 +3,7 @@ import { EntityData } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { DepartmentEntity } from "@modules/department/entity/department.entity";
-import { ConflictException, Inject, Injectable, NotFoundException, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { ConflictException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { z } from "zod";
 import { CategoryEntity } from "../entity/category.entity";
 import { categoryFilterValidation, createCategoryValidation, updateCategoryValidation } from "../validation/category.validation";
@@ -13,19 +11,18 @@ import { categoryFilterValidation, createCategoryValidation, updateCategoryValid
 @Injectable({ scope: Scope.REQUEST })
 export class CategoryService extends BaseService<CategoryEntity> {
   constructor(
-    @Inject(REQUEST) protected request: Request | undefined,
     @InjectRepository(CategoryEntity)
-    private readonly categoryRepo: EntityRepository<CategoryEntity>,
+    protected readonly repo: EntityRepository<CategoryEntity>,
   ) {
-    super(categoryRepo, request);
+    super();
   }
 
   async createCategory(data: z.infer<typeof createCategoryValidation>) {
-    const existing = await this.categoryRepo.findOne({ code: data.code, deleted: { $ne: true } });
+    const existing = await this.repo.findOne({ code: data.code, deleted: { $ne: true } });
     if (existing) {
       throw new ConflictException(`Category with code "${data.code}" already exists`);
     }
-    const em = this.categoryRepo.getEntityManager();
+    const em = this.repo.getEntityManager();
     const department = em.getReference(DepartmentEntity, data.department);
     return this.addOne({ code: data.code, name: data.name, icon: data.icon, department });
   }
@@ -56,22 +53,22 @@ export class CategoryService extends BaseService<CategoryEntity> {
   }
 
   async updateCategory(id: string, data: z.infer<typeof updateCategoryValidation>) {
-    const category = await this.categoryRepo.findOne({ id, deleted: { $ne: true } });
+    const category = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!category) throw new NotFoundException("Category not found");
     if (data.code && data.code !== category.code) {
-      const duplicate = await this.categoryRepo.findOne({ code: data.code, deleted: { $ne: true } });
+      const duplicate = await this.repo.findOne({ code: data.code, deleted: { $ne: true } });
       if (duplicate) throw new ConflictException(`Category with code "${data.code}" already exists`);
     }
     const { department, ...rest } = data;
     const update: EntityData<CategoryEntity> = { ...rest };
     if (department) {
-      update.department = this.categoryRepo.getEntityManager().getReference(DepartmentEntity, department);
+      update.department = this.repo.getEntityManager().getReference(DepartmentEntity, department);
     }
     return this.updateOne(id, update);
   }
 
   async deleteCategory(id: string) {
-    const category = await this.categoryRepo.findOne({ id, deleted: { $ne: true } });
+    const category = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!category) throw new NotFoundException("Category not found");
     return this.remove(id);
   }

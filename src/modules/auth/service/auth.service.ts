@@ -1,8 +1,6 @@
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, Scope } from "@nestjs/common";
-import { REQUEST } from "@nestjs/core";
-import { Request } from "express";
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, Scope } from "@nestjs/common";
 import z from "zod";
 
 import { BaseService } from "@common/base/base.service";
@@ -26,15 +24,14 @@ export class AuthService extends BaseService<UserEntity> {
 
   constructor(
     @InjectRepository(UserEntity)
-    private readonly userRepo: EntityRepository<UserEntity>,
-    @Inject(REQUEST) protected request: Request | undefined,
+    protected readonly repo: EntityRepository<UserEntity>,
     private readonly supabaseService: SupabaseService,
     private readonly mailService: MailService,
     private readonly appSettingService: AppSettingService,
     private readonly activityLogService: ActivityLogService,
     private readonly kvService: CloudflareKvService,
   ) {
-    super(userRepo, request);
+    super();
   }
 
   async changePassword(currentUser: IUserResponse, data: z.infer<typeof changePasswordValidation>) {
@@ -58,7 +55,7 @@ export class AuthService extends BaseService<UserEntity> {
   }
 
   async forgotPassword(data: z.infer<typeof forgotPasswordValidation>) {
-    const user = await this.userRepo.findOne({ loginName: data.email, deleted: { $ne: true } });
+    const user = await this.repo.findOne({ loginName: data.email, deleted: { $ne: true } });
     if (!user) return; // không tiết lộ email có tồn tại hay không
 
     const today = this.getVNDate();
@@ -96,7 +93,7 @@ export class AuthService extends BaseService<UserEntity> {
       throw new BadRequestException("Invalid or expired OTP");
     }
 
-    const user = await this.userRepo.findOne({ loginName: data.email, deleted: { $ne: true } });
+    const user = await this.repo.findOne({ loginName: data.email, deleted: { $ne: true } });
     if (!user) throw new BadRequestException("Invalid or expired OTP");
 
     const supabaseUser = await this.supabaseService.listUsers().then((users) => users.find((u) => u.email === data.email));
