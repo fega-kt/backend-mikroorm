@@ -1,3 +1,4 @@
+import { FilterQuery } from "@mikro-orm/core";
 import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Scope } from "@nestjs/common";
@@ -89,15 +90,17 @@ export class UserService extends BaseService<UserEntity> {
     return res;
   }
 
-  async findAllUser(page = 1, limit = 10) {
-    const { data, total } = await this.paginate(
-      { deleted: { $ne: true } },
-      {
-        limit,
-        page,
-        fields: ["id", "fullName", "workEmail", "createdAt", "isActive", "loginName", "avatar"],
-      },
-    );
+  async findAllUser(page = 1, limit = 10, keyword?: string) {
+    const filter: FilterQuery<UserEntity> = { deleted: { $ne: true } };
+    if (keyword) {
+      filter.$or = [{ fullName: new RegExp(keyword, "i") }, { loginName: new RegExp(keyword, "i") }];
+    }
+
+    const { data, total } = await this.paginate(filter, {
+      limit,
+      page,
+      fields: ["id", "fullName", "workEmail", "createdAt", "isActive", "loginName", "avatar"],
+    });
 
     return { data, total };
   }

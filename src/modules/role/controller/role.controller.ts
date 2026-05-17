@@ -1,5 +1,6 @@
 import { PermissionType } from "@common/base/permission-type.enum";
 import { Permissions } from "@common/decorators/permissions.decorator";
+import { listFilterValidation, ListFilterDto } from "@common/pagination/pagination.validation";
 import { IdValidationPipe } from "@common/pipes/id-validation-pipe";
 import { ZodValidationPipe } from "@common/pipes/zod-validation-pipe";
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
@@ -32,8 +33,8 @@ export class RoleController {
 
   @Get()
   @Permissions(PermissionType.MenuRole)
-  findAll(@Query("page") page = 1, @Query("limit") limit = 10) {
-    return this.roleService.findAllRoles(Number(page), Number(limit));
+  findAll(@Query(new ZodValidationPipe(listFilterValidation)) { page, limit, keyword }: ListFilterDto) {
+    return this.roleService.findAllRoles(page, limit, keyword);
   }
 
   @Get(":id")

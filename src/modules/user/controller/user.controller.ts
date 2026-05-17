@@ -19,6 +19,7 @@ import { IUserResponse } from "@common/base/consts";
 import { PermissionType } from "@common/base/permission-type.enum";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
+import { listFilterValidation, ListFilterDto } from "@common/pagination/pagination.validation";
 import { IdValidationPipe, ZodValidationPipe } from "@common/pipes";
 import z from "zod";
 import { UserService } from "../service/user.service";
@@ -53,8 +54,8 @@ export class UserController {
 
   @Get()
   @Permissions(PermissionType.MenuUser)
-  findAll(@Query("page") page = 1, @Query("limit") limit = 10) {
-    return this.userService.findAllUser(Number(page), Number(limit));
+  findAll(@Query(new ZodValidationPipe(listFilterValidation)) { page, limit, keyword }: ListFilterDto) {
+    return this.userService.findAllUser(page, limit, keyword);
   }
 
   @Get(":id")

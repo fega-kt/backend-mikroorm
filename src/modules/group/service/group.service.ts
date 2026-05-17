@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { FilterQuery } from "@mikro-orm/core";
 import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
@@ -127,15 +128,17 @@ export class GroupService extends BaseService<GroupEntity> {
       return true;
     });
   }
-  async getList(page = 1, limit = 10) {
-    const { data, total } = await this.paginate(
-      { deleted: { $ne: true } },
-      {
-        limit,
-        page,
-        fields: ["id", "name", "description", "createdAt"],
-      },
-    );
+  async getList(page = 1, limit = 10, keyword?: string) {
+    const filter: FilterQuery<GroupEntity> = { deleted: { $ne: true } };
+    if (keyword) {
+      filter.name = new RegExp(keyword, "i");
+    }
+
+    const { data, total } = await this.paginate(filter, {
+      limit,
+      page,
+      fields: ["id", "name", "description", "createdAt"],
+    });
 
     return { data, total };
   }

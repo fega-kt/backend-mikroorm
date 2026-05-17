@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { FilterQuery } from "@mikro-orm/core";
 import { EntityManager, EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
@@ -29,15 +30,17 @@ export class RoleService extends BaseService<RoleEntity> {
     return this.updateOne(id, data);
   }
 
-  async findAllRoles(page = 1, limit = 10) {
-    const { data, total } = await this.paginate(
-      { deleted: { $ne: true } },
-      {
-        limit,
-        page,
-        fields: ["id", "name", "description", "rights", "createdAt"],
-      },
-    );
+  async findAllRoles(page = 1, limit = 10, keyword?: string) {
+    const filter: FilterQuery<RoleEntity> = { deleted: { $ne: true } };
+    if (keyword) {
+      filter.name = new RegExp(keyword, "i");
+    }
+
+    const { data, total } = await this.paginate(filter, {
+      limit,
+      page,
+      fields: ["id", "name", "description", "rights", "createdAt"],
+    });
 
     return { data, total };
   }
