@@ -1,4 +1,4 @@
-import { EntityData, RequiredEntityData } from "@mikro-orm/core";
+import { EntityData } from "@mikro-orm/core";
 import { EntityRepository } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, Logger, Scope } from "@nestjs/common";
@@ -85,6 +85,6 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
       return this.repo.findOne({ key: data.key });
     }
 
-    return this.addOne({ key: data.key, value: data.value, description: data.description } as RequiredEntityData<AppSettingEntity>);
+    return this.addOne({ key: data.key, value: data.value, description: data.description });
   }
 }

@@ -11,7 +11,7 @@ export class HealthService {
     try {
       // ping mongodb
       await this.em.getConnection().execute("ping");
-    } catch (error) {
+    } catch {
       database = "down";
     }
 
