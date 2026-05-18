@@ -1,4 +1,4 @@
-import { IUserResponse } from "@common/base/consts";
+import { type IUserResponse } from "@common/base/consts";
 
 declare global {
   namespace Express {

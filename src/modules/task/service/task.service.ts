@@ -20,7 +20,7 @@ export class TaskService extends BaseService<TaskEntity> {
   async createTask(data: z.infer<typeof createTaskValidation>) {
     const em = this.repo.getEntityManager();
     const baseCreate = this.getDefaultValuesForCreate();
-    const entity = this.repo.create({ ...data, path: "", ...baseCreate } as any);
+    const entity = this.repo.create({ ...data, path: "", ...baseCreate });
 
     if (data.parentTask) {
       const parent = await this.repo.findOne({ id: data.parentTask, deleted: { $ne: true } });
@@ -36,10 +36,7 @@ export class TaskService extends BaseService<TaskEntity> {
 
   async getTask(id: string) {
     const user = this.getCurrentUser();
-    const task = await this.repo.findOne(
-      { id, deleted: { $ne: true } },
-      { populate: ["assignee", "section", "parentTask", "project"] },
-    );
+    const task = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["assignee", "section", "parentTask", "project"] });
     if (!task) throw new NotFoundException("Task not found");
 
     const projectId = task.project.id;
@@ -56,10 +53,7 @@ export class TaskService extends BaseService<TaskEntity> {
     const em = this.repo.getEntityManager();
     const baseCreate = this.getDefaultValuesForCreate();
 
-    const parent = await this.repo.findOne(
-      { id: parentTaskId, deleted: { $ne: true } },
-      { populate: ["project", "section", "assignee"] },
-    );
+    const parent = await this.repo.findOne({ id: parentTaskId, deleted: { $ne: true } }, { populate: ["project", "section", "assignee"] });
     if (!parent) throw new NotFoundException("Parent task not found");
 
     const entity = this.repo.create({

@@ -47,7 +47,7 @@ export class ProjectPermissionService {
     if (this.isOwner(project, user.id)) return;
 
     const membership = await this.getMembership(projectId, user.id);
-    if (!membership || membership.role !== ProjectMemberRole.PM) {
+    if (membership?.role !== ProjectMemberRole.PM) {
       throw new ForbiddenException("Only the project owner or PM can perform this action");
     }
   }
