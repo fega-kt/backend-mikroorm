@@ -28,7 +28,7 @@ export class ProjectMemberService extends BaseService<ProjectMemberEntity> {
     });
     if (existing) throw new ConflictException("User is already a member of this project");
 
-    return this.addOne({ project: projectId, user: data.userId, role: data.role } as any);
+    return this.addOne({ project: projectId, user: data.userId, role: data.role });
   }
 
   async updateMemberRole(projectId: string, memberId: string, data: z.infer<typeof updateProjectMemberValidation>) {
@@ -38,7 +38,7 @@ export class ProjectMemberService extends BaseService<ProjectMemberEntity> {
     const member = await this.repo.findOne({ id: memberId, project: projectId, deleted: { $ne: true } });
     if (!member) throw new NotFoundException("Member not found");
 
-    return this.updateOne(memberId, { role: data.role } as any);
+    return this.updateOne(memberId, { role: data.role });
   }
 
   async removeMember(projectId: string, memberId: string) {

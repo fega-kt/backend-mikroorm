@@ -34,7 +34,7 @@ export class TimeLogService extends BaseService<TimeLogEntity> {
     const projectId = (task.project as any)?.id ?? task.project.toString();
     await this.projectPermissionService.assertMember(projectId, user);
 
-    return this.addOne({ ...data, user: user.id, status: TimeLogStatus.PENDING } as any);
+    return this.addOne({ ...data, user: user.id, status: TimeLogStatus.PENDING });
   }
 
   async getTimeLogsByTask(taskId: string, filter: z.infer<typeof timelogFilterValidation>) {
@@ -115,7 +115,7 @@ export class TimeLogService extends BaseService<TimeLogEntity> {
       throw new BadRequestException("Only pending timelogs can be edited");
     }
 
-    return this.updateOne(id, data as any);
+    return this.updateOne(id, data);
   }
 
   async deleteTimeLog(id: string) {

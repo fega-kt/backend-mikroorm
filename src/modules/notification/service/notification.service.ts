@@ -24,7 +24,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
       refId: payload.refId,
       refType: payload.refType,
       isRead: false,
-    } as any);
+    });
     await em.persistAndFlush(entity);
     return entity;
   }
@@ -49,7 +49,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
     if (!notif) throw new NotFoundException("Notification not found");
     if (notif.isRead) return notif;
 
-    return this.updateOne(id, { isRead: true, readAt: new Date() } as any);
+    return this.updateOne(id, { isRead: true, readAt: new Date() });
   }
 
   /** Đánh dấu tất cả đã đọc */

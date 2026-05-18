@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus } from "@nestjs/common";
-import { ResponseCode } from "./response-code";
+import { type ResponseCode } from "./response-code";
 
 export type ExceptionRef = unknown;
 

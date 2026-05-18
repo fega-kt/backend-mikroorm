@@ -20,7 +20,7 @@ export class MilestoneService extends BaseService<MilestoneEntity> {
   async createMilestone(data: z.infer<typeof createMilestoneValidation>) {
     const user = this.getCurrentUser();
     await this.projectPermissionService.assertManagerRole(data.project, user);
-    return this.addOne(data as any);
+    return this.addOne(data);
   }
 
   async getMilestonesByProject(projectId: string, filter: z.infer<typeof milestoneFilterValidation>) {

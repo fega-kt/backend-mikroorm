@@ -1,4 +1,4 @@
-import { Collection } from "@mikro-orm/core";
+import { type Collection } from "@mikro-orm/core";
 
 /**
  * Bảng đếm ngược depth. Điều chỉnh thêm phần tử để tăng depth tối đa hỗ trợ.

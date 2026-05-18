@@ -44,7 +44,7 @@ export class MailService {
   async sendWithTemplate(options: SendMailTemplateOptions): Promise<void> {
     const commonVariables: Record<string, string> = {
       IP: this.request?.ip ?? "unknown",
-      DEVICE: (this.request?.headers["user-agent"] as string) ?? "unknown",
+      DEVICE: this.request?.headers["user-agent"] ?? "unknown",
       LOGIN_LINK: ENV.FRONTEND_URL,
     };
 

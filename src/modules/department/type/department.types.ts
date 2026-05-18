@@ -1,6 +1,6 @@
 import { defineFields, definePopulate } from "@common/base/entity-fields";
-import { Loaded } from "@mikro-orm/core";
-import { DepartmentEntity } from "../entity/department.entity";
+import { type Loaded } from "@mikro-orm/core";
+import { type DepartmentEntity } from "../entity/department.entity";
 
 export const DEPARTMENT_DETAIL_FIELDS = defineFields<DepartmentEntity>()([
   "id",

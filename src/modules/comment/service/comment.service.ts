@@ -38,7 +38,7 @@ export class CommentService extends BaseService<CommentEntity> {
       if (!parent) throw new NotFoundException("Parent comment not found");
     }
 
-    return this.addOne({ ...data, edited: false } as any);
+    return this.addOne({ ...data, edited: false });
   }
 
   async getCommentsByTask(taskId: string, filter: z.infer<typeof commentFilterValidation>) {
@@ -70,7 +70,7 @@ export class CommentService extends BaseService<CommentEntity> {
     const authorId = (comment.createdBy as any)?.id ?? comment.createdBy?.toString();
     if (authorId !== user.id) throw new ForbiddenException("You can only edit your own comments");
 
-    return this.updateOne(id, { content: data.content, edited: true } as any);
+    return this.updateOne(id, { content: data.content, edited: true });
   }
 
   async deleteComment(id: string) {

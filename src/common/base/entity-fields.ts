@@ -1,4 +1,4 @@
-import { EntityPath } from "./entity-path.type";
+import { type EntityPath } from "./entity-path.type";
 
 /**
  * Defines a typed list of entity field paths with autocomplete and literal type preservation.

@@ -25,7 +25,7 @@ export class SprintService extends BaseService<SprintEntity> {
       throw new BadRequestException("startDate must be before endDate");
     }
 
-    return this.addOne(data as any);
+    return this.addOne(data);
   }
 
   async getSprintsByProject(projectId: string, filter: z.infer<typeof sprintFilterValidation>) {
@@ -66,7 +66,7 @@ export class SprintService extends BaseService<SprintEntity> {
     const endDate = data.endDate ?? sprint.endDate;
     if (startDate >= endDate) throw new BadRequestException("startDate must be before endDate");
 
-    return this.updateOne(id, data as any);
+    return this.updateOne(id, data);
   }
 
   async deleteSprint(id: string) {

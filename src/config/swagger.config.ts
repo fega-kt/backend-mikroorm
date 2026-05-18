@@ -1,5 +1,5 @@
 import { ENV } from "@config/env.config";
-import { INestApplication, Logger } from "@nestjs/common";
+import { type INestApplication, Logger } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 
 const config = new DocumentBuilder()
