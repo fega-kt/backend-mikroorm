@@ -16,7 +16,7 @@ const aboutRouter = {
   },
 };
 
-const outsideRouter = {
+const _outsideRouter = {
   path: "/outside",
   handle: {
     icon: "OutsidePageIcon",
@@ -94,7 +94,7 @@ const personalCenterRouter = {
   ],
 };
 
-const routeNestRouter = {
+const _routeNestRouter = {
   path: "/route-nest",
   handle: {
     order: routeNest,
@@ -149,7 +149,7 @@ export class RouteService {
     // cứ để true đã, sau sẽ sửa sang permission nào có quyền gì
     const isAdmin = true;
 
-    const accessRouter = {
+    const _accessRouter = {
       path: "/access",
       handle: {
         icon: "SafetyOutlined",

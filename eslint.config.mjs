@@ -25,12 +25,46 @@ export default [
       ...tseslint.configs["recommended"].rules,
       ...prettierConfig.rules,
       "prettier/prettier": "error",
+
+      // --- Disabled / overridden NestJS/framework rules ---
       "@typescript-eslint/interface-name-prefix": "off",
       "@typescript-eslint/explicit-function-return-type": "off",
       "@typescript-eslint/explicit-module-boundary-types": "off",
-      "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/no-require-imports": "off",
+
+      // --- Type safety (CLAUDE.md: avoid `as any`, use proper MikroORM types) ---
+      // warn instead of error: ~39 existing violations mostly from MikroORM ref pattern
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-unnecessary-type-assertion": "error",
+      "@typescript-eslint/no-non-null-assertion": "warn",
+
+      // --- Unused vars (error, prefix _ to suppress) ---
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+        },
+      ],
+
+      // --- Import hygiene ---
+      "@typescript-eslint/consistent-type-imports": [
+        "error",
+        { prefer: "type-imports", fixStyle: "inline-type-imports" },
+      ],
+
+      // --- Async safety: critical for NestJS promise handling ---
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        { checksVoidReturn: { attributes: false } },
+      ],
+
+      // --- Modern TypeScript syntax ---
+      // prefer-nullish-coalescing requires strictNullChecks — enable when tsconfig "strict" is turned on
+      "@typescript-eslint/prefer-optional-chain": "error",
     },
   },
 ];
