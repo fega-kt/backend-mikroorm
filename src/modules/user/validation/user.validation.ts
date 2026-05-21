@@ -33,7 +33,16 @@ export const updateUserValidation = z.object({
     .max(255, "Full name must be less than 255 characters")
     .regex(/^[\p{L}]+(?:\s[\p{L}]+)*$/u, "Full name must contain only letters and single spaces between words")
     .optional(),
-  workEmail: z.string().trim().email("Invalid email format").optional(),
+  workEmail: z
+    .union([
+      z.null(),
+      z
+        .string()
+        .trim()
+        .transform((v) => (v === "" ? null : v))
+        .pipe(z.email("Invalid email format").nullable()),
+    ])
+    .optional(),
   avatar: z.string().trim().optional(),
   phoneNumber: z
     .string()
@@ -42,4 +51,30 @@ export const updateUserValidation = z.object({
     .optional(),
   description: z.string().trim().max(1000).optional(),
   department: z.string().trim().optional(),
+});
+
+export const updateProfileValidation = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .min(1, "Full name is required")
+    .max(255, "Full name must be less than 255 characters")
+    .regex(/^[\p{L}]+(?:\s[\p{L}]+)*$/u, "Full name must contain only letters and single spaces between words")
+    .optional(),
+  workEmail: z
+    .union([
+      z.null(),
+      z
+        .string()
+        .trim()
+        .transform((v) => (v === "" ? null : v))
+        .pipe(z.email("Invalid email format").nullable()),
+    ])
+    .optional(),
+  phoneNumber: z
+    .string()
+    .trim()
+    .regex(/^[0-9+ ]+$/, "Invalid phone number format")
+    .optional(),
+  description: z.string().trim().max(1000).optional(),
 });

@@ -11,7 +11,7 @@ import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UploadService } from "@modules/upload/service/upload.service";
 import z from "zod";
 import { UserEntity } from "../entity/user.entity";
-import { createUserValidation, updateUserValidation } from "../validation/user.validation";
+import { createUserValidation, updateProfileValidation, updateUserValidation } from "../validation/user.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class UserService extends BaseService<UserEntity> {
@@ -125,6 +125,10 @@ export class UserService extends BaseService<UserEntity> {
       throw new BadRequestException(result.error.format());
     }
 
+    return await this.updateOne(id, data);
+  }
+
+  async updateProfile(id: string, data: z.infer<typeof updateProfileValidation>) {
     return await this.updateOne(id, data);
   }
 
