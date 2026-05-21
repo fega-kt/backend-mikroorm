@@ -23,7 +23,7 @@ import { listFilterValidation, ListFilterDto } from "@common/pagination/paginati
 import { IdValidationPipe, ZodValidationPipe } from "@common/pipes";
 import z from "zod";
 import { UserService } from "../service/user.service";
-import { createUserValidation, updateUserValidation } from "../validation/user.validation";
+import { createUserValidation, updateProfileValidation, updateUserValidation } from "../validation/user.validation";
 
 @Controller("user")
 export class UserController {
@@ -37,10 +37,10 @@ export class UserController {
   @Patch("profile")
   updateProfile(
     @CurrentUser() user: IUserResponse,
-    @Body(new ZodValidationPipe(updateUserValidation))
-    data: z.infer<typeof updateUserValidation>,
+    @Body(new ZodValidationPipe(updateProfileValidation))
+    data: z.infer<typeof updateProfileValidation>,
   ) {
-    return this.userService.update(user.id, data);
+    return this.userService.updateProfile(user.id, data);
   }
 
   @Post()
