@@ -6,6 +6,9 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { BaseService } from "@common/base/base.service";
 import { STORAGE_PATH } from "@common/constants/storage.constant";
 import { SYSTEM_DEPARTMENT_ID } from "@common/constants/system.constant";
+import { AppSettingType } from "@modules/app-setting/enum/app-setting-type.enum";
+import { AppSettingService } from "@modules/app-setting/service/app-setting.service";
+import { MailService } from "@modules/mail/mail.service";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UploadService } from "@modules/upload/service/upload.service";
@@ -23,6 +26,8 @@ export class UserService extends BaseService<UserEntity> {
     private readonly em: EntityManager,
     private readonly uploadService: UploadService,
     private readonly supabaseService: SupabaseService,
+    private readonly mailService: MailService,
+    private readonly appSettingService: AppSettingService,
   ) {
     super();
   }
@@ -81,8 +86,8 @@ export class UserService extends BaseService<UserEntity> {
 
       await em.flush();
     });
-    await this.supabaseService.sendOtp(loginName).catch((error: Error) => {
-      this.logger.error("Failed to generate magic link for new user: " + error.message);
+    await this.sendAccountCreatedMail(loginName, fullName).catch((error: Error) => {
+      this.logger.error("Failed to send account created email: " + error.message);
     });
     return res;
   }
@@ -140,5 +145,18 @@ export class UserService extends BaseService<UserEntity> {
     const { url } = await this.uploadService.upload(file, `${STORAGE_PATH.USER_AVATAR}/${id}`);
     await this.updateOne(id, { avatar: url });
     return url;
+  }
+
+  private async sendAccountCreatedMail(email: string, fullName: string): Promise<void> {
+    const templateId = await this.appSettingService.getString(AppSettingType.MAIL_TEMPLATE_ACCOUNT_CREATED);
+    if (!templateId) {
+      this.logger.warn("Account created mail template ID not configured");
+      return;
+    }
+    await this.mailService.sendWithTemplate({
+      to: email,
+      templateId,
+      variables: { USER_NAME: fullName, LOGIN_EMAIL: email },
+    });
   }
 }
