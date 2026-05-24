@@ -31,8 +31,7 @@ export const updateUserValidation = z.object({
     .trim()
     .min(1, "Full name is required")
     .max(255, "Full name must be less than 255 characters")
-    .regex(/^[\p{L}]+(?:\s[\p{L}]+)*$/u, "Full name must contain only letters and single spaces between words")
-    .optional(),
+    .regex(/^[\p{L}]+(?:\s[\p{L}]+)*$/u, "Full name must contain only letters and single spaces between words"),
   workEmail: z
     .union([
       z.null(),
@@ -59,8 +58,7 @@ export const updateProfileValidation = z.object({
     .trim()
     .min(1, "Full name is required")
     .max(255, "Full name must be less than 255 characters")
-    .regex(/^[\p{L}]+(?:\s[\p{L}]+)*$/u, "Full name must contain only letters and single spaces between words")
-    .optional(),
+    .regex(/^[\p{L}]+(?:\s[\p{L}]+)*$/u, "Full name must contain only letters and single spaces between words"),
   workEmail: z
     .union([
       z.null(),
