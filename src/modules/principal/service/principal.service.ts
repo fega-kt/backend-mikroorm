@@ -24,7 +24,7 @@ export class PrincipalService extends BaseService<PrincipalEntity> {
       page,
       limit,
       populate: ["user", "group"],
-      fields: ["id", "name", "type", "description", "user", "group"],
+      fields: ["id", "name", "type", "description", "user", "group", "user.id", "user.fullName", "user.avatar", "group.id", "group.name"],
     });
 
     return { data, total };
