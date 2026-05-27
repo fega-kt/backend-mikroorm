@@ -41,7 +41,7 @@ export class UserService extends BaseService<UserEntity> {
 
     const { loginName, fullName, workEmail, password, department, isActive } = data;
     const exist = await this.repo.findOne({
-      loginName,
+      loginName: new RegExp(`^${loginName}$`, "i"),
     });
 
     if (exist) {

@@ -55,7 +55,7 @@ export class AuthService extends BaseService<UserEntity> {
   }
 
   async forgotPassword(data: z.infer<typeof forgotPasswordValidation>) {
-    const user = await this.repo.findOne({ loginName: data.email, deleted: { $ne: true } });
+    const user = await this.repo.findOne({ loginName: new RegExp(`^${data.email}$`, "i"), deleted: { $ne: true } });
     if (!user) return; // không tiết lộ email có tồn tại hay không
 
     const today = this.getVNDate();
@@ -93,7 +93,7 @@ export class AuthService extends BaseService<UserEntity> {
       throw new BadRequestException("Invalid or expired OTP");
     }
 
-    const user = await this.repo.findOne({ loginName: data.email, deleted: { $ne: true } });
+    const user = await this.repo.findOne({ loginName: new RegExp(`^${data.email}$`, "i"), deleted: { $ne: true } });
     if (!user) throw new BadRequestException("Invalid or expired OTP");
 
     const supabaseUser = await this.supabaseService.listUsers().then((users) => users.find((u) => u.email === data.email));
