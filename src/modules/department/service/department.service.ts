@@ -5,8 +5,8 @@ import { InjectRepository } from "@mikro-orm/nestjs";
 import { UserService } from "@modules/user/service/user.service";
 import { ConflictException, Inject, Injectable, NotFoundException, Scope, forwardRef } from "@nestjs/common";
 import z from "zod";
-import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "../type/department.types";
 import { DepartmentEntity } from "../entity/department.entity";
+import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "../type/department.types";
 import { createDepartmentValidation, updateDepartmentValidation } from "../validation/department.validation";
 
 @Injectable({ scope: Scope.REQUEST })
@@ -132,7 +132,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   async getList(): Promise<DepartmentEntity[]> {
     const { data } = await this.findAll(
       { deleted: { $ne: true } },
-      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status", "parentCode"] },
+      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status", "parentCode", "users"], populate: ["users"] },
     );
     return data;
   }
