@@ -136,6 +136,7 @@ export class GroupService extends BaseService<GroupEntity> {
       limit,
       page,
       fields: ["id", "name", "description", "createdAt"],
+      sort: { updatedAt: "DESC" },
     });
 
     return { data, total };
