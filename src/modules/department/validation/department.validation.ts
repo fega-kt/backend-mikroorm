@@ -1,5 +1,20 @@
+import { listFilterValidation } from "@common/pagination/pagination.validation";
 import z from "zod";
 import { DepartmentStatus } from "../entity/department.entity";
+
+const searchStringSchema = z
+  .string()
+  .trim()
+  .transform((val) => val.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  .optional();
+
+export const departmentListFilterValidation = listFilterValidation.extend({
+  name: searchStringSchema,
+  code: searchStringSchema,
+  status: z.coerce.number().pipe(z.nativeEnum(DepartmentStatus)).optional(),
+});
+
+export type DepartmentListFilterDto = z.infer<typeof departmentListFilterValidation>;
 
 export const createDepartmentValidation = z.object({
   code: z

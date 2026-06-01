@@ -2,11 +2,17 @@ import { PermissionType } from "@common/base/permission-type.enum";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import { IdValidationPipe } from "@common/pipes/id-validation-pipe";
 import { ZodValidationPipe } from "@common/pipes/zod-validation-pipe";
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { WithChildren } from "@common/utils/tree.util";
+import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import z from "zod";
-import { DepartmentEntity } from "../entity/department.entity";
+import { DepartmentEntity, DepartmentStatus } from "../entity/department.entity";
 import { DepartmentService } from "../service/department.service";
-import { createDepartmentValidation, updateDepartmentValidation } from "../validation/department.validation";
+import {
+  createDepartmentValidation,
+  DepartmentListFilterDto,
+  departmentListFilterValidation,
+  updateDepartmentValidation,
+} from "../validation/department.validation";
 
 @Controller("department")
 export class DepartmentController {
@@ -32,9 +38,27 @@ export class DepartmentController {
   }
 
   @Get()
+  getList(@Query(new ZodValidationPipe(departmentListFilterValidation)) query: DepartmentListFilterDto) {
+    return this.departmentService.getList(query);
+  }
+
+  @Get("department-tree")
   @Permissions(PermissionType.MenuDeparment)
-  getList(): Promise<DepartmentEntity[]> {
-    return this.departmentService.getList();
+  getTree(@Query(new ZodValidationPipe(departmentListFilterValidation)) { keyword, name, code, status }: DepartmentListFilterDto): Promise<
+    WithChildren<
+      {
+        id: string;
+        name: string;
+        code: string;
+        parentCode: string;
+        status: DepartmentStatus;
+        createdAt: Date;
+        parent: string;
+      },
+      "children"
+    >[]
+  > {
+    return this.departmentService.getTree({ keyword, name, code, status });
   }
 
   @Get(":id")
