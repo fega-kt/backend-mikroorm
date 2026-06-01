@@ -7,6 +7,9 @@ export const DEPARTMENT_DETAIL_FIELDS = defineFields<DepartmentEntity>()([
   "code",
   "name",
   "parent",
+  "parent.id",
+  "parent.name",
+  "parent.code",
   "status",
   "manager",
   "deputy",
@@ -20,7 +23,7 @@ export const DEPARTMENT_DETAIL_FIELDS = defineFields<DepartmentEntity>()([
   "deputy.workEmail",
 ]);
 
-export const DEPARTMENT_DETAIL_POPULATE = definePopulate<DepartmentEntity>()(["manager", "deputy"]);
+export const DEPARTMENT_DETAIL_POPULATE = definePopulate<DepartmentEntity>()(["manager", "deputy", "parent"]);
 
 export type DepartmentDetail = Loaded<
   DepartmentEntity,

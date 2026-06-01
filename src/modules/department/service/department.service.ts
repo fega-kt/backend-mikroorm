@@ -1,13 +1,15 @@
 import { BaseService } from "@common/base/base.service";
 import { SYSTEM_DEPARTMENT_ID, SYSTEM_USER_ID } from "@common/constants/system.constant";
+import { WithChildren, handleTree } from "@common/utils/tree.util";
+import { FilterQuery } from "@mikro-orm/core";
 import { EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { UserService } from "@modules/user/service/user.service";
 import { ConflictException, Inject, Injectable, NotFoundException, Scope, forwardRef } from "@nestjs/common";
 import z from "zod";
-import { DepartmentEntity } from "../entity/department.entity";
+import { DepartmentEntity, DepartmentStatus } from "../entity/department.entity";
 import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "../type/department.types";
-import { createDepartmentValidation, updateDepartmentValidation } from "../validation/department.validation";
+import { DepartmentListFilterDto, createDepartmentValidation, updateDepartmentValidation } from "../validation/department.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class DepartmentService extends BaseService<DepartmentEntity> {
@@ -129,12 +131,75 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     }
   }
 
-  async getList(): Promise<DepartmentEntity[]> {
-    const { data } = await this.findAll(
-      { deleted: { $ne: true } },
-      { fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status", "parentCode", "users"], populate: ["users"] },
-    );
-    return data;
+  async getList({ page = 1, limit = 10, keyword, name, code, status }: DepartmentListFilterDto) {
+    const filter: FilterQuery<DepartmentEntity> = { deleted: { $ne: true } };
+    if (keyword) {
+      filter.$or = [{ name: new RegExp(keyword, "i") }, { code: new RegExp(keyword, "i") }];
+    }
+    if (name) {
+      filter.name = new RegExp(name, "i");
+    }
+    if (code) {
+      filter.code = new RegExp(code, "i");
+    }
+    if (status !== undefined) {
+      filter.status = status;
+    }
+
+    const { data, total } = await this.paginate(filter, {
+      limit,
+      page,
+      fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status", "parentCode", "users"],
+      populate: ["users"],
+      sort: { updatedAt: "DESC" },
+    });
+
+    return { data, total };
+  }
+
+  async getTree({ keyword, name, code, status }: Pick<DepartmentListFilterDto, "keyword" | "name" | "code" | "status">): Promise<
+    WithChildren<
+      {
+        id: string;
+        name: string;
+        code: string;
+        parentCode: string;
+        status: DepartmentStatus;
+        createdAt: Date;
+        parent: string;
+      },
+      "children"
+    >[]
+  > {
+    const filter: FilterQuery<DepartmentEntity> = { deleted: { $ne: true } };
+    if (keyword) {
+      filter.$or = [{ name: new RegExp(keyword, "i") }, { code: new RegExp(keyword, "i") }];
+    }
+    if (name) {
+      filter.name = new RegExp(name, "i");
+    }
+    if (code) {
+      filter.code = new RegExp(code, "i");
+    }
+    if (status !== undefined) {
+      filter.status = status;
+    }
+
+    const { data } = await this.findAll(filter, {
+      fields: ["id", "name", "code", "parentCode", "status", "createdAt", "parent"],
+    });
+
+    const plain = data.map((d) => ({
+      id: d.id,
+      name: d.name,
+      code: d.code,
+      parentCode: d.parentCode,
+      status: d.status,
+      createdAt: d.createdAt,
+      parent: d.parent?.id ?? null,
+    }));
+
+    return handleTree(plain);
   }
 
   async getDetail(id: string): Promise<DepartmentDetail> {
