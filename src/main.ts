@@ -13,11 +13,20 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
 
+  app.enableCors({
+    origin: ENV.CORS_ORIGINS ? ENV.CORS_ORIGINS.split(",") : ["http://localhost:3333"],
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+    credentials: true,
+  });
+
   const orm = app.get(MikroORM);
 
   await orm.getSchemaGenerator().ensureIndexes();
 
   app.getHttpAdapter().getInstance().set("trust proxy", 1);
+  // health check cho Render startup
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.head("/", (req, res) => res.status(200).send());
 
   app.useGlobalFilters(new HttpExceptionFilter());
 
@@ -33,11 +42,6 @@ async function bootstrap() {
   if (ENV.NODE_ENV === NodeEnv.DEVELOPMENT) {
     await handleApplySwagger(app, port);
   }
-  app.enableCors({
-    origin: ENV.CORS_ORIGINS ? ENV.CORS_ORIGINS.split(",") : ["http://localhost:3333"],
-    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-    credentials: true,
-  });
 
   await app.listen(port);
 
