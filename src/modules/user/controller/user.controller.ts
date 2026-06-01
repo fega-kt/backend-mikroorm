@@ -19,11 +19,16 @@ import { IUserResponse } from "@common/base/consts";
 import { PermissionType } from "@common/base/permission-type.enum";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
-import { listFilterValidation, ListFilterDto } from "@common/pagination/pagination.validation";
 import { IdValidationPipe, ZodValidationPipe } from "@common/pipes";
 import z from "zod";
 import { UserService } from "../service/user.service";
-import { createUserValidation, updateProfileValidation, updateUserValidation } from "../validation/user.validation";
+import {
+  createUserValidation,
+  updateProfileValidation,
+  updateUserValidation,
+  UserListFilterDto,
+  userListFilterValidation,
+} from "../validation/user.validation";
 
 @Controller("user")
 export class UserController {
@@ -54,8 +59,8 @@ export class UserController {
 
   @Get()
   @Permissions(PermissionType.MenuUser)
-  findAll(@Query(new ZodValidationPipe(listFilterValidation)) { page, limit, keyword }: ListFilterDto) {
-    return this.userService.findAllUser(page, limit, keyword);
+  findAll(@Query(new ZodValidationPipe(userListFilterValidation)) { page, limit, keyword, phoneNumber, isActive }: UserListFilterDto) {
+    return this.userService.findAllUser(page, limit, keyword, phoneNumber, isActive);
   }
 
   @Get(":id")
