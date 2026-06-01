@@ -1,4 +1,19 @@
+import { listFilterValidation } from "@common/pagination/pagination.validation";
 import { z } from "zod";
+
+export const userListFilterValidation = listFilterValidation.extend({
+  phoneNumber: z
+    .string()
+    .trim()
+    .transform((val) => val.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .optional(),
+  isActive: z
+    .enum(["true", "false"])
+    .transform((v) => v === "true")
+    .optional(),
+});
+
+export type UserListFilterDto = z.infer<typeof userListFilterValidation>;
 
 export const createUserValidation = z.object({
   loginName: z.string().trim().min(1, "Email is required").email("Invalid email format"),

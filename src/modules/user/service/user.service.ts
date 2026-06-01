@@ -92,16 +92,35 @@ export class UserService extends BaseService<UserEntity> {
     return res;
   }
 
-  async findAllUser(page = 1, limit = 10, keyword?: string) {
+  async findAllUser(page = 1, limit = 10, keyword?: string, phoneNumber?: string, isActive?: boolean) {
     const filter: FilterQuery<UserEntity> = { deleted: { $ne: true } };
     if (keyword) {
       filter.$or = [{ fullName: new RegExp(keyword, "i") }, { loginName: new RegExp(keyword, "i") }];
+    }
+    if (phoneNumber) {
+      filter.phoneNumber = new RegExp(phoneNumber, "i");
+    }
+    if (isActive !== undefined) {
+      filter.isActive = isActive ? true : { $ne: true };
     }
 
     const { data, total } = await this.paginate(filter, {
       limit,
       page,
-      fields: ["id", "fullName", "workEmail", "createdAt", "isActive", "loginName", "avatar"],
+      fields: [
+        "id",
+        "fullName",
+        "workEmail",
+        "createdAt",
+        "isActive",
+        "loginName",
+        "avatar",
+        "phoneNumber",
+        "department",
+        "department.id",
+        "department.name",
+      ],
+      populate: ["department"],
       sort: { updatedAt: "DESC" },
     });
 
