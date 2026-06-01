@@ -26,6 +26,7 @@ async function bootstrap() {
   app.getHttpAdapter().getInstance().set("trust proxy", 1);
   // health check cho Render startup
   const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get("/", (req, res) => res.status(200).send());
   httpAdapter.head("/", (req, res) => res.status(200).send());
 
   app.useGlobalFilters(new HttpExceptionFilter());
