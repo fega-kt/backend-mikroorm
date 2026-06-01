@@ -1,4 +1,18 @@
+import { listFilterValidation } from "@common/pagination/pagination.validation";
 import z from "zod";
+
+const searchStringSchema = z
+  .string()
+  .trim()
+  .transform((val) => val.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  .optional();
+
+export const groupListFilterValidation = listFilterValidation.extend({
+  name: searchStringSchema,
+  description: searchStringSchema,
+});
+
+export type GroupListFilterDto = z.infer<typeof groupListFilterValidation>;
 
 export const createGroupValidation = z.object({
   name: z

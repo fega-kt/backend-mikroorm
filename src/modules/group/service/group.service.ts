@@ -126,10 +126,16 @@ export class GroupService extends BaseService<GroupEntity> {
     });
   }
 
-  async getList(page = 1, limit = 10, keyword?: string) {
+  async getList(page = 1, limit = 10, keyword?: string, name?: string, description?: string) {
     const filter: FilterQuery<GroupEntity> = { deleted: { $ne: true } };
     if (keyword) {
-      filter.name = new RegExp(keyword, "i");
+      filter.$or = [{ name: new RegExp(keyword, "i") }, { description: new RegExp(keyword, "i") }];
+    }
+    if (name) {
+      filter.name = new RegExp(name, "i");
+    }
+    if (description) {
+      filter.description = new RegExp(description, "i");
     }
 
     const { data, total } = await this.paginate(filter, {

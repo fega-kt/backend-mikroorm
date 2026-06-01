@@ -1,12 +1,11 @@
 import { PermissionType } from "@common/base/permission-type.enum";
 import { Permissions } from "@common/decorators/permissions.decorator";
-import { listFilterValidation, ListFilterDto } from "@common/pagination/pagination.validation";
 import { IdValidationPipe } from "@common/pipes/id-validation-pipe";
 import { ZodValidationPipe } from "@common/pipes/zod-validation-pipe";
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import z from "zod";
 import { GroupService } from "../service/group.service";
-import { createGroupValidation } from "../validation/group.validation";
+import { createGroupValidation, groupListFilterValidation, GroupListFilterDto } from "../validation/group.validation";
 
 @Controller("group")
 export class GroupController {
@@ -31,8 +30,8 @@ export class GroupController {
 
   @Get()
   @Permissions(PermissionType.MenuGroup)
-  getList(@Query(new ZodValidationPipe(listFilterValidation)) { page, limit, keyword }: ListFilterDto) {
-    return this.groupService.getList(page, limit, keyword);
+  getList(@Query(new ZodValidationPipe(groupListFilterValidation)) { page, limit, keyword, name, description }: GroupListFilterDto) {
+    return this.groupService.getList(page, limit, keyword, name, description);
   }
 
   @Delete("/:id")
