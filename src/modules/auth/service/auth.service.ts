@@ -10,7 +10,6 @@ import { ActivityLogAction, ActivityLogType } from "@modules/activity-log/entity
 import { ActivityLogService } from "@modules/activity-log/service/activity-log.service";
 import { AppSettingType } from "@modules/app-setting/enum/app-setting-type.enum";
 import { AppSettingService } from "@modules/app-setting/service/app-setting.service";
-import { CloudflareKvService } from "@modules/cloudflare-kv/cloudflare-kv.service";
 import { MailService } from "@modules/mail/mail.service";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UserEntity } from "@modules/user/entity/user.entity";
@@ -29,7 +28,6 @@ export class AuthService extends BaseService<UserEntity> {
     private readonly mailService: MailService,
     private readonly appSettingService: AppSettingService,
     private readonly activityLogService: ActivityLogService,
-    private readonly kvService: CloudflareKvService,
   ) {
     super();
   }
@@ -59,17 +57,17 @@ export class AuthService extends BaseService<UserEntity> {
     if (!user) return; // không tiết lộ email có tồn tại hay không
 
     const today = this.getVNDate();
-    const sendCountRaw = await this.kvService.get(`otp_send:${data.email}:${today}`);
+    const sendCountRaw = await this.cache.get(`otp_send:${data.email}:${today}`);
     if (parseInt(sendCountRaw ?? "0") >= 5) {
       throw new BadRequestException("Daily OTP request limit reached");
     }
 
-    const existing = await this.kvService.get(`otp:${data.email}`);
+    const existing = await this.cache.get(`otp:${data.email}`);
     if (existing) throw new BadRequestException("OTP already sent, please wait before requesting a new one");
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await this.kvService.set(`otp:${data.email}`, otp.toLowerCase(), OTP_TTL_SECONDS);
-    await this.kvService.set(`otp_send:${data.email}:${today}`, (parseInt(sendCountRaw ?? "0") + 1).toString(), 86400);
+    await this.cache.set(`otp:${data.email}`, otp.toLowerCase(), OTP_TTL_SECONDS);
+    await this.cache.set(`otp_send:${data.email}:${today}`, (parseInt(sendCountRaw ?? "0") + 1).toString(), 86400);
 
     await this.activityLogService.addOne(
       {
@@ -87,9 +85,9 @@ export class AuthService extends BaseService<UserEntity> {
   }
 
   async verifyOtp(data: z.infer<typeof verifyOtpValidation>) {
-    const stored = await this.kvService.get(`otp:${data.email}`);
+    const stored = await this.cache.get(`otp:${data.email}`);
     if (!stored || stored !== data.otp.toLowerCase()) {
-      await this.kvService.del(`otp:${data.email}`);
+      await this.cache.del(`otp:${data.email}`);
       throw new BadRequestException("Invalid or expired OTP");
     }
 
@@ -101,7 +99,7 @@ export class AuthService extends BaseService<UserEntity> {
 
     const newPassword = this.generatePassword();
     await this.supabaseService.updateUserPassword(supabaseUser.id, newPassword);
-    await this.kvService.del(`otp:${data.email}`);
+    await this.cache.del(`otp:${data.email}`);
 
     await this.sendNewPasswordMail(user.loginName, user.fullName, newPassword).catch((error: Error) => {
       this.logger.error("Failed to send new password email: " + error.message);
