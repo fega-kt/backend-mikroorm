@@ -89,7 +89,7 @@ export class AuthService extends BaseService<UserEntity> {
   async verifyOtp(data: z.infer<typeof verifyOtpValidation>) {
     const stored = await this.kvService.get(`otp:${data.email}`);
     if (!stored || stored !== data.otp.toLowerCase()) {
-      await this.kvService.delete(`otp:${data.email}`);
+      await this.kvService.del(`otp:${data.email}`);
       throw new BadRequestException("Invalid or expired OTP");
     }
 
@@ -101,7 +101,7 @@ export class AuthService extends BaseService<UserEntity> {
 
     const newPassword = this.generatePassword();
     await this.supabaseService.updateUserPassword(supabaseUser.id, newPassword);
-    await this.kvService.delete(`otp:${data.email}`);
+    await this.kvService.del(`otp:${data.email}`);
 
     await this.sendNewPasswordMail(user.loginName, user.fullName, newPassword).catch((error: Error) => {
       this.logger.error("Failed to send new password email: " + error.message);

@@ -1,5 +1,6 @@
 import { EntityData, FindOneOptions, FindOptions, FromEntityType, Loaded, QueryOrderMap, RequiredEntityData, wrap } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery, ObjectId } from "@mikro-orm/mongodb";
+import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
 import { Inject, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
@@ -15,11 +16,38 @@ export interface PaginationQuery<T> {
   sort?: QueryOrderMap<T>;
 }
 
+function stableStringify(value: unknown): string {
+  return JSON.stringify(value, (_, v) => {
+    if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+      return Object.fromEntries(Object.entries(v as object).sort(([a], [b]) => a.localeCompare(b)));
+    }
+    return v as unknown;
+  });
+}
+
 export abstract class BaseService<T extends BaseEntity> {
   @Inject(REQUEST)
   protected readonly request: Request | undefined;
 
+  @Inject(CACHE_SERVICE)
+  protected readonly cache: ICacheService;
+
   protected abstract readonly repo: EntityRepository<T>;
+
+  protected readonly cacheTTL = { item: 300, list: 120 };
+
+  /* ================= CACHE HELPERS ================= */
+  protected get cachePrefix(): string {
+    return this.repo.getEntityName().toLowerCase().replace("entity", "");
+  }
+
+  protected cacheKey(id: string): string {
+    return `cache:${this.cachePrefix}:${id}`;
+  }
+
+  protected cacheListKey(filter: object): string {
+    return `cache:${this.cachePrefix}:list:${stableStringify(filter)}`;
+  }
 
   /* ================= CURRENT USER ================= */
   getCurrentUser(options?: { user?: IUserResponse }): IUserResponse {
@@ -53,7 +81,10 @@ export abstract class BaseService<T extends BaseEntity> {
   async addOne(data: RequiredEntityData<T>, options?: { user?: IUserResponse }): Promise<T> {
     const baseCreate = this.getDefaultValuesForCreate(options);
     const entity = this.repo.create({ ...data, ...baseCreate });
-    await this.repo.getEntityManager().persistAndFlush(entity);
+    const em = this.repo.getEntityManager();
+    em.persist(entity);
+    await em.flush();
+    await this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`);
     return entity;
   }
 
@@ -109,11 +140,14 @@ export abstract class BaseService<T extends BaseEntity> {
   /* ================= UPDATE ================= */
   async updateOne(id: string, data: EntityData<FromEntityType<T>>, options?: { user?: IUserResponse }): Promise<T> {
     const baseUpdate = this.getDefaultValuesForUpdate(options);
-    const entity = await this.findById(id);
+    // Dùng repo.findOne trực tiếp để đảm bảo entity được quản lý bởi EM (không dùng cached plain object)
+    const entity = await this.repo.findOne({ id } as FilterQuery<T>);
+    if (!entity) throw new NotFoundException(`${this.repo.getEntityName()} not found`);
 
-    // wrap.assign has an IsSubset constraint TypeScript can't verify for generic T
     wrap(entity).assign({ ...data, ...baseUpdate } as any);
     await this.repo.getEntityManager().flush();
+
+    await Promise.all([this.cache.del(this.cacheKey(id)), this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`)]);
 
     return entity;
   }
@@ -128,6 +162,8 @@ export abstract class BaseService<T extends BaseEntity> {
 
     wrap(entity).assign({ deleted: true } as any);
     await this.repo.getEntityManager().flush();
+
+    await Promise.all([this.cache.del(this.cacheKey(id)), this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`)]);
 
     return { message: "Deleted successfully" };
   }
