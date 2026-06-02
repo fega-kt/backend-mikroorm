@@ -13,9 +13,14 @@ import { AppSettingService } from "@modules/app-setting/service/app-setting.serv
 import { MailService } from "@modules/mail/mail.service";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UserEntity } from "@modules/user/entity/user.entity";
-import { changePasswordValidation, forgotPasswordValidation, verifyOtpValidation } from "../validation/auth.validation";
-
-const OTP_TTL_SECONDS = 60; // 60s
+import {
+  changePasswordValidation,
+  forgotPasswordValidation,
+  loginWithOtpValidation,
+  sendLoginOtpValidation,
+  verifyOtpValidation,
+} from "../validation/auth.validation";
+import { AuthCacheKey, AuthOtpConfig } from "../auth.constants";
 
 @Injectable({ scope: Scope.REQUEST })
 export class AuthService extends BaseService<UserEntity> {
@@ -57,17 +62,17 @@ export class AuthService extends BaseService<UserEntity> {
     if (!user) return; // không tiết lộ email có tồn tại hay không
 
     const today = this.getVNDate();
-    const sendCountRaw = await this.cache.get(`otp_send:${data.email}:${today}`);
+    const sendCountRaw = await this.cache.get(AuthCacheKey.forgotPasswordSendCount(data.email, today));
     if (parseInt(sendCountRaw ?? "0") >= 5) {
       throw new BadRequestException("Daily OTP request limit reached");
     }
 
-    const existing = await this.cache.get(`otp:${data.email}`);
+    const existing = await this.cache.get(AuthCacheKey.forgotPasswordOtp(data.email));
     if (existing) throw new BadRequestException("OTP already sent, please wait before requesting a new one");
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await this.cache.set(`otp:${data.email}`, otp.toLowerCase(), OTP_TTL_SECONDS);
-    await this.cache.set(`otp_send:${data.email}:${today}`, (parseInt(sendCountRaw ?? "0") + 1).toString(), 86400);
+    await this.cache.set(AuthCacheKey.forgotPasswordOtp(data.email), otp.toLowerCase(), AuthOtpConfig.forgotPasswordTtl);
+    await this.cache.set(AuthCacheKey.forgotPasswordSendCount(data.email, today), (parseInt(sendCountRaw ?? "0") + 1).toString(), 86400);
 
     await this.activityLogService.addOne(
       {
@@ -85,9 +90,9 @@ export class AuthService extends BaseService<UserEntity> {
   }
 
   async verifyOtp(data: z.infer<typeof verifyOtpValidation>) {
-    const stored = await this.cache.get(`otp:${data.email}`);
+    const stored = await this.cache.get(AuthCacheKey.forgotPasswordOtp(data.email));
     if (!stored || stored !== data.otp.toLowerCase()) {
-      await this.cache.del(`otp:${data.email}`);
+      await this.cache.del(AuthCacheKey.forgotPasswordOtp(data.email));
       throw new BadRequestException("Invalid or expired OTP");
     }
 
@@ -99,11 +104,59 @@ export class AuthService extends BaseService<UserEntity> {
 
     const newPassword = this.generatePassword();
     await this.supabaseService.updateUserPassword(supabaseUser.id, newPassword);
-    await this.cache.del(`otp:${data.email}`);
+    await this.cache.del(AuthCacheKey.forgotPasswordOtp(data.email));
 
     await this.sendNewPasswordMail(user.loginName, user.fullName, newPassword).catch((error: Error) => {
       this.logger.error("Failed to send new password email: " + error.message);
       throw new InternalServerErrorException("Failed to send new password email");
+    });
+  }
+
+  async sendLoginOtp(data: z.infer<typeof sendLoginOtpValidation>): Promise<void> {
+    const user = await this.repo.findOne({ loginName: new RegExp(`^${data.email}$`, "i"), deleted: { $ne: true } });
+    if (!user) return; // không tiết lộ email có tồn tại hay không
+
+    const countRaw = await this.cache.get(AuthCacheKey.loginOtpRateLimit(data.email));
+    if (parseInt(countRaw ?? "0") >= AuthOtpConfig.loginOtpRateLimit) {
+      throw new BadRequestException("Too many OTP requests, please try again later");
+    }
+
+    const existing = await this.cache.get(AuthCacheKey.loginOtp(data.email));
+    if (existing) throw new BadRequestException("OTP already sent, please wait before requesting a new one");
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await this.cache.set(AuthCacheKey.loginOtp(data.email), JSON.stringify({ code: otp, attempts: 0 }), AuthOtpConfig.loginOtpTtl);
+    await this.cache.set(AuthCacheKey.loginOtpRateLimit(data.email), (parseInt(countRaw ?? "0") + 1).toString(), 3600);
+
+    await this.sendLoginOtpMail(user.loginName, user.fullName, otp).catch((error: Error) => {
+      this.logger.error("Failed to send login OTP email: " + error.message);
+      throw new InternalServerErrorException("Failed to send login OTP email");
+    });
+  }
+
+  async loginWithOtp(data: z.infer<typeof loginWithOtpValidation>) {
+    const cacheKey = AuthCacheKey.loginOtp(data.email);
+    const raw = await this.cache.get(cacheKey);
+    if (!raw) throw new BadRequestException("OTP expired or not found");
+
+    const stored: { code: string; attempts: number } = JSON.parse(raw) as { code: string; attempts: number };
+
+    if (stored.attempts >= AuthOtpConfig.loginOtpMaxAttempts) {
+      await this.cache.del(cacheKey);
+      throw new BadRequestException("Too many failed attempts, please request a new OTP");
+    }
+
+    if (stored.code !== data.otp) {
+      stored.attempts += 1;
+      await this.cache.set(cacheKey, JSON.stringify(stored), AuthOtpConfig.loginOtpTtl);
+      throw new BadRequestException("Invalid OTP");
+    }
+
+    await this.cache.del(cacheKey);
+
+    return this.supabaseService.createSessionFromEmail(data.email).catch((error: Error) => {
+      this.logger.error("Failed to create session: " + error.message);
+      throw new InternalServerErrorException("Failed to create session");
     });
   }
 
@@ -119,6 +172,16 @@ export class AuthService extends BaseService<UserEntity> {
     const rand = (chars: string) => chars[Math.floor(Math.random() * chars.length)];
     const rest = Array.from({ length: 8 }, () => rand(all)).join("");
     return rand(lower) + rand(upper) + rand(digits) + rest;
+  }
+
+  private async sendLoginOtpMail(email: string, fullName: string, otp: string): Promise<void> {
+    const templateId = await this.appSettingService.getString(AppSettingType.MAIL_TEMPLATE_LOGIN_OTP);
+    if (!templateId) throw new Error("Login OTP mail template ID not configured");
+    await this.mailService.sendWithTemplate({
+      to: email,
+      templateId,
+      variables: { USER_NAME: fullName, OTP: otp },
+    });
   }
 
   private async sendOtpMail(email: string, fullName: string, otp: string): Promise<void> {
