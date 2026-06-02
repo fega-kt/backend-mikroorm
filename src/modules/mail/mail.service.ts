@@ -58,7 +58,7 @@ export class MailService {
     });
 
     if (error) {
-      this.logger.error(`Failed to send template email to ${options.to}: ${error.message}`);
+      this.logger.error(`Failed to send template email to ${options.to} - "${options.templateId}": ${error.message}`);
       throw error;
     }
 
