@@ -1,5 +1,6 @@
 import { LoggerModule } from "@common/logger/logger.module";
 import { CloudflareKvModule } from "@modules/cloudflare-kv/cloudflare-kv.module";
+import { CacheModule } from "@modules/cache/cache.module";
 import { ActivityLogModule } from "@modules/activity-log/activity-log.module";
 import { AppSettingModule } from "@modules/app-setting/app-setting.module";
 import { AuthModule } from "@modules/auth/auth.module";
@@ -26,6 +27,7 @@ import { UserModule } from "@modules/user/user.module";
 import { type ModuleMetadata } from "@nestjs/common";
 
 export const modules: ModuleMetadata["imports"] = [
+  CacheModule,
   CloudflareKvModule,
   SupabaseModule,
   MailModule,

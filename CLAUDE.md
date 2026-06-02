@@ -25,6 +25,8 @@ Copy `.env.example` to `.env`. Required variables:
 - `MONGO_URI`, `DB_NAME` — MongoDB connection
 - `SUPABASE_URL`, `SUPABASE_JWT_PUBLISHABLE` — token auth
 - `PORT`, `API_PREFIX` — server config
+- `CACHE_DRIVER` — `redis` (default) or `cloudflare`
+- `REDIS_URL` — Redis connection (e.g. `redis://localhost:6379`)
 
 ## Project structure
 
@@ -50,7 +52,9 @@ src/
 ├── modules/
 │   ├── activity-log/           ← audit trail for entity changes
 │   ├── auth/                   ← Supabase auth guard, permissions guard
+│   ├── cache/                  ← ICacheService interface + CacheModule (selects Redis or CF KV)
 │   ├── category/               ← task/project categories
+│   ├── cloudflare-kv/          ← Cloudflare KV implementation of ICacheService
 │   ├── request-type/           ← request types (linked to category)
 │   ├── comment/                ← threaded comments on tasks
 │   ├── department/             ← organizational departments
@@ -60,6 +64,7 @@ src/
 │   ├── notification/           ← in-app notifications
 │   ├── principal/              ← User/Group wrapper for role assignment
 │   ├── project/                ← projects, members, sections
+│   ├── redis/                  ← Redis implementation of ICacheService
 │   ├── role/                   ← roles with rights (PermissionType[])
 │   ├── route/                  ← navigation routes / menu structure
 │   ├── sprint/                 ← agile sprints
@@ -96,6 +101,8 @@ All entities extend `BaseEntity` (`src/common/base/base.entity.ts`):
 - `deleted: boolean` — soft delete flag
 
 `BaseService<T>` provides: `addOne`, `findAll`, `paginate`, `findById`, `updateOne`, `remove` (soft delete). Services must declare `scope: Scope.REQUEST` to inject `REQUEST` (for current user).
+
+`paginate` and `findAll` auto-cache results via `CACHE_SERVICE`. Write methods (`addOne`, `updateOne`, `remove`) auto-invalidate the relevant cache keys. Do not call `findOne` results' collection methods (`.getItems()` etc.) — use `repo.findOne` directly when ORM collections are needed.
 
 ```typescript
 @Injectable({ scope: Scope.REQUEST })
@@ -139,6 +146,22 @@ Priority when hitting a type error:
 4. `as any` only as a last resort — add a comment explaining why
 
 When a validation schema uses `fooId: z.string()` (client sends an ID), resolve it to an entity reference via `em.getReference(FooEntity, id)` before passing to `addOne`/`updateOne` — no extra DB query needed.
+
+### Caching
+
+`CacheModule` is `@Global` — inject `CACHE_SERVICE` token anywhere without importing the module.
+
+```typescript
+import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
+
+@Inject(CACHE_SERVICE) private readonly cache: ICacheService;
+```
+
+`ICacheService` interface: `get<T>(key)`, `set(key, value, ttl)`, `del(...keys)`, `delByPattern(pattern)`.
+
+Driver is selected via `CACHE_DRIVER` env var (`redis` | `cloudflare`). Cache keys follow the convention `cache:<entity>:<id>` for items and `cache:<entity>:list:<hash>` for lists — helpers `cacheKey(id)` and `cacheListKey(filter)` are available on `BaseService`.
+
+**Do not cache MikroORM entities with uninitialized `Collection<>` fields** — collections lose their ORM methods after JSON round-trip.
 
 ### Authentication & Authorization
 

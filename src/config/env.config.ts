@@ -36,4 +36,7 @@ export const ENV = {
   CF_ACCOUNT_ID: process.env.CF_ACCOUNT_ID,
   CF_KV_NAMESPACE_ID: process.env.CF_KV_NAMESPACE_ID,
   CF_KV_API_TOKEN: process.env.CF_KV_API_TOKEN,
+
+  REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
+  CACHE_DRIVER: (process.env.CACHE_DRIVER as "redis" | "cloudflare") || "redis",
 };
