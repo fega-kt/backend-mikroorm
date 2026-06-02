@@ -58,4 +58,24 @@ export class SupabaseService {
   async sendOtp(email: string): Promise<void> {
     await this.admin.auth.signInWithOtp({ email });
   }
+
+  async createSessionFromEmail(email: string): Promise<{ access_token: string; refresh_token: string; expires_at: number }> {
+    const { data: linkData, error: linkError } = await this.admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+    });
+    if (linkError || !linkData) throw linkError ?? new Error("Failed to generate magic link");
+
+    const { data: sessionData, error: sessionError } = await this.client.auth.verifyOtp({
+      token_hash: linkData.properties.hashed_token,
+      type: "magiclink",
+    });
+    if (sessionError || !sessionData.session) throw sessionError ?? new Error("Failed to create session");
+
+    return {
+      access_token: sessionData.session.access_token,
+      refresh_token: sessionData.session.refresh_token,
+      expires_at: sessionData.session.expires_at ?? 0,
+    };
+  }
 }

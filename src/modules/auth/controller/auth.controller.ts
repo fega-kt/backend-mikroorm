@@ -5,12 +5,30 @@ import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { Public } from "@common/decorators/public.decorator";
 import { ZodValidationPipe } from "@common/pipes";
 import z from "zod";
-import { changePasswordValidation, forgotPasswordValidation, verifyOtpValidation } from "../validation/auth.validation";
+import {
+  changePasswordValidation,
+  forgotPasswordValidation,
+  loginWithOtpValidation,
+  sendLoginOtpValidation,
+  verifyOtpValidation,
+} from "../validation/auth.validation";
 import { AuthService } from "../service/auth.service";
 
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Public()
+  @Post("otp/send")
+  sendLoginOtp(@Body(new ZodValidationPipe(sendLoginOtpValidation)) data: z.infer<typeof sendLoginOtpValidation>) {
+    return this.authService.sendLoginOtp(data);
+  }
+
+  @Public()
+  @Post("otp/login")
+  loginWithOtp(@Body(new ZodValidationPipe(loginWithOtpValidation)) data: z.infer<typeof loginWithOtpValidation>) {
+    return this.authService.loginWithOtp(data);
+  }
 
   @Public()
   @Post("forgot-password")
