@@ -305,6 +305,10 @@ export class AuthService extends BaseService<UserEntity> {
 
     const computed = createHmac("sha256", secretBytes).update(signedContent).digest("base64");
 
+    this.logger.debug(`[hook] computed: ${computed}`);
+    this.logger.debug(`[hook] received: ${webhookSignature}`);
+    this.logger.debug(`[hook] secret prefix: ${secret.slice(0, 10)}...`);
+
     // webhook-signature có thể chứa nhiều sig: "v1,sig1 v1,sig2"
     const valid = webhookSignature.split(" ").some((part) => {
       const sig = part.split(",")[1];
