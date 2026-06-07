@@ -214,7 +214,9 @@ export class AuthService extends BaseService<UserEntity> {
     webhookSignature: string,
     body: Record<string, unknown>,
   ): Promise<{ decision: "continue" | "reject"; message?: string }> {
+    this.logger.debug(`[hook] called — rawBody: ${!!rawBody}, id: ${webhookId}, ts: ${webhookTimestamp}, sig: ${webhookSignature}`);
     this.verifyHookSignature(rawBody, webhookId, webhookTimestamp, webhookSignature);
+    this.logger.debug(`[hook] signature OK`);
 
     const payload = body?.user as Record<string, unknown> | undefined;
     const email = typeof payload?.email === "string" ? payload.email : undefined;
