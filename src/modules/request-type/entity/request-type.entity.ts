@@ -8,7 +8,7 @@ export enum RequestTypeStatus {
   Cancelled = "cancelled",
 }
 
-@Entity({ collection: "request_types" })
+@Entity({ tableName: "request_types" })
 export class RequestTypeEntity extends BaseEntity {
   @Property({ unique: true, type: types.string })
   code!: string;

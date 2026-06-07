@@ -15,7 +15,7 @@ export enum NotificationType {
   SPRINT_COMPLETED = "SPRINT_COMPLETED",
 }
 
-@Entity({ collection: "notifications" })
+@Entity({ tableName: "notifications" })
 export class NotificationEntity extends BaseEntity {
   @ManyToOne({ cascade: [], entity: () => UserEntity })
   user!: UserEntity;

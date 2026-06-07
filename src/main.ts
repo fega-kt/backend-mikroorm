@@ -21,7 +21,7 @@ async function bootstrap() {
 
   const orm = app.get(MikroORM);
 
-  await orm.getSchemaGenerator().ensureIndexes();
+  await orm.schema.updateSchema({ safe: true });
 
   app.getHttpAdapter().getInstance().set("trust proxy", 1);
   // health check cho Render startup
@@ -51,7 +51,7 @@ async function bootstrap() {
     🚀 MODE       : ${ENV.NODE_ENV}
     🌐 PORT       : ${ENV.PORT}
     🔗 URL        : http://localhost:${ENV.PORT}
-    📦 DATABASE   : ${ENV.DB_NAME}
+    📦 DATABASE   : ${ENV.DATABASE_URL}
     🔗 API PREFIX : /${ENV.API_PREFIX}
     🗄️  CACHE      : ${ENV.CACHE_DRIVER}
     ========================================

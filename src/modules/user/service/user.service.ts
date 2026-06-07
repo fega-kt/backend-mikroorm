@@ -1,11 +1,11 @@
-import { FilterQuery } from "@mikro-orm/core";
-import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
+import { EntityManager, EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Scope } from "@nestjs/common";
 
 import { BaseService } from "@common/base/base.service";
 import { STORAGE_PATH } from "@common/constants/storage.constant";
 import { SYSTEM_DEPARTMENT_ID } from "@common/constants/system.constant";
+import { DepartmentEntity } from "@modules/department/entity/department.entity";
 import { AppSettingType } from "@modules/app-setting/enum/app-setting-type.enum";
 import { AppSettingService } from "@modules/app-setting/service/app-setting.service";
 import { MailService } from "@modules/mail/mail.service";
@@ -40,9 +40,7 @@ export class UserService extends BaseService<UserEntity> {
     }
 
     const { loginName, fullName, workEmail, password, department, isActive } = data;
-    const exist = await this.repo.findOne({
-      loginName: new RegExp(`^${loginName}$`, "i"),
-    });
+    const exist = await this.repo.findOne({ loginName: { $ilike: loginName } });
 
     if (exist) {
       throw new ConflictException("Email already exists in local database");
@@ -68,7 +66,7 @@ export class UserService extends BaseService<UserEntity> {
         loginName,
         workEmail,
         isActive: isActive !== undefined ? isActive : true,
-        department: department ? new ObjectId(department) : new ObjectId(SYSTEM_DEPARTMENT_ID),
+        department: em.getReference(DepartmentEntity, department ?? SYSTEM_DEPARTMENT_ID),
         ...defaulValueBase,
       });
 
@@ -95,10 +93,10 @@ export class UserService extends BaseService<UserEntity> {
   async findAllUser(page = 1, limit = 10, keyword?: string, phoneNumber?: string, isActive?: boolean) {
     const filter: FilterQuery<UserEntity> = { deleted: { $ne: true } };
     if (keyword) {
-      filter.$or = [{ fullName: new RegExp(keyword, "i") }, { loginName: new RegExp(keyword, "i") }];
+      filter.$or = [{ fullName: { $ilike: `%${keyword}%` } }, { loginName: { $ilike: `%${keyword}%` } }];
     }
     if (phoneNumber) {
-      filter.phoneNumber = new RegExp(phoneNumber, "i");
+      filter.phoneNumber = { $ilike: `%${phoneNumber}%` };
     }
     if (isActive !== undefined) {
       filter.isActive = isActive ? true : { $ne: true };

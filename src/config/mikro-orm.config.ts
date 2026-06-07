@@ -1,11 +1,10 @@
 import { ENV } from "@config/env.config";
 import { type Options } from "@mikro-orm/core";
-import { MongoDriver } from "@mikro-orm/mongodb";
+import { PostgreSqlDriver } from "@mikro-orm/postgresql";
 
-const config: Options<MongoDriver> = {
-  driver: MongoDriver,
-  clientUrl: ENV.MONGO_URI,
-  dbName: ENV.DB_NAME,
+const config: Options<PostgreSqlDriver> = {
+  driver: PostgreSqlDriver,
+  clientUrl: ENV.DATABASE_URL,
 };
 
 export default config;

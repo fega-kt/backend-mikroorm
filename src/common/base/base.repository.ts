@@ -1,4 +1,4 @@
-import { EntityRepository } from "@mikro-orm/mongodb";
+import { EntityRepository } from "@mikro-orm/core";
 
 export class BaseRepository<T extends object> extends EntityRepository<T> {
   async paginate(filter = {}, page = 1, limit = 10) {

@@ -8,7 +8,7 @@ export enum PrincipalType {
   Group = "group",
 }
 
-@Entity({ collection: "principals" })
+@Entity({ tableName: "principals" })
 export class PrincipalEntity extends BaseEntity {
   @Property()
   name!: string;
@@ -25,7 +25,6 @@ export class PrincipalEntity extends BaseEntity {
     cascade: [],
     entity: () => GroupEntity,
     nullable: true,
-    default: [],
   })
   public group?: GroupEntity;
 

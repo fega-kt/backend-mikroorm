@@ -1,6 +1,6 @@
 import { BaseService } from "@common/base/base.service";
 import { EntityData } from "@mikro-orm/core";
-import { EntityRepository, FilterQuery } from "@mikro-orm/mongodb";
+import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { DepartmentEntity } from "@modules/department/entity/department.entity";
 import { ConflictException, Injectable, NotFoundException, Scope } from "@nestjs/common";

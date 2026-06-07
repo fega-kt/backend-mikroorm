@@ -1,8 +1,7 @@
 import { BaseService } from "@common/base/base.service";
-import { SYSTEM_DEPARTMENT_ID, SYSTEM_USER_ID } from "@common/constants/system.constant";
+import { SYSTEM_USER_ID } from "@common/constants/system.constant";
 import { WithChildren, handleTree } from "@common/utils/tree.util";
-import { FilterQuery } from "@mikro-orm/core";
-import { EntityRepository, ObjectId } from "@mikro-orm/mongodb";
+import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { UserService } from "@modules/user/service/user.service";
 import { ConflictException, Inject, Injectable, NotFoundException, Scope, forwardRef } from "@nestjs/common";
@@ -39,10 +38,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       }
     } else {
       const root = await this.findOne(
-        {
-          $or: [{ parent: { $exists: false } }, { parent: null }],
-          deleted: { $ne: true },
-        },
+        { parent: null, deleted: { $ne: true } },
         { fields: ["id", "code"] },
       );
       if (root) {
@@ -61,8 +57,8 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       parentCode: parent ? (parent.parentCode ? `${parent.parentCode}.${parent.code}` : parent.code) : null,
       manager: manager ?? undefined,
       deputy: deputy ?? undefined,
-      createdBy: new ObjectId(SYSTEM_USER_ID),
-      updatedBy: new ObjectId(SYSTEM_DEPARTMENT_ID),
+      createdBy: { id: SYSTEM_USER_ID } as any,
+      updatedBy: { id: SYSTEM_USER_ID } as any,
     });
 
     return department;
@@ -134,13 +130,13 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   async getList({ page = 1, limit = 10, keyword, name, code, status }: DepartmentListFilterDto) {
     const filter: FilterQuery<DepartmentEntity> = { deleted: { $ne: true } };
     if (keyword) {
-      filter.$or = [{ name: new RegExp(keyword, "i") }, { code: new RegExp(keyword, "i") }];
+      filter.$or = [{ name: { $ilike: `%${keyword}%` } }, { code: { $ilike: `%${keyword}%` } }];
     }
     if (name) {
-      filter.name = new RegExp(name, "i");
+      filter.name = { $ilike: `%${name}%` };
     }
     if (code) {
-      filter.code = new RegExp(code, "i");
+      filter.code = { $ilike: `%${code}%` };
     }
     if (status !== undefined) {
       filter.status = status;
@@ -173,13 +169,13 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   > {
     const filter: FilterQuery<DepartmentEntity> = { deleted: { $ne: true } };
     if (keyword) {
-      filter.$or = [{ name: new RegExp(keyword, "i") }, { code: new RegExp(keyword, "i") }];
+      filter.$or = [{ name: { $ilike: `%${keyword}%` } }, { code: { $ilike: `%${keyword}%` } }];
     }
     if (name) {
-      filter.name = new RegExp(name, "i");
+      filter.name = { $ilike: `%${name}%` };
     }
     if (code) {
-      filter.code = new RegExp(code, "i");
+      filter.code = { $ilike: `%${code}%` };
     }
     if (status !== undefined) {
       filter.status = status;

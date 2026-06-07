@@ -1,5 +1,5 @@
 import { BaseService } from "@common/base/base.service";
-import { EntityRepository } from "@mikro-orm/mongodb";
+import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { NotificationEntity, NotificationType } from "../entity/notification.entity";
@@ -56,10 +56,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
   async markAllAsRead() {
     const user = this.getCurrentUser();
     const em = this.repo.getEntityManager();
-    const collection = em.getConnection().getCollection("notifications");
-
-    await collection.updateMany({ user: user.id, isRead: false, deleted: { $ne: true } }, { $set: { isRead: true, readAt: new Date() } });
-
+    await em.nativeUpdate(NotificationEntity, { user: user.id, isRead: false, deleted: { $ne: true } }, { isRead: true, readAt: new Date() });
     return { message: "All notifications marked as read" };
   }
 

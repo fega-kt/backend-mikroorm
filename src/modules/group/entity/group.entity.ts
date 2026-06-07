@@ -3,7 +3,7 @@ import { Collection, Entity, ManyToMany, OneToOne, Property, types } from "@mikr
 import { PrincipalEntity } from "@modules/principal/entity/principal.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
 
-@Entity({ collection: "groups" })
+@Entity({ tableName: "groups" })
 export class GroupEntity extends BaseEntity {
   @Property()
   name!: string;

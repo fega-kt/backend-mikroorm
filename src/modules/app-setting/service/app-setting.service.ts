@@ -1,5 +1,5 @@
 import { EntityData } from "@mikro-orm/core";
-import { EntityRepository } from "@mikro-orm/mongodb";
+import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, Logger, Scope } from "@nestjs/common";
 import z from "zod";

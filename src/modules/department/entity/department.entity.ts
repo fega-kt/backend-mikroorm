@@ -7,7 +7,7 @@ export enum DepartmentStatus {
   ACTIVE = 1,
 }
 
-@Entity({ collection: "departments" })
+@Entity({ tableName: "departments" })
 export class DepartmentEntity extends BaseEntity {
   @Property({ unique: true })
   code!: string;
