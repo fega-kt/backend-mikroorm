@@ -5,6 +5,7 @@ import { PostgreSqlDriver } from "@mikro-orm/postgresql";
 const config: Options<PostgreSqlDriver> = {
   driver: PostgreSqlDriver,
   clientUrl: ENV.DATABASE_URL,
+  dbName: ENV.DB_NAME,
 };
 
 export default config;

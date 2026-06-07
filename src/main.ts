@@ -51,7 +51,7 @@ async function bootstrap() {
     🚀 MODE       : ${ENV.NODE_ENV}
     🌐 PORT       : ${ENV.PORT}
     🔗 URL        : http://localhost:${ENV.PORT}
-    📦 DATABASE   : ${ENV.DATABASE_URL}
+    📦 DATABASE   : ${ENV.DB_NAME}
     🔗 API PREFIX : /${ENV.API_PREFIX}
     🗄️  CACHE      : ${ENV.CACHE_DRIVER}
     ========================================

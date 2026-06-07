@@ -11,7 +11,8 @@ export const ENV = {
   PORT: Number(process.env.PORT) || 3000,
   API_PREFIX: process.env.API_PREFIX || "api",
   CORS_ORIGINS: process.env.CORS_ORIGINS,
-  DATABASE_URL: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/db_name",
+  DATABASE_URL: process.env.DATABASE_URL,
+  DB_NAME: process.env.DB_NAME || "zhizhu",
   JWT_SECRET: process.env.JWT_SECRET || "secret",
 
   R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
