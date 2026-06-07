@@ -1,5 +1,5 @@
-import { Body, Controller, Headers, Patch, Post, RawBodyRequest, Req } from "@nestjs/common";
-import { Request } from "express";
+import { Body, Controller, Headers, Patch, Post, RawBodyRequest, Req, Res } from "@nestjs/common";
+import { Request, Response } from "express";
 
 import { IUserResponse } from "@common/base/consts";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
@@ -45,14 +45,16 @@ export class AuthController {
 
   @Public()
   @Post("hook/signup")
-  signupHook(
+  async signupHook(
     @Req() req: RawBodyRequest<Request>,
+    @Res() res: Response,
     @Body() body: Record<string, unknown>,
     @Headers("webhook-id") webhookId: string,
     @Headers("webhook-timestamp") webhookTimestamp: string,
     @Headers("webhook-signature") webhookSignature: string,
   ) {
-    return this.authService.signupHook(req.rawBody, webhookId, webhookTimestamp, webhookSignature, body);
+    const result = await this.authService.signupHook(req.rawBody, webhookId, webhookTimestamp, webhookSignature, body);
+    res.json(result);
   }
 
   @Patch("change-password")
