@@ -11,6 +11,7 @@ import { CommentModule } from "@modules/comment/comment.module";
 import { DepartmentModule } from "@modules/department/department.module";
 import { GroupModule } from "@modules/group/group.module";
 import { HealthModule } from "@modules/health/health.module";
+import { HomeReportModule } from "@modules/home/home-report.module";
 import { MilestoneModule } from "@modules/milestone/milestone.module";
 import { NotificationModule } from "@modules/notification/notification.module";
 import { RequestTypeModule } from "@modules/request-type/request-type.module";
@@ -34,6 +35,7 @@ export const modules: ModuleMetadata["imports"] = [
   AppSettingModule,
   UploadModule,
   HealthModule,
+  HomeReportModule,
   LoggerModule,
   AuthModule,
   UserModule,
