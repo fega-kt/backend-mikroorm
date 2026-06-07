@@ -296,12 +296,13 @@ export class AuthService extends BaseService<UserEntity> {
     const secret = ENV.SUPABASE_HOOK_SECRET;
     if (!secret) throw new UnauthorizedException("Hook secret not configured");
 
-    // Standard Webhooks: signed content = "{webhook-id}.{webhook-timestamp}.{body}"
-    const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody.toString()}`;
-
-    // Secret có thể dạng "whsec_<base64>" hoặc raw base64
-    const secretBase64 = secret.startsWith("whsec_") ? secret.slice(6) : secret;
+    // Strip "v1," và "whsec_" prefix
+    const withoutV1 = secret.startsWith("v1,") ? secret.slice(3) : secret;
+    const secretBase64 = withoutV1.startsWith("whsec_") ? withoutV1.slice(6) : withoutV1;
     const secretBytes = Buffer.from(secretBase64, "base64");
+
+    // Standard Webhooks format: "{webhook-id}.{webhook-timestamp}.{body}"
+    const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody.toString()}`;
 
     const computed = createHmac("sha256", secretBytes).update(signedContent).digest("base64");
 
@@ -310,7 +311,10 @@ export class AuthService extends BaseService<UserEntity> {
       const sig = part.split(",")[1];
       if (!sig) return false;
       try {
-        return timingSafeEqual(Buffer.from(sig), Buffer.from(computed));
+        const a = Buffer.from(sig);
+        const b = Buffer.from(computed);
+        if (a.length !== b.length) return false;
+        return timingSafeEqual(a, b);
       } catch {
         return false;
       }
