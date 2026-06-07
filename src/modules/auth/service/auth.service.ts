@@ -209,9 +209,9 @@ export class AuthService extends BaseService<UserEntity> {
 
   async signupHook(
     rawBody: Buffer | undefined,
-    webhookId: string | undefined,
-    webhookTimestamp: string | undefined,
-    webhookSignature: string | undefined,
+    webhookId: string,
+    webhookTimestamp: string,
+    webhookSignature: string,
     body: Record<string, unknown>,
   ): Promise<{ decision: "continue" | "reject"; message?: string }> {
     this.verifyHookSignature(rawBody, webhookId, webhookTimestamp, webhookSignature);
@@ -289,12 +289,7 @@ export class AuthService extends BaseService<UserEntity> {
     });
   }
 
-  private verifyHookSignature(
-    rawBody: Buffer | undefined,
-    webhookId: string | undefined,
-    webhookTimestamp: string | undefined,
-    webhookSignature: string | undefined,
-  ): void {
+  private verifyHookSignature(rawBody: Buffer, webhookId: string, webhookTimestamp: string, webhookSignature: string): void {
     if (!rawBody) throw new UnauthorizedException("Missing request body");
     if (!webhookId || !webhookTimestamp || !webhookSignature) throw new UnauthorizedException("Missing webhook headers");
 

@@ -6,6 +6,7 @@ import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { Public } from "@common/decorators/public.decorator";
 import { ZodValidationPipe } from "@common/pipes";
 import z from "zod";
+import { AuthService } from "../service/auth.service";
 import {
   changePasswordValidation,
   forgotPasswordValidation,
@@ -13,7 +14,6 @@ import {
   sendLoginOtpValidation,
   verifyOtpValidation,
 } from "../validation/auth.validation";
-import { AuthService } from "../service/auth.service";
 
 @Controller("auth")
 export class AuthController {
@@ -48,9 +48,9 @@ export class AuthController {
   signupHook(
     @Req() req: RawBodyRequest<Request>,
     @Body() body: Record<string, unknown>,
-    @Headers("webhook-id") webhookId: string | undefined,
-    @Headers("webhook-timestamp") webhookTimestamp: string | undefined,
-    @Headers("webhook-signature") webhookSignature: string | undefined,
+    @Headers("webhook-id") webhookId: string,
+    @Headers("webhook-timestamp") webhookTimestamp: string,
+    @Headers("webhook-signature") webhookSignature: string,
   ) {
     return this.authService.signupHook(req.rawBody, webhookId, webhookTimestamp, webhookSignature, body);
   }
