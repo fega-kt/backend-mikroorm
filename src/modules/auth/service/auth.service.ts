@@ -209,10 +209,12 @@ export class AuthService extends BaseService<UserEntity> {
 
   async signupHook(
     rawBody: Buffer | undefined,
-    signature: string | undefined,
+    webhookId: string,
+    webhookTimestamp: string,
+    webhookSignature: string,
     body: Record<string, unknown>,
   ): Promise<{ decision: "continue" | "reject"; message?: string }> {
-    this.verifyHookSignature(rawBody, signature);
+    this.verifyHookSignature(rawBody, webhookId, webhookTimestamp, webhookSignature);
 
     const payload = body?.user as Record<string, unknown> | undefined;
     const email = typeof payload?.email === "string" ? payload.email : undefined;
@@ -287,20 +289,34 @@ export class AuthService extends BaseService<UserEntity> {
     });
   }
 
-  private verifyHookSignature(rawBody: Buffer | undefined, signature: string | undefined): void {
+  private verifyHookSignature(rawBody: Buffer, webhookId: string, webhookTimestamp: string, webhookSignature: string): void {
     if (!rawBody) throw new UnauthorizedException("Missing request body");
-    if (!signature) throw new UnauthorizedException("Missing signature header");
+    if (!webhookId || !webhookTimestamp || !webhookSignature) throw new UnauthorizedException("Missing webhook headers");
 
     const secret = ENV.SUPABASE_HOOK_SECRET;
     if (!secret) throw new UnauthorizedException("Hook secret not configured");
 
-    const expected = "sha256=" + createHmac("sha256", secret).update(rawBody).digest("hex");
-    const sigBuffer = Buffer.from(signature);
-    const expBuffer = Buffer.from(expected);
+    // Standard Webhooks: signed content = "{webhook-id}.{webhook-timestamp}.{body}"
+    const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody.toString()}`;
 
-    if (sigBuffer.length !== expBuffer.length || !timingSafeEqual(sigBuffer, expBuffer)) {
-      throw new UnauthorizedException("Invalid hook signature");
-    }
+    // Secret có thể dạng "whsec_<base64>" hoặc raw base64
+    const secretBase64 = secret.startsWith("whsec_") ? secret.slice(6) : secret;
+    const secretBytes = Buffer.from(secretBase64, "base64");
+
+    const computed = createHmac("sha256", secretBytes).update(signedContent).digest("base64");
+
+    // webhook-signature có thể chứa nhiều sig: "v1,sig1 v1,sig2"
+    const valid = webhookSignature.split(" ").some((part) => {
+      const sig = part.split(",")[1];
+      if (!sig) return false;
+      try {
+        return timingSafeEqual(Buffer.from(sig), Buffer.from(computed));
+      } catch {
+        return false;
+      }
+    });
+
+    if (!valid) throw new UnauthorizedException("Invalid webhook signature");
   }
 
   private async sendPasswordChangedMail(currentUser: IUserResponse): Promise<void> {
