@@ -1,18 +1,22 @@
-import { EntityRepository } from "@mikro-orm/mongodb";
+import { EntityRepository, ObjectId } from "@mikro-orm/mongodb";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, Scope } from "@nestjs/common";
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, Scope, UnauthorizedException } from "@nestjs/common";
+import { createHmac, timingSafeEqual } from "crypto";
 import z from "zod";
 
 import { BaseService } from "@common/base/base.service";
 import { IUserResponse } from "@common/base/consts";
-import { SYSTEM_USER_ID } from "@common/constants/system.constant";
+import { SYSTEM_DEPARTMENT_ID, SYSTEM_USER_ID } from "@common/constants/system.constant";
+import { ENV } from "@config/env.config";
 import { ActivityLogAction, ActivityLogType } from "@modules/activity-log/entity/activity-log.entity";
 import { ActivityLogService } from "@modules/activity-log/service/activity-log.service";
 import { AppSettingType } from "@modules/app-setting/enum/app-setting-type.enum";
 import { AppSettingService } from "@modules/app-setting/service/app-setting.service";
 import { MailService } from "@modules/mail/mail.service";
+import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UserEntity } from "@modules/user/entity/user.entity";
+import { AuthCacheKey, AuthOtpConfig } from "../auth.constants";
 import {
   changePasswordValidation,
   forgotPasswordValidation,
@@ -20,7 +24,6 @@ import {
   sendLoginOtpValidation,
   verifyOtpValidation,
 } from "../validation/auth.validation";
-import { AuthCacheKey, AuthOtpConfig } from "../auth.constants";
 
 @Injectable({ scope: Scope.REQUEST })
 export class AuthService extends BaseService<UserEntity> {
@@ -202,6 +205,99 @@ export class AuthService extends BaseService<UserEntity> {
       templateId,
       variables: { USER_NAME: fullName, NEW_PASSWORD: newPassword },
     });
+  }
+
+  async signupHook(
+    rawBody: Buffer,
+    signature: string,
+    body: Record<string, unknown>,
+  ): Promise<{ decision: "continue" | "reject"; message?: string }> {
+    this.verifyHookSignature(rawBody, signature);
+
+    const payload = body?.user as Record<string, unknown> | undefined;
+    const email = typeof payload?.email === "string" ? payload.email : undefined;
+    if (!email) return { decision: "reject", message: "Email không hợp lệ" };
+
+    const systemUser = { id: SYSTEM_USER_ID } as IUserResponse;
+
+    // Query không filter deleted để bắt cả user bị xóa mềm
+    const user = await this.repo.findOne({ loginName: new RegExp(`^${email}$`, "i") });
+
+    if (!user) {
+      const metadata = payload?.user_metadata as Record<string, unknown> | undefined;
+      const fullName =
+        typeof metadata?.full_name === "string"
+          ? metadata.full_name
+          : typeof metadata?.name === "string"
+            ? metadata.name
+            : email.split("@")[0];
+
+      await this.createUserWithPrincipal(email, fullName, systemUser);
+      return { decision: "continue" };
+    }
+
+    if (user.deleted || !user.isActive) {
+      await this.updateOne(user.id, { deleted: false, isActive: true }, { user: systemUser });
+      return { decision: "continue" };
+    }
+
+    return { decision: "continue" };
+  }
+
+  private async createUserWithPrincipal(email: string, fullName: string, systemUser: IUserResponse): Promise<void> {
+    const defaultValues = this.getDefaultValuesForCreate({ user: systemUser });
+    const em = this.repo.getEntityManager();
+
+    await em.transactional(async (txEm) => {
+      const user = this.repo.create({
+        loginName: email,
+        fullName,
+        isActive: true,
+        department: new ObjectId(SYSTEM_DEPARTMENT_ID),
+        ...defaultValues,
+      });
+      txEm.persist(user);
+
+      const principal = txEm.create(PrincipalEntity, {
+        name: fullName,
+        type: PrincipalType.User,
+        user,
+        ...defaultValues,
+      });
+      txEm.persist(principal);
+
+      await txEm.flush();
+    });
+
+    await this.sendAccountCreatedMail(email, fullName).catch((error: Error) => {
+      this.logger.error("Failed to send account created email: " + error.message);
+    });
+  }
+
+  private async sendAccountCreatedMail(email: string, fullName: string): Promise<void> {
+    const templateId = await this.appSettingService.getString(AppSettingType.MAIL_TEMPLATE_ACCOUNT_CREATED);
+    if (!templateId) {
+      this.logger.warn("Account created mail template ID not configured");
+      return;
+    }
+    await this.mailService.sendWithTemplate({
+      to: email,
+      templateId,
+      variables: { USER_NAME: fullName, LOGIN_EMAIL: email },
+    });
+  }
+
+  private verifyHookSignature(rawBody: Buffer, signature: string): void {
+    const secret = ENV.SUPABASE_HOOK_SECRET;
+    if (!secret) throw new UnauthorizedException("Hook secret not configured");
+
+    const expected = "sha256=" + createHmac("sha256", secret).update(rawBody).digest("hex");
+    const sigBuffer = Buffer.from(signature);
+    const expBuffer = Buffer.from(expected);
+
+    if (sigBuffer.length !== expBuffer.length || !timingSafeEqual(sigBuffer, expBuffer)) {
+      throw new UnauthorizedException("Invalid hook signature");
+    }
   }
 
   private async sendPasswordChangedMail(currentUser: IUserResponse): Promise<void> {

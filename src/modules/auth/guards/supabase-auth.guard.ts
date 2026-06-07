@@ -52,7 +52,7 @@ export class SupabaseAuthGuard implements CanActivate {
     try {
       const email: string | undefined = await this.verifyToken(token);
       if (!email) {
-        return false;
+        throw new UnauthorizedException("Could not extract email from token");
       }
       const user = await this.validate(email);
       request.user = user;
@@ -107,11 +107,6 @@ export class SupabaseAuthGuard implements CanActivate {
       this.handleLogging(email);
 
       throw new UnauthorizedException("User not found or deleted");
-    }
-
-    if (user.deleted) {
-      this.handleLogging(email);
-      throw new UnauthorizedException("User deleted");
     }
 
     if (!user.isActive) {

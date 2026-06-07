@@ -1,4 +1,5 @@
-import { Body, Controller, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Headers, Patch, Post, RawBodyRequest, Req } from "@nestjs/common";
+import { Request } from "express";
 
 import { IUserResponse } from "@common/base/consts";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
@@ -40,6 +41,12 @@ export class AuthController {
   @Post("verify-otp")
   verifyOtp(@Body(new ZodValidationPipe(verifyOtpValidation)) data: z.infer<typeof verifyOtpValidation>) {
     return this.authService.verifyOtp(data);
+  }
+
+  @Public()
+  @Post("hook/signup")
+  signupHook(@Req() req: RawBodyRequest<Request>, @Headers("x-supabase-signature") signature: string) {
+    return this.authService.signupHook(req.rawBody, signature, req.body as Record<string, unknown>);
   }
 
   @Patch("change-password")
