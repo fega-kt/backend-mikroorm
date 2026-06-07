@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Patch, Post, RawBodyRequest, Req } from "@nestjs/common";
+import { Body, Controller, Patch, Post, RawBodyRequest, Req } from "@nestjs/common";
 import { Request } from "express";
 
 import { IUserResponse } from "@common/base/consts";
@@ -45,7 +45,10 @@ export class AuthController {
 
   @Public()
   @Post("hook/signup")
-  signupHook(@Req() req: RawBodyRequest<Request>, @Headers("x-supabase-signature") signature: string) {
+  signupHook(@Req() req: RawBodyRequest<Request>) {
+    console.log("[hook/signup] headers:", JSON.stringify(req.headers));
+    console.log("[hook/signup] rawBody defined:", !!req.rawBody);
+    const signature = (req.headers["x-supabase-signature"] ?? req.headers["authorization"]) as string | undefined;
     return this.authService.signupHook(req.rawBody, signature, req.body as Record<string, unknown>);
   }
 
