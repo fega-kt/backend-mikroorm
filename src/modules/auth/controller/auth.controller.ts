@@ -54,7 +54,7 @@ export class AuthController {
     @Headers("webhook-signature") webhookSignature: string,
   ) {
     const result = await this.authService.signupHook(req.rawBody, webhookId, webhookTimestamp, webhookSignature, body);
-    res.json(result);
+    res.status(200).json(result);
   }
 
   @Patch("change-password")
