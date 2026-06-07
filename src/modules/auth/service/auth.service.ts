@@ -208,8 +208,8 @@ export class AuthService extends BaseService<UserEntity> {
   }
 
   async signupHook(
-    rawBody: Buffer,
-    signature: string,
+    rawBody: Buffer | undefined,
+    signature: string | undefined,
     body: Record<string, unknown>,
   ): Promise<{ decision: "continue" | "reject"; message?: string }> {
     this.verifyHookSignature(rawBody, signature);
@@ -287,7 +287,10 @@ export class AuthService extends BaseService<UserEntity> {
     });
   }
 
-  private verifyHookSignature(rawBody: Buffer, signature: string): void {
+  private verifyHookSignature(rawBody: Buffer | undefined, signature: string | undefined): void {
+    if (!rawBody) throw new UnauthorizedException("Missing request body");
+    if (!signature) throw new UnauthorizedException("Missing signature header");
+
     const secret = ENV.SUPABASE_HOOK_SECRET;
     if (!secret) throw new UnauthorizedException("Hook secret not configured");
 
