@@ -21,7 +21,7 @@ export const createUserValidation = z.object({
   phoneNumber: z
     .string()
     .trim()
-    .regex(/^[0-9+ ]+$/, "Invalid phone number format")
+    .refine((v) => v === "" || /^[0-9+ ]+$/.test(v), "Invalid phone number format")
     .optional(),
   fullName: z
     .string()
@@ -62,7 +62,7 @@ export const updateUserValidation = z.object({
   phoneNumber: z
     .string()
     .trim()
-    .regex(/^[0-9+ ]+$/, "Invalid phone number format")
+    .refine((v) => v === "" || /^[0-9+ ]+$/.test(v), "Invalid phone number format")
     .optional(),
   description: z.string().trim().max(1000).optional(),
   department: z.string().trim().optional(),
@@ -89,7 +89,7 @@ export const updateProfileValidation = z.object({
   phoneNumber: z
     .string()
     .trim()
-    .regex(/^[0-9+ ]+$/, "Invalid phone number format")
+    .refine((v) => v === "" || /^[0-9+ ]+$/.test(v), "Invalid phone number format")
     .optional(),
   description: z.string().trim().max(1000).optional(),
 });
