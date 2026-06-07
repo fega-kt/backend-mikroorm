@@ -46,10 +46,13 @@ export class AuthController {
   @Public()
   @Post("hook/signup")
   signupHook(@Req() req: RawBodyRequest<Request>) {
-    console.log("[hook/signup] headers:", JSON.stringify(req.headers));
-    console.log("[hook/signup] rawBody defined:", !!req.rawBody);
-    const signature = (req.headers["x-supabase-signature"] ?? req.headers["authorization"]) as string | undefined;
-    return this.authService.signupHook(req.rawBody, signature, req.body as Record<string, unknown>);
+    return this.authService.signupHook(
+      req.rawBody,
+      req.headers["webhook-id"] as string | undefined,
+      req.headers["webhook-timestamp"] as string | undefined,
+      req.headers["webhook-signature"] as string | undefined,
+      req.body as Record<string, unknown>,
+    );
   }
 
   @Patch("change-password")
