@@ -14,7 +14,7 @@ import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UploadService } from "@modules/upload/service/upload.service";
 import z from "zod";
 import { UserEntity } from "../entity/user.entity";
-import { createUserValidation, updateProfileValidation, updateUserValidation } from "../validation/user.validation";
+import { createUserValidation, updateProfileValidation, updateUserValidation, UserListFilterDto } from "../validation/user.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class UserService extends BaseService<UserEntity> {
@@ -90,10 +90,13 @@ export class UserService extends BaseService<UserEntity> {
     return res;
   }
 
-  async findAllUser(page = 1, limit = 10, keyword?: string, phoneNumber?: string, isActive?: boolean) {
+  async findAllUser({ page = 1, limit = 10, keyword, fullName, phoneNumber, isActive }: UserListFilterDto) {
     const filter: FilterQuery<UserEntity> = { deleted: { $ne: true } };
     if (keyword) {
       filter.$or = [{ fullName: { $ilike: `%${keyword}%` } }, { loginName: { $ilike: `%${keyword}%` } }];
+    }
+    if (fullName) {
+      filter.fullName = { $ilike: `%${fullName}%` };
     }
     if (phoneNumber) {
       filter.phoneNumber = { $ilike: `%${phoneNumber}%` };

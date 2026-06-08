@@ -2,6 +2,11 @@ import { listFilterValidation } from "@common/pagination/pagination.validation";
 import { z } from "zod";
 
 export const userListFilterValidation = listFilterValidation.extend({
+  fullName: z
+    .string()
+    .trim()
+    .transform((val) => val.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .optional(),
   phoneNumber: z
     .string()
     .trim()
