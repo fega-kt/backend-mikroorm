@@ -1,6 +1,6 @@
 import { BaseService } from "@common/base/base.service";
 import { FilterQuery } from "@mikro-orm/core";
-import { EntityRepository } from "@mikro-orm/mongodb";
+import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import z from "zod";
@@ -27,7 +27,7 @@ export class RoleService extends BaseService<RoleEntity> {
   async findAllRoles(page = 1, limit = 10, keyword?: string) {
     const filter: FilterQuery<RoleEntity> = { deleted: { $ne: true } };
     if (keyword) {
-      filter.name = new RegExp(keyword, "i");
+      filter.name = { $ilike: `%${keyword}%` };
     }
 
     const { data, total } = await this.paginate(filter, {

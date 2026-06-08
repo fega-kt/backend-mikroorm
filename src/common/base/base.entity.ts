@@ -1,12 +1,10 @@
-import { ManyToOne, PrimaryKey, Property, SerializedPrimaryKey } from "@mikro-orm/core";
-import { ObjectId } from "@mikro-orm/mongodb";
+import { ManyToOne, PrimaryKey, Property } from "@mikro-orm/core";
+import { v4 as uuidv4 } from "uuid";
 import { type UserEntity } from "@modules/user/entity/user.entity";
-export abstract class BaseEntity {
-  @PrimaryKey()
-  _id!: ObjectId;
 
-  @SerializedPrimaryKey()
-  id!: string;
+export abstract class BaseEntity {
+  @PrimaryKey({ type: "uuid" })
+  id: string = uuidv4();
 
   @Property({ onCreate: () => new Date() })
   createdAt = new Date();
@@ -17,13 +15,9 @@ export abstract class BaseEntity {
   @Property({ default: false })
   deleted: boolean = false;
 
-  @ManyToOne("UserEntity", {
-    cascade: [],
-  })
+  @ManyToOne("UserEntity", { cascade: [] })
   createdBy!: UserEntity;
 
-  @ManyToOne("UserEntity", {
-    cascade: [],
-  })
+  @ManyToOne("UserEntity", { cascade: [] })
   updatedBy!: UserEntity;
 }

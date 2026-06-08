@@ -21,7 +21,7 @@ async function bootstrap() {
 
   const orm = app.get(MikroORM);
 
-  await orm.getSchemaGenerator().ensureIndexes();
+  await orm.schema.updateSchema({ safe: true });
 
   app.getHttpAdapter().getInstance().set("trust proxy", 1);
   // health check cho Render startup

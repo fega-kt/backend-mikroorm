@@ -1,4 +1,4 @@
-import { EntityRepository, ObjectId } from "@mikro-orm/mongodb";
+import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, Injectable, InternalServerErrorException, Logger, Scope, UnauthorizedException } from "@nestjs/common";
 import { createHmac, timingSafeEqual } from "crypto";
@@ -13,6 +13,7 @@ import { ActivityLogService } from "@modules/activity-log/service/activity-log.s
 import { AppSettingType } from "@modules/app-setting/enum/app-setting-type.enum";
 import { AppSettingService } from "@modules/app-setting/service/app-setting.service";
 import { MailService } from "@modules/mail/mail.service";
+import { DepartmentEntity } from "@modules/department/entity/department.entity";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UserEntity } from "@modules/user/entity/user.entity";
@@ -61,7 +62,7 @@ export class AuthService extends BaseService<UserEntity> {
   }
 
   async forgotPassword(data: z.infer<typeof forgotPasswordValidation>) {
-    const user = await this.repo.findOne({ loginName: new RegExp(`^${data.email}$`, "i"), deleted: { $ne: true } });
+    const user = await this.repo.findOne({ loginName: { $ilike: data.email }, deleted: { $ne: true } });
     if (!user) return; // không tiết lộ email có tồn tại hay không
 
     const today = this.getVNDate();
@@ -99,7 +100,7 @@ export class AuthService extends BaseService<UserEntity> {
       throw new BadRequestException("Invalid or expired OTP");
     }
 
-    const user = await this.repo.findOne({ loginName: new RegExp(`^${data.email}$`, "i"), deleted: { $ne: true } });
+    const user = await this.repo.findOne({ loginName: { $ilike: data.email }, deleted: { $ne: true } });
     if (!user) throw new BadRequestException("Invalid or expired OTP");
 
     const supabaseUser = await this.supabaseService.listUsers().then((users) => users.find((u) => u.email === data.email));
@@ -116,7 +117,7 @@ export class AuthService extends BaseService<UserEntity> {
   }
 
   async sendLoginOtp(data: z.infer<typeof sendLoginOtpValidation>): Promise<void> {
-    const user = await this.repo.findOne({ loginName: new RegExp(`^${data.email}$`, "i"), deleted: { $ne: true } });
+    const user = await this.repo.findOne({ loginName: { $ilike: data.email }, deleted: { $ne: true } });
     if (!user) return; // không tiết lộ email có tồn tại hay không
 
     const countRaw = await this.cache.get(AuthCacheKey.loginOtpRateLimit(data.email));
@@ -223,7 +224,7 @@ export class AuthService extends BaseService<UserEntity> {
     const systemUser = { id: SYSTEM_USER_ID } as IUserResponse;
 
     // Query không filter deleted để bắt cả user bị xóa mềm
-    const user = await this.repo.findOne({ loginName: new RegExp(`^${email}$`, "i") });
+    const user = await this.repo.findOne({ loginName: { $ilike: email } });
 
     if (!user) {
       const metadata = payload?.user_metadata as Record<string, unknown> | undefined;
@@ -255,7 +256,7 @@ export class AuthService extends BaseService<UserEntity> {
         loginName: email,
         fullName,
         isActive: true,
-        department: new ObjectId(SYSTEM_DEPARTMENT_ID),
+        department: em.getReference(DepartmentEntity, SYSTEM_DEPARTMENT_ID),
         ...defaultValues,
       });
       txEm.persist(user);

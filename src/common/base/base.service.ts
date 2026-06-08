@@ -1,6 +1,17 @@
-import { EntityData, FindOneOptions, FindOptions, FromEntityType, Loaded, QueryOrderMap, RequiredEntityData, wrap } from "@mikro-orm/core";
-import { EntityRepository, FilterQuery, ObjectId } from "@mikro-orm/mongodb";
+import {
+  EntityData,
+  EntityRepository,
+  FilterQuery,
+  FindOneOptions,
+  FindOptions,
+  FromEntityType,
+  Loaded,
+  QueryOrderMap,
+  RequiredEntityData,
+  wrap,
+} from "@mikro-orm/core";
 import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
+import { UserEntity } from "@modules/user/entity/user.entity";
 import { Inject, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
@@ -61,19 +72,21 @@ export abstract class BaseService<T extends BaseEntity> {
 
   getDefaultValuesForCreate(options?: { user?: IUserResponse }) {
     const { id } = this.getCurrentUser(options);
+    const em = this.repo.getEntityManager();
     return {
       createdAt: new Date(),
       updatedAt: new Date(),
-      createdBy: new ObjectId(id),
-      updatedBy: new ObjectId(id),
+      createdBy: em.getReference(UserEntity, id),
+      updatedBy: em.getReference(UserEntity, id),
     };
   }
 
   getDefaultValuesForUpdate(options?: { user?: IUserResponse }) {
     const { id } = this.getCurrentUser(options);
+    const em = this.repo.getEntityManager();
     return {
       updatedAt: new Date(),
-      updatedBy: new ObjectId(id),
+      updatedBy: em.getReference(UserEntity, id),
     };
   }
 

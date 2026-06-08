@@ -1,5 +1,5 @@
 import { BaseService } from "@common/base/base.service";
-import { EntityRepository } from "@mikro-orm/mongodb";
+import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, Scope } from "@nestjs/common";
 import { AttachmentEntity } from "../entity/attachment.entity";

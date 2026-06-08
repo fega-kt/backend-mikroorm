@@ -1,6 +1,5 @@
 import { BaseService } from "@common/base/base.service";
-import { FilterQuery } from "@mikro-orm/core";
-import { EntityManager, EntityRepository, ObjectId } from "@mikro-orm/mongodb";
+import { EntityManager, EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
 import { UserEntity } from "@modules/user/entity/user.entity";
@@ -50,12 +49,10 @@ export class GroupService extends BaseService<GroupEntity> {
 
       /** 3️⃣ add users to group */
       if (userIds.length) {
-        const users = await em.find(UserEntity, {
-          _id: { $in: userIds.map((id) => new ObjectId(id)) },
-        });
+        const users = await em.find(UserEntity, { id: { $in: userIds } });
 
         for (const user of users) {
-          user.groups.add(group); // update owning side
+          user.groups.add(group);
         }
       }
 
@@ -72,7 +69,7 @@ export class GroupService extends BaseService<GroupEntity> {
 
     return this.em.transactional(async (em) => {
       /** 1️⃣ find group */
-      const group = await em.findOneOrFail(GroupEntity, new ObjectId(id));
+      const group = await em.findOneOrFail(GroupEntity, id);
 
       /** 2️⃣ update group info */
       em.assign(group, {
@@ -95,19 +92,15 @@ export class GroupService extends BaseService<GroupEntity> {
 
       /** 4️⃣ sync users */
       if (userIds) {
-        const newUsers = await em.find(UserEntity, {
-          _id: { $in: userIds.map((id) => new ObjectId(id)) },
-        });
+        const newUsers = await em.find(UserEntity, { id: { $in: userIds } });
 
-        const currentUsers = await em.find(UserEntity, {
-          groups: group,
-        });
+        const currentUsers = await em.find(UserEntity, { groups: group });
 
-        const newUserIds = newUsers.map((u) => u._id.toString());
+        const newUserIds = new Set(newUsers.map((u) => u.id));
 
         /** remove users not in new list */
         for (const user of currentUsers) {
-          if (!newUserIds.includes(user._id.toString())) {
+          if (!newUserIds.has(user.id)) {
             user.groups.remove(group);
           }
         }
@@ -129,13 +122,13 @@ export class GroupService extends BaseService<GroupEntity> {
   async getList(page = 1, limit = 10, keyword?: string, name?: string, description?: string) {
     const filter: FilterQuery<GroupEntity> = { deleted: { $ne: true } };
     if (keyword) {
-      filter.$or = [{ name: new RegExp(keyword, "i") }, { description: new RegExp(keyword, "i") }];
+      filter.$or = [{ name: { $ilike: `%${keyword}%` } }, { description: { $ilike: `%${keyword}%` } }];
     }
     if (name) {
-      filter.name = new RegExp(name, "i");
+      filter.name = { $ilike: `%${name}%` };
     }
     if (description) {
-      filter.description = new RegExp(description, "i");
+      filter.description = { $ilike: `%${description}%` };
     }
 
     const { data, total } = await this.paginate(filter, {

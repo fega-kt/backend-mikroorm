@@ -108,7 +108,7 @@ export interface WorkflowDefinition {
   edges: WfEdge[];
 }
 
-@Entity({ collection: "workflow_settings" })
+@Entity({ tableName: "workflow_settings" })
 export class WorkflowSettingEntity extends BaseEntity {
   @Property({ type: types.string })
   name!: string;

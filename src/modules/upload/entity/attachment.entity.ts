@@ -1,7 +1,7 @@
 import { BaseEntity } from "@common/base/base.entity";
 import { Entity, Property, types } from "@mikro-orm/core";
 
-@Entity({ collection: "attachments" })
+@Entity({ tableName: "attachments" })
 export class AttachmentEntity extends BaseEntity {
   /** Tên file gốc khi upload */
   @Property({ type: types.string })

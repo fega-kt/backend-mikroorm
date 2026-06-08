@@ -1,6 +1,6 @@
 import { BaseService } from "@common/base/base.service";
 import { EntityData } from "@mikro-orm/core";
-import { EntityRepository, FilterQuery } from "@mikro-orm/mongodb";
+import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { CategoryEntity } from "@modules/category/entity/category.entity";
 import { PrincipalEntity } from "@modules/principal/entity/principal.entity";

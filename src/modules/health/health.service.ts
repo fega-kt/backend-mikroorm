@@ -1,4 +1,4 @@
-import { EntityManager } from "@mikro-orm/mongodb";
+import { EntityManager } from "@mikro-orm/core";
 import { Injectable } from "@nestjs/common";
 
 @Injectable()
@@ -9,8 +9,7 @@ export class HealthService {
     let database = "ok";
 
     try {
-      // ping mongodb
-      await this.em.getConnection().execute("ping");
+      await this.em.getConnection().execute("SELECT 1");
     } catch {
       database = "down";
     }

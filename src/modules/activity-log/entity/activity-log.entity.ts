@@ -19,7 +19,7 @@ export enum ActivityLogAction {
   FORGOT_PASSWORD = "FORGOT_PASSWORD",
 }
 
-@Entity({ collection: "activity_logs" })
+@Entity({ tableName: "activity_logs" })
 export class ActivityLogEntity extends BaseEntity {
   @Property({ type: types.string })
   parentId!: string;

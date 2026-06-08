@@ -4,7 +4,7 @@ import { DepartmentEntity } from "@modules/department/entity/department.entity";
 import { GroupEntity } from "@modules/group/entity/group.entity";
 import { PrincipalEntity } from "@modules/principal/entity/principal.entity";
 
-@Entity({ collection: "users" })
+@Entity({ tableName: "users" })
 export class UserEntity extends BaseEntity {
   @Property({ unique: true, type: types.string })
   loginName!: string;

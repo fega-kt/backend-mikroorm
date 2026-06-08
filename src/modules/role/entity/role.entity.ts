@@ -3,7 +3,7 @@ import { PermissionType } from "@common/base/permission-type.enum";
 import { Collection, Entity, Enum, ManyToMany, Property, types } from "@mikro-orm/core";
 import { PrincipalEntity } from "@modules/principal/entity/principal.entity";
 
-@Entity({ collection: "roles" })
+@Entity({ tableName: "roles" })
 export class RoleEntity extends BaseEntity {
   @Property()
   name!: string;
@@ -14,6 +14,6 @@ export class RoleEntity extends BaseEntity {
   @Property({ type: types.string, nullable: true })
   description?: string;
 
-  @Enum({ items: () => PermissionType, array: true, nullable: false })
+  @Enum({ items: () => PermissionType, array: true, columnType: "text[]", nullable: false })
   rights!: PermissionType[];
 }

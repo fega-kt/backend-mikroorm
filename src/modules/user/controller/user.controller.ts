@@ -59,8 +59,8 @@ export class UserController {
 
   @Get()
   @Permissions(PermissionType.MenuUser)
-  findAll(@Query(new ZodValidationPipe(userListFilterValidation)) { page, limit, keyword, phoneNumber, isActive }: UserListFilterDto) {
-    return this.userService.findAllUser(page, limit, keyword, phoneNumber, isActive);
+  findAll(@Query(new ZodValidationPipe(userListFilterValidation)) query: UserListFilterDto) {
+    return this.userService.findAllUser(query);
   }
 
   @Get(":id")

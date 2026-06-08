@@ -4,7 +4,7 @@ import { AppSettingType } from "../enum/app-setting-type.enum";
 
 export { AppSettingType };
 
-@Entity({ collection: "app_settings" })
+@Entity({ tableName: "app_settings" })
 export class AppSettingEntity extends BaseEntity {
   @Enum(() => AppSettingType)
   @Unique()
