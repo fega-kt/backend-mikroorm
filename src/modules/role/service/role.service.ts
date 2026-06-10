@@ -34,6 +34,7 @@ export class RoleService extends BaseService<RoleEntity> {
       limit,
       page,
       fields: ["id", "name", "description", "rights", "createdAt"],
+      sort: { updatedAt: "DESC" },
     });
 
     return { data, total };
