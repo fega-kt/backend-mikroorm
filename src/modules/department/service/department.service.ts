@@ -37,10 +37,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
         throw new NotFoundException("Parent department not found");
       }
     } else {
-      const root = await this.findOne(
-        { parent: null, deleted: { $ne: true } },
-        { fields: ["id", "code"] },
-      );
+      const root = await this.findOne({ parent: null, deleted: { $ne: true } }, { fields: ["id", "code"] });
       if (root) {
         throw new ConflictException("Root department already exists");
       }

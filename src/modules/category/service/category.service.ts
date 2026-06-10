@@ -37,6 +37,7 @@ export class CategoryService extends BaseService<CategoryEntity> {
       limit,
       fields: ["id", "code", "department", "name", "icon", "createdAt", "department.id", "department.name"],
       populate: ["department"],
+      sort: { updatedAt: "DESC" },
     });
   }
 

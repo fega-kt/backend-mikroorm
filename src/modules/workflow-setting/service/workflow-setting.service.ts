@@ -72,6 +72,7 @@ export class WorkflowSettingService extends BaseService<WorkflowSettingEntity> {
       limit,
       fields: ["id", "name", "status", "description", "createdAt", "category", "category.id", "category.name"],
       populate: ["category"],
+      sort: { updatedAt: "DESC" },
     });
   }
 

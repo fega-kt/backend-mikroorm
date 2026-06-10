@@ -50,6 +50,7 @@ export class RequestTypeService extends BaseService<RequestTypeEntity> {
       limit,
       fields: ["id", "code", "name", "category", "prefix", "description", "status", "createdAt", "category.name"],
       populate: ["category"],
+      sort: { updatedAt: "DESC" },
     });
   }
 

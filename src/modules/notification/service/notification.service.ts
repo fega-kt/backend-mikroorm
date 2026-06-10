@@ -39,6 +39,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
       page,
       limit,
       fields: ["id", "type", "title", "message", "refId", "refType", "isRead", "readAt", "createdAt"],
+      sort: { createdAt: "DESC" },
     });
   }
 
@@ -56,7 +57,11 @@ export class NotificationService extends BaseService<NotificationEntity> {
   async markAllAsRead() {
     const user = this.getCurrentUser();
     const em = this.repo.getEntityManager();
-    await em.nativeUpdate(NotificationEntity, { user: user.id, isRead: false, deleted: { $ne: true } }, { isRead: true, readAt: new Date() });
+    await em.nativeUpdate(
+      NotificationEntity,
+      { user: user.id, isRead: false, deleted: { $ne: true } },
+      { isRead: true, readAt: new Date() },
+    );
     return { message: "All notifications marked as read" };
   }
 
