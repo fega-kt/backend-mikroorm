@@ -11,7 +11,7 @@ export class RoleEntity extends BaseEntity {
   @ManyToMany({ cascade: [], entity: () => PrincipalEntity, nullable: true })
   usersAndGroups = new Collection<PrincipalEntity>(this);
 
-  @Property({ type: types.string, nullable: true })
+  @Property({ type: types.text, nullable: true })
   description?: string;
 
   @Enum({ items: () => PermissionType, array: true, columnType: "text[]", nullable: false })

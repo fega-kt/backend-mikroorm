@@ -23,7 +23,7 @@ export class RequestTypeEntity extends BaseEntity {
   @Property({ type: types.string })
   prefix!: string;
 
-  @Property({ type: types.string, nullable: true })
+  @Property({ type: types.text, nullable: true })
   description?: string;
 
   @Enum({ items: () => RequestTypeStatus, default: RequestTypeStatus.Draft })
