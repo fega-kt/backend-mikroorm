@@ -37,6 +37,6 @@ export class UserEntity extends BaseEntity {
   @ManyToMany({ cascade: [], entity: () => GroupEntity, inversedBy: "users" })
   public groups = new Collection<GroupEntity>(this);
 
-  @Property({ type: types.string, nullable: true })
+  @Property({ type: types.text, nullable: true })
   description?: string;
 }

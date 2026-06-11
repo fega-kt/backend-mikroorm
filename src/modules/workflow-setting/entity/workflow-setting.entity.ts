@@ -119,7 +119,7 @@ export class WorkflowSettingEntity extends BaseEntity {
   @Enum(() => WorkflowSettingStatus)
   status!: WorkflowSettingStatus;
 
-  @Property({ type: types.string, nullable: true })
+  @Property({ type: types.text, nullable: true })
   description?: string;
 
   @Property({ nullable: true })

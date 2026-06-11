@@ -35,6 +35,6 @@ export class PrincipalEntity extends BaseEntity {
   })
   public user?: UserEntity;
 
-  @Property({ type: types.string, nullable: true })
+  @Property({ type: types.text, nullable: true })
   description?: string;
 }
