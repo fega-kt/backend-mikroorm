@@ -54,8 +54,8 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       parentCode: parent ? (parent.parentCode ? `${parent.parentCode}.${parent.code}` : parent.code) : null,
       manager: manager ?? undefined,
       deputy: deputy ?? undefined,
-      createdBy: { id: SYSTEM_USER_ID } as any,
-      updatedBy: { id: SYSTEM_USER_ID } as any,
+      createdBy: { id: SYSTEM_USER_ID },
+      updatedBy: { id: SYSTEM_USER_ID },
     });
 
     return department;
