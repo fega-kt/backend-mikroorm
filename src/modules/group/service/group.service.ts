@@ -134,7 +134,22 @@ export class GroupService extends BaseService<GroupEntity> {
     const { data, total } = await this.paginate(filter, {
       limit,
       page,
-      fields: ["id", "name", "description", "createdAt"],
+      fields: [
+        "id",
+        "name",
+        "description",
+        "createdAt",
+        "updatedAt",
+        "createdBy",
+        "createdBy.id",
+        "createdBy.fullName",
+        "createdBy.avatar",
+        "updatedBy",
+        "updatedBy.id",
+        "updatedBy.fullName",
+        "updatedBy.avatar",
+      ],
+      populate: ["createdBy", "updatedBy"],
       sort: { updatedAt: "DESC" },
     });
 
