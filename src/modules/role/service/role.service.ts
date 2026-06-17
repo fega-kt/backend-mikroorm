@@ -33,7 +33,23 @@ export class RoleService extends BaseService<RoleEntity> {
     const { data, total } = await this.paginate(filter, {
       limit,
       page,
-      fields: ["id", "name", "description", "rights", "createdAt"],
+      fields: [
+        "id",
+        "name",
+        "description",
+        "rights",
+        "createdAt",
+        "updatedAt",
+        "createdBy",
+        "createdBy.id",
+        "createdBy.fullName",
+        "createdBy.avatar",
+        "updatedBy",
+        "updatedBy.id",
+        "updatedBy.fullName",
+        "updatedBy.avatar",
+      ],
+      populate: ["createdBy", "updatedBy"],
       sort: { updatedAt: "DESC" },
     });
 

@@ -25,6 +25,7 @@ export interface PaginationQuery<T> {
   fields?: readonly EntityPath<T>[];
   populate?: readonly EntityPath<T>[];
   sort?: QueryOrderMap<T>;
+  disableIdentityMap?: boolean;
 }
 
 function stableStringify(value: unknown): string {
@@ -103,12 +104,13 @@ export abstract class BaseService<T extends BaseEntity> {
 
   /* ================= FIND ALL ================= */
   async findAll(filter: FilterQuery<T> = {}, query: PaginationQuery<T> = {}) {
-    const { page = 1, limit, fields = ["id"], populate = [] } = query;
+    const { page = 1, limit, fields = ["id"], populate = [], sort, disableIdentityMap = true } = query;
 
     const data = await this.repo.find(filter, {
       fields,
       populate,
-      disableIdentityMap: true,
+      orderBy: sort,
+      disableIdentityMap,
       ...(limit && { limit, offset: (page - 1) * limit }),
     } as FindOptions<T>);
 
@@ -117,7 +119,7 @@ export abstract class BaseService<T extends BaseEntity> {
 
   /* ================= PAGINATE ================= */
   async paginate(filter: FilterQuery<T> = {}, query: PaginationQuery<T> = {}) {
-    const { page = 1, limit = 10, fields = ["id"], populate = [], sort } = query;
+    const { page = 1, limit = 10, fields = ["id"], populate = [], sort, disableIdentityMap } = query;
 
     const [data, total] = await this.repo.findAndCount(filter, {
       limit,
@@ -125,7 +127,7 @@ export abstract class BaseService<T extends BaseEntity> {
       fields,
       populate,
       orderBy: sort,
-      disableIdentityMap: true,
+      disableIdentityMap,
     } as FindOptions<T>);
 
     return { data, total, page, limit };

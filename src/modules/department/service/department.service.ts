@@ -159,7 +159,10 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
         parentCode: string;
         status: DepartmentStatus;
         createdAt: Date;
+        updatedAt: Date;
         parent: string;
+        createdBy: { id: string; fullName: string; avatar: string } | null;
+        updatedBy: { id: string; fullName: string; avatar: string } | null;
       },
       "children"
     >[]
@@ -179,7 +182,26 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     }
 
     const { data } = await this.findAll(filter, {
-      fields: ["id", "name", "code", "parentCode", "status", "createdAt", "parent"],
+      fields: [
+        "id",
+        "name",
+        "code",
+        "parentCode",
+        "status",
+        "createdAt",
+        "updatedAt",
+        "parent",
+        "createdBy",
+        "createdBy.id",
+        "createdBy.fullName",
+        "createdBy.avatar",
+        "updatedBy",
+        "updatedBy.id",
+        "updatedBy.fullName",
+        "updatedBy.avatar",
+      ],
+      populate: ["createdBy", "updatedBy"],
+      sort: { updatedAt: "DESC" },
     });
 
     const plain = data.map((d) => ({
@@ -189,7 +211,10 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       parentCode: d.parentCode,
       status: d.status,
       createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
       parent: d.parent?.id ?? null,
+      createdBy: d.createdBy ? { id: d.createdBy.id, fullName: d.createdBy.fullName, avatar: d.createdBy.avatar } : null,
+      updatedBy: d.updatedBy ? { id: d.updatedBy.id, fullName: d.updatedBy.fullName, avatar: d.updatedBy.avatar } : null,
     }));
 
     return handleTree(plain);
