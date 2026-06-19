@@ -49,7 +49,7 @@ export class GroupService extends BaseService<GroupEntity> {
 
       /** 3️⃣ add users to group */
       if (userIds.length) {
-        const users = await em.find(UserEntity, { id: { $in: userIds } });
+        const users = await em.find(UserEntity, { id: { $in: userIds } }, { populate: ["groups"] });
 
         for (const user of users) {
           user.groups.add(group);
@@ -91,10 +91,10 @@ export class GroupService extends BaseService<GroupEntity> {
       }
 
       /** 4️⃣ sync users */
-      if (userIds) {
-        const newUsers = await em.find(UserEntity, { id: { $in: userIds } });
+      if (userIds.length) {
+        const newUsers = await em.find(UserEntity, { id: { $in: userIds } }, { populate: ["groups"] });
 
-        const currentUsers = await em.find(UserEntity, { groups: group });
+        const currentUsers = await em.find(UserEntity, { groups: group }, { populate: ["groups"] });
 
         const newUserIds = new Set(newUsers.map((u) => u.id));
 
