@@ -17,12 +17,12 @@ pnpm lint:fix      # Auto-fix lint errors
 pnpm format        # Format all src/
 ```
 
-No test runner configured. No migration CLI — MikroORM uses `autoLoadEntities: true` and `orm.getSchemaGenerator().ensureIndexes()` on startup (MongoDB schemaless).
+No test runner configured. No migration CLI — MikroORM uses `autoLoadEntities: true` and `orm.schema.updateSchema({ safe: true })` on startup (PostgreSQL auto-sync, safe mode — never drops columns/tables).
 
 ## Environment
 
 Copy `.env.example` to `.env`. Required variables:
-- `MONGO_URI`, `DB_NAME` — MongoDB connection
+- `DATABASE_URL`, `DB_NAME` — PostgreSQL connection
 - `SUPABASE_URL`, `SUPABASE_JWT_PUBLISHABLE` — token auth
 - `PORT`, `API_PREFIX` — server config
 - `CACHE_DRIVER` — `redis` (default) or `cloudflare`
@@ -96,7 +96,7 @@ To register a new module: import into `src/app.imports.ts` in the `modules` arra
 
 All entities extend `BaseEntity` (`src/common/base/base.entity.ts`):
 
-- `_id` (ObjectId) + `id` (string serialized)
+- `id` (UUID string, primary key — auto-generated)
 - `createdAt`, `updatedAt`, `createdBy`, `updatedBy` (auto-set)
 - `deleted: boolean` — soft delete flag
 
@@ -124,7 +124,7 @@ Use the proper MikroORM types:
 
 ```typescript
 import { EntityData, RequiredEntityData } from "@mikro-orm/core";
-import { FilterQuery } from "@mikro-orm/mongodb";
+import { FilterQuery } from "@mikro-orm/postgresql";
 
 // where clauses — use FilterQuery<T>, not Record<string, any>
 const where: FilterQuery<FooEntity> = { deleted: { $ne: true } };
@@ -210,7 +210,7 @@ Errors handled by `HttpExceptionFilter` with `ResponseCode` enum (`src/common/ex
 
 ## Checklist for new modules
 
-1. Create entity extending `BaseEntity`, use `@Entity({ collection: '<plural>' })`
+1. Create entity extending `BaseEntity`, use `@Entity({ tableName: '<plural>' })`
 2. Create Zod schemas in `validation/`
 3. Create service with `Scope.REQUEST`, extending `BaseService<Entity>`
 4. Create controller with `@Permissions()` decorator on each endpoint
