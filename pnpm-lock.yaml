@@ -12,13 +12,13 @@ importers:
         specifier: ^3.1004.0
         version: 3.1047.0
       '@mikro-orm/core':
-        specifier: ^6.6.15
+        specifier: ^6.6.14
         version: 6.6.15
       '@mikro-orm/nestjs':
         specifier: ^6.1.2
         version: 6.1.2(@mikro-orm/core@6.6.15)(@nestjs/common@11.1.27(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@11.1.27)
       '@mikro-orm/postgresql':
-        specifier: ^6.6.15
+        specifier: ^6.6.14
         version: 6.6.15(@mikro-orm/core@6.6.15)
       '@nestjs/common':
         specifier: ^11.0.0

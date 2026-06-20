@@ -1,13 +1,13 @@
-import { EntityManager, EntityRepository, FilterQuery } from "@mikro-orm/core";
+import { EntityManager, EntityRepository, FilterQuery, serialize } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Scope } from "@nestjs/common";
 
 import { BaseService } from "@common/base/base.service";
 import { STORAGE_PATH } from "@common/constants/storage.constant";
 import { SYSTEM_DEPARTMENT_ID } from "@common/constants/system.constant";
-import { DepartmentEntity } from "@modules/department/entity/department.entity";
 import { AppSettingType } from "@modules/app-setting/enum/app-setting-type.enum";
 import { AppSettingService } from "@modules/app-setting/service/app-setting.service";
+import { DepartmentEntity } from "@modules/department/entity/department.entity";
 import { MailService } from "@modules/mail/mail.service";
 import { PrincipalEntity, PrincipalType } from "@modules/principal/entity/principal.entity";
 import { SupabaseService } from "@modules/supabase/supabase.service";
@@ -134,7 +134,7 @@ export class UserService extends BaseService<UserEntity> {
       sort: { updatedAt: "DESC" },
     });
 
-    return { data, total };
+    return { data: serialize(data, { populate: ["department", "createdBy", "updatedBy"], forceObject: true }), total };
   }
 
   async getDetail(id: string) {

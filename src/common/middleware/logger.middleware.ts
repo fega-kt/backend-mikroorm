@@ -1,5 +1,5 @@
 import { Injectable, Logger, NestMiddleware } from "@nestjs/common";
-
+import { setRequestInfo } from "@common/request-context";
 import chalk from "chalk";
 import { NextFunction, Request, Response } from "express";
 import { compact } from "lodash";
@@ -9,6 +9,8 @@ export class LoggerMiddleware implements NestMiddleware {
   private logger = new Logger("HTTP");
 
   use(req: Request, res: Response, next: NextFunction) {
+    setRequestInfo({ method: req.method, path: req.originalUrl });
+
     const start = Date.now();
 
     res.on("finish", () => {
