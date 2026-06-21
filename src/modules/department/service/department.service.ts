@@ -3,8 +3,8 @@ import { SYSTEM_USER_ID } from "@common/constants/system.constant";
 import { WithChildren, handleTree } from "@common/utils/tree.util";
 import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { UserService } from "@modules/user/service/user.service";
-import { ConflictException, Inject, Injectable, NotFoundException, Scope, forwardRef } from "@nestjs/common";
+import { UserEntity } from "@modules/user/entity/user.entity";
+import { ConflictException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import z from "zod";
 import { DepartmentEntity, DepartmentStatus } from "../entity/department.entity";
 import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "../type/department.types";
@@ -15,14 +15,16 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   constructor(
     @InjectRepository(DepartmentEntity)
     protected readonly repo: EntityRepository<DepartmentEntity>,
-    @Inject(forwardRef(() => UserService))
-    private readonly userService: UserService,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: EntityRepository<UserEntity>,
   ) {
     super();
   }
 
   private async resolveUser(userId: string) {
-    return this.userService.findById(userId);
+    const user = await this.userRepo.findOne({ id: userId });
+    if (!user) throw new NotFoundException("User not found");
+    return user;
   }
 
   async create(data: z.infer<typeof createDepartmentValidation>) {
