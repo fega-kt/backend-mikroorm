@@ -28,6 +28,7 @@ export class SettingManagementRouteService {
         path: "/setting/category",
         component: "/setting/category/index.tsx",
         handle: {
+          keepAlive: false,
           icon: "TagsOutlined",
           title: "common.menu.category",
           roles: [PermissionType.MenuCategory],
@@ -51,6 +52,7 @@ export class SettingManagementRouteService {
         path: "/setting/workflow-setting",
         component: "/setting/workflow-setting/index.tsx",
         handle: {
+          keepAlive: false,
           icon: "NodeIndexOutlined",
           title: "common.menu.workflowSetting",
           roles: [PermissionType.MenuWorkflowSetting],
@@ -62,6 +64,7 @@ export class SettingManagementRouteService {
     const settingRouter = {
       path: "/setting",
       handle: {
+        keepAlive: false,
         icon: "ToolOutlined",
         title: "common.menu.setting",
         order: setting,

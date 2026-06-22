@@ -72,6 +72,8 @@ const _outsideRouter = {
 const personalCenterRouter = {
   path: "/personal-center",
   handle: {
+    keepAlive: false,
+
     order: personalCenter,
     title: "common.menu.personalCenter",
     icon: "RiAccountCircleLine",
@@ -80,6 +82,8 @@ const personalCenterRouter = {
     {
       path: "/personal-center/my-profile",
       handle: {
+        keepAlive: false,
+
         title: "common.menu.profile",
         icon: "ProfileCardIcon",
       },
@@ -87,6 +91,8 @@ const personalCenterRouter = {
     {
       path: "/personal-center/settings",
       handle: {
+        keepAlive: false,
+
         title: "common.menu.settings",
         icon: "RiUserSettingsLine",
       },
@@ -97,6 +103,8 @@ const personalCenterRouter = {
 const _routeNestRouter = {
   path: "/route-nest",
   handle: {
+    keepAlive: false,
+
     order: routeNest,
     title: "common.menu.nestMenus",
     icon: "NodeExpandOutlined",
@@ -105,6 +113,8 @@ const _routeNestRouter = {
     {
       path: "/route-nest/menu1",
       handle: {
+        keepAlive: false,
+
         title: "common.menu.menu1",
         icon: "SisternodeOutlined",
       },
@@ -112,6 +122,8 @@ const _routeNestRouter = {
         {
           path: "/route-nest/menu1/menu1-1",
           handle: {
+            keepAlive: false,
+
             title: "common.menu.menu1-1",
             icon: "SubnodeOutlined",
           },
@@ -119,6 +131,8 @@ const _routeNestRouter = {
         {
           path: "/route-nest/menu1/menu1-2",
           handle: {
+            keepAlive: false,
+
             title: "common.menu.menu1-2",
             icon: "SubnodeOutlined",
           },
@@ -128,6 +142,8 @@ const _routeNestRouter = {
     {
       path: "/route-nest/menu2",
       handle: {
+        keepAlive: false,
+
         title: "common.menu.menu2",
         icon: "SubnodeOutlined",
       },
@@ -207,6 +223,7 @@ export class RouteService {
       path: "/home",
       component: "/home/index.tsx",
       handle: {
+        keepAlive: false,
         icon: "HomeOutlined",
         title: "common.menu.home",
         order: home,
