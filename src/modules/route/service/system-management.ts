@@ -38,6 +38,7 @@ export class SystemManagementService {
         path: "/system/group",
         component: "/system/group/index.tsx",
         handle: {
+          keepAlive: false,
           icon: "UserOutlined",
           title: "common.menu.group",
           roles: [PermissionType.MenuGroup],
@@ -51,6 +52,7 @@ export class SystemManagementService {
         path: "/system/user",
         component: "/system/user/index.tsx",
         handle: {
+          keepAlive: false,
           icon: "UserOutlined",
           title: "common.menu.user",
           roles: [PermissionType.MenuUser],
@@ -64,6 +66,7 @@ export class SystemManagementService {
         path: "/system/role",
         component: "/system/role/index.tsx",
         handle: {
+          keepAlive: false,
           icon: "TeamOutlined",
           title: "common.menu.role",
           roles: [PermissionType.MenuRole],
@@ -89,6 +92,7 @@ export class SystemManagementService {
     const systemManagementRouter = {
       path: "/system",
       handle: {
+        keepAlive: false,
         icon: "SettingOutlined",
         title: "common.menu.system",
         order: system,

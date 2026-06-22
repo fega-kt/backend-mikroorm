@@ -26,6 +26,7 @@ export class ProjectManagementRouteService {
         path: "/project/list",
         component: "/project/index.tsx",
         handle: {
+          keepAlive: false,
           icon: "ProjectOutlined",
           title: "common.menu.project",
           roles: [PermissionType.MenuProject],
@@ -39,6 +40,7 @@ export class ProjectManagementRouteService {
         path: "/project/task",
         component: "/task/index.tsx",
         handle: {
+          keepAlive: false,
           icon: "FieldTimeOutlined",
           title: "common.menu.task",
           roles: [PermissionType.MenuTask],
@@ -50,6 +52,7 @@ export class ProjectManagementRouteService {
     const projectManagementRouter = {
       path: "/project",
       handle: {
+        keepAlive: false,
         icon: "FundProjectionScreenOutlined",
         title: "common.menu.project_task",
         order: projectTask,
