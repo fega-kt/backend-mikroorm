@@ -29,4 +29,6 @@ COPY --from=builder /app/dist ./dist
 COPY package.json ./
 
 EXPOSE 3000
-CMD ["node_modules/.bin/vault-start", "prod"]
+COPY ecosystem.config.js ./
+
+CMD ["node_modules/.bin/pm2-runtime", "ecosystem.config.js"]
