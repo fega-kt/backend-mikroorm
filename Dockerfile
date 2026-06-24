@@ -1,6 +1,6 @@
 FROM node:22-slim AS builder
 RUN corepack enable
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
