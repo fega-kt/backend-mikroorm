@@ -48,7 +48,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@zhizhu_dev/vault-start": "latest",
+    "@zhizhu_dev/vault-start": "1.0.1",
     "@nestjs/cli": "^11.0.0",
     "@types/lodash": "^4",
     "@types/multer": "^2.1.0",

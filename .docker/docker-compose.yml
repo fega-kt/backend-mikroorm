@@ -1,0 +1,9 @@
+services:
+  app:
+    image: ${APP_IMAGE:-ghcr.io/fega-kt/backend-mikroorm:latest}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      VAULT_TOKEN: ${VAULT_TOKEN}
