@@ -37,6 +37,7 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.21.0",
+    "pm2": "^7.0.1",
     "reflect-metadata": "^0.1.13",
     "resend": "^6.12.3",
     "rxjs": "^7.8.1",
@@ -47,7 +48,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@zhizhu_dev/vault-start": "1.0.1",
     "@nestjs/cli": "^11.0.0",
     "@types/lodash": "^4",
     "@types/multer": "^2.1.0",
@@ -56,6 +56,7 @@
     "@types/uuid": "^11.0.0",
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
+    "@zhizhu_dev/vault-start": "1.0.1",
     "eslint": "^10.3.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
