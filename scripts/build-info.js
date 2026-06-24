@@ -11,6 +11,7 @@ function run(cmd) {
 }
 
 function safe(val) {
+  if (!val) return '""';
   return `"${val.replace(/"/g, '\\"')}"`;
 }
 
