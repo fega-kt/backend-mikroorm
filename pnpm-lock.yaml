@@ -127,8 +127,8 @@ importers:
         specifier: ^8.59.2
         version: 8.59.3(eslint@10.3.0)(typescript@6.0.3)
       '@zhizhu_dev/vault-start':
-        specifier: latest
-        version: 1.0.0
+        specifier: 1.0.1
+        version: 1.0.1
       eslint:
         specifier: ^10.3.0
         version: 10.3.0
@@ -1000,9 +1000,9 @@ packages:
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
 
-  '@zhizhu_dev/vault-start@1.0.0':
-    resolution: {integrity: sha512-FQRKFzHaMpiJzpc4+ZMBKK6Q6HtdGAw8rrH/Qkb8v5vMjBomvcgQ1aTKjKQEhCU8/eGpbHa3JeivoumRiuiuUg==}
-    engines: {node: '>=18'}
+  '@zhizhu_dev/vault-start@1.0.1':
+    resolution: {integrity: sha512-0rBcKJdUya7ZSMHpO7EPyDDNJf/Of/VnHFbHy0SAti7en0JT6nuOsL0DqUbc/kr0wqgVOJUFoY9eN23y6l6GYg==}
+    engines: {node: '>=22'}
     hasBin: true
 
   abbrev@1.1.1:
@@ -4072,7 +4072,7 @@ snapshots:
 
   '@xtuc/long@4.2.2': {}
 
-  '@zhizhu_dev/vault-start@1.0.0': {}
+  '@zhizhu_dev/vault-start@1.0.1': {}
 
   abbrev@1.1.1: {}
 
