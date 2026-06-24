@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "start": "nest start",
-    "start:dev": "nest start --watch",
+    "pull:env": "vault-start backend-mikroorm-dev --write-env",
+    "start:dev": "vault-start backend-mikroorm-dev",
+    "start:staging": "vault-start staging",
+    "start:prod": "vault-start prod",
     "prebuild": "node scripts/build-info.js",
     "build": "pnpm prebuild && nest build",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
@@ -45,6 +48,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@zhizhu_dev/vault-start": "latest",
     "@nestjs/cli": "^11.0.0",
     "@types/lodash": "^4",
     "@types/multer": "^2.1.0",

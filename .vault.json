@@ -1,0 +1,9 @@
+{
+  "addr": "https://vault.zhizhu.online",
+  "kv": 2,
+  "envs": {
+    "backend-mikroorm-dev": "secret/data/backend-mikroorm-dev",
+    "staging": "secret/data/backend-mikroorm-staging",
+    "prod": "secret/data/backend-mikroorm-prod"
+  }
+}
