@@ -126,6 +126,9 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^8.59.2
         version: 8.59.3(eslint@10.3.0)(typescript@6.0.3)
+      '@zhizhu_dev/vault-start':
+        specifier: latest
+        version: 1.0.0
       eslint:
         specifier: ^10.3.0
         version: 10.3.0
@@ -996,6 +999,11 @@ packages:
 
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
+
+  '@zhizhu_dev/vault-start@1.0.0':
+    resolution: {integrity: sha512-FQRKFzHaMpiJzpc4+ZMBKK6Q6HtdGAw8rrH/Qkb8v5vMjBomvcgQ1aTKjKQEhCU8/eGpbHa3JeivoumRiuiuUg==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   abbrev@1.1.1:
     resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}
@@ -4063,6 +4071,8 @@ snapshots:
   '@xtuc/ieee754@1.2.0': {}
 
   '@xtuc/long@4.2.2': {}
+
+  '@zhizhu_dev/vault-start@1.0.0': {}
 
   abbrev@1.1.1: {}
 
