@@ -8,8 +8,7 @@
     "start:dev": "vault-start backend-mikroorm-dev",
     "start:staging": "vault-start staging",
     "start:prod": "vault-start prod",
-    "prebuild": "node scripts/build-info.js",
-    "build": "pnpm prebuild && nest build",
+    "build": "nest build",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\""
