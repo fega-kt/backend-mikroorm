@@ -47,6 +47,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.99.1
         version: 2.105.4
+      '@zhizhu_dev/vault-start':
+        specifier: 1.0.1
+        version: 1.0.1
       bcrypt:
         specifier: ^5.1.0
         version: 5.1.1
@@ -129,9 +132,6 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^8.59.2
         version: 8.59.3(eslint@10.3.0)(typescript@6.0.3)
-      '@zhizhu_dev/vault-start':
-        specifier: 1.0.1
-        version: 1.0.1
       eslint:
         specifier: ^10.3.0
         version: 10.3.0
