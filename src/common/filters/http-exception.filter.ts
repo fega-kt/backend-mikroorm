@@ -5,7 +5,7 @@ import chalk from "chalk";
 export class HttpExceptionFilter implements ExceptionFilter {
   private logger = new Logger("HTTP");
 
-  catch(exception: any, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse();
 
@@ -15,10 +15,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     if (status >= 500) {
       this.logger.error(chalk.red(message));
-      this.logger.error(chalk.red(exception.stack));
+      this.logger.error(chalk.red((exception as Error).stack));
     } else if (status >= 400) {
       this.logger.warn(chalk.yellow(message));
-      this.logger.error(chalk.red(exception.stack));
+      this.logger.error(chalk.red((exception as Error).stack));
     }
     response.status(status).json({
       message,

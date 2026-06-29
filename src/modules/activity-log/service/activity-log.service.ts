@@ -1,7 +1,6 @@
 import { BaseService } from "@common/base/base.service";
 import { IUserResponse } from "@common/base/consts";
-import { RequiredEntityData } from "@mikro-orm/core";
-import { EntityRepository } from "@mikro-orm/core";
+import { EntityRepository, FilterQuery, RequiredEntityData } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, Scope } from "@nestjs/common";
 import { ActivityLogAction, ActivityLogEntity } from "../entity/activity-log.entity";
@@ -22,7 +21,7 @@ export class ActivityLogService extends BaseService<ActivityLogEntity> {
   }
 
   findByParent(parentId: string, page: number, limit: number, action?: ActivityLogAction) {
-    const where: Record<string, any> = { parentId, deleted: { $ne: true } };
+    const where: FilterQuery<ActivityLogEntity> = { parentId, deleted: { $ne: true } };
     if (action) where.action = action;
 
     return this.paginate(where, {
