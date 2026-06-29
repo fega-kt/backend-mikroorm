@@ -28,4 +28,4 @@ COPY --from=builder /app/dist ./dist
 COPY package.json ecosystem.config.js .vault.json ./
 
 EXPOSE 3000
-CMD ["sh", "-c", "node_modules/.bin/vault-start $VAULT_SECRET_PATH -- node_modules/.bin/pm2-runtime ecosystem.config.js"]
+CMD ["sh", "-c", "node_modules/.bin/vault-start $VAULT_SECRET_PATH_MAPPED -- node_modules/.bin/pm2-runtime ecosystem.config.js"]
