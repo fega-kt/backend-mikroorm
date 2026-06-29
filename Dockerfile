@@ -25,7 +25,7 @@ ENV NODE_ENV=production \
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY package.json ecosystem.config.js ./
+COPY package.json ecosystem.config.js .vault.json ./
 
 EXPOSE 3000
-CMD ["node_modules/.bin/pm2-runtime", "ecosystem.config.js"]
+CMD ["node_modules/.bin/vault-start", "--", "node_modules/.bin/pm2-runtime", "ecosystem.config.js"]
