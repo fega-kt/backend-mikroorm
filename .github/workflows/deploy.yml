@@ -112,7 +112,7 @@ jobs:
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} bash <<ENDSSH
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
             cd ${{ secrets.SERVER_DEPLOY_PATH }}
-            VAULT_TOKEN="${{ secrets.VAULT_TOKEN }}" VAULT_SECRET_PATH="${{ vars.VAULT_SECRET_PATH }}" VAULT_AUTH_METHOD="${{ vars.VAULT_AUTH_METHOD }}" APP_IMAGE="$APP_IMAGE" docker compose -f docker-compose.yml pull
-            VAULT_TOKEN="${{ secrets.VAULT_TOKEN }}" VAULT_SECRET_PATH="${{ vars.VAULT_SECRET_PATH }}" VAULT_AUTH_METHOD="${{ vars.VAULT_AUTH_METHOD }}" APP_IMAGE="$APP_IMAGE" docker compose -f docker-compose.yml up -d --remove-orphans
+            VAULT_TOKEN="${{ secrets.VAULT_TOKEN }}" VAULT_SECRET_PATH_MAPPED="${{ vars.VAULT_SECRET_PATH }}" VAULT_AUTH_METHOD="${{ vars.VAULT_AUTH_METHOD }}" APP_IMAGE="$APP_IMAGE" docker compose -f docker-compose.yml pull
+            VAULT_TOKEN="${{ secrets.VAULT_TOKEN }}" VAULT_SECRET_PATH_MAPPED="${{ vars.VAULT_SECRET_PATH }}" VAULT_AUTH_METHOD="${{ vars.VAULT_AUTH_METHOD }}" APP_IMAGE="$APP_IMAGE" docker compose -f docker-compose.yml up -d --remove-orphans
             docker image prune -f
           ENDSSH
