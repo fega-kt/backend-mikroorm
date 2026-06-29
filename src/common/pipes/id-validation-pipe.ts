@@ -6,8 +6,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 @Injectable({})
 export class IdValidationPipe implements PipeTransform {
-  transform(value: any, _metadata: ArgumentMetadata) {
-    if (!UUID_REGEX.test(value)) {
+  transform(value: unknown, _metadata: ArgumentMetadata) {
+    if (!UUID_REGEX.test(String(value))) {
       throw new C400Exception(ResponseCode.IdValidationError);
     }
     return value;

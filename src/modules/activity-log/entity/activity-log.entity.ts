@@ -28,10 +28,10 @@ export class ActivityLogEntity extends BaseEntity {
   action!: ActivityLogAction;
 
   @Property({ type: types.json, nullable: true })
-  oldData?: Record<string, any>;
+  oldData?: Record<string, unknown>;
 
   @Property({ type: types.json, nullable: true })
-  newData?: Record<string, any>;
+  newData?: Record<string, unknown>;
 
   @Enum(() => ActivityLogType)
   type!: ActivityLogType;

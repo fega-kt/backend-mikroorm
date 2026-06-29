@@ -1,5 +1,5 @@
 import { BaseService } from "@common/base/base.service";
-import { EntityRepository } from "@mikro-orm/core";
+import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { NotificationEntity, NotificationType } from "../entity/notification.entity";
@@ -32,7 +32,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
   /** Lấy danh sách notification của user hiện tại */
   getMyNotifications(page: number, limit: number, onlyUnread: boolean) {
     const user = this.getCurrentUser();
-    const where: Record<string, any> = { user: user.id, deleted: { $ne: true } };
+    const where: FilterQuery<NotificationEntity> = { user: user.id, deleted: { $ne: true } };
     if (onlyUnread) where.isRead = false;
 
     return this.paginate(where, {

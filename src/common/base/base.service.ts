@@ -8,7 +8,6 @@ import {
   Loaded,
   QueryOrderMap,
   RequiredEntityData,
-  wrap,
 } from "@mikro-orm/core";
 import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
 import { UserEntity } from "@modules/user/entity/user.entity";
@@ -159,7 +158,7 @@ export abstract class BaseService<T extends BaseEntity> {
     const entity = await this.repo.findOne({ id } as FilterQuery<T>);
     if (!entity) throw new NotFoundException(`${this.repo.getEntityName()} not found`);
 
-    wrap(entity).assign({ ...data, ...baseUpdate } as any);
+    Object.assign(entity, data, baseUpdate);
     await this.repo.getEntityManager().flush();
 
     await Promise.all([this.cache.del(this.cacheKey(id)), this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`)]);
@@ -175,7 +174,7 @@ export abstract class BaseService<T extends BaseEntity> {
       throw new NotFoundException(`${this.repo.getEntityName()} not found or already deleted`);
     }
 
-    wrap(entity).assign({ deleted: true } as any);
+    entity.deleted = true;
     await this.repo.getEntityManager().flush();
 
     await Promise.all([this.cache.del(this.cacheKey(id)), this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`)]);
