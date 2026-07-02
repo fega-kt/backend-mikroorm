@@ -1,13 +1,16 @@
-import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { CanActivate, ExecutionContext, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
 import { IUserResponse } from "@common/base/consts";
+import { PermissionType } from "@common/base/permission-type.enum";
 import { IS_PUBLIC_KEY } from "@common/decorators/public.decorator";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
+import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
 import { RoleEntity } from "@modules/role/entity/role.entity";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import { UserEntity } from "@modules/user/entity/user.entity";
+import { createHash } from "crypto";
 import { compact, uniq } from "lodash";
 
 @Injectable()
@@ -21,6 +24,7 @@ export class SupabaseAuthGuard implements CanActivate {
     private readonly userRepo: EntityRepository<UserEntity>,
     @InjectRepository(RoleEntity)
     private readonly roleEntity: EntityRepository<RoleEntity>,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -50,12 +54,23 @@ export class SupabaseAuthGuard implements CanActivate {
     }
 
     try {
+      const cacheKey = `cache:auth:${createHash("sha256").update(token).digest("hex")}`;
+      const cached = await this.cache.get<Omit<IUserResponse, "canAccess">>(cacheKey);
+
+      if (cached) {
+        request.user = { ...cached, canAccess: (pers: PermissionType[]) => pers.some((per) => cached.permissions?.includes(per)) };
+        return true;
+      }
+
       const email: string | undefined = await this.verifyToken(token);
       if (!email) {
         throw new UnauthorizedException("Could not extract email from token");
       }
       const user = await this.validate(email);
       request.user = user;
+
+      const { canAccess: _, ...cacheable } = user;
+      await this.cache.set(cacheKey, cacheable, 300);
 
       return true;
     } catch (error) {
