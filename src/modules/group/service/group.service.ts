@@ -63,7 +63,7 @@ export class GroupService extends BaseService<GroupEntity> {
   }
 
   async updateGroup(id: string, data: z.infer<typeof updateGroupValidation>): Promise<boolean> {
-    const { users: userIds = [], ...groupData } = data;
+    const { users: userIds, ...groupData } = data;
 
     const defaultValueBase = this.getDefaultValuesForUpdate();
 
@@ -91,25 +91,23 @@ export class GroupService extends BaseService<GroupEntity> {
       }
 
       /** 4️⃣ sync users */
-      if (userIds.length) {
-        const newUsers = await em.find(UserEntity, { id: { $in: userIds } }, { populate: ["groups"] });
+      const newUsers = await em.find(UserEntity, { id: { $in: userIds } }, { populate: ["groups"] });
 
-        const currentUsers = await em.find(UserEntity, { groups: group }, { populate: ["groups"] });
+      const currentUsers = await em.find(UserEntity, { groups: group }, { populate: ["groups"] });
 
-        const newUserIds = new Set(newUsers.map((u) => u.id));
+      const newUserIds = new Set(newUsers.map((u) => u.id));
 
-        /** remove users not in new list */
-        for (const user of currentUsers) {
-          if (!newUserIds.has(user.id)) {
-            user.groups.remove(group);
-          }
+      /** remove users not in new list */
+      for (const user of currentUsers) {
+        if (!newUserIds.has(user.id)) {
+          user.groups.remove(group);
         }
+      }
 
-        /** add new users */
-        for (const user of newUsers) {
-          if (!user.groups.contains(group)) {
-            user.groups.add(group);
-          }
+      /** add new users */
+      for (const user of newUsers) {
+        if (!user.groups.contains(group)) {
+          user.groups.add(group);
         }
       }
 
