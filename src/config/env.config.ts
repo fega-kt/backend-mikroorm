@@ -38,4 +38,9 @@ export const ENV = {
 
   REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
   CACHE_DRIVER: (process.env.CACHE_DRIVER as "redis" | "cloudflare") || "redis",
+
+  FLOWABLE_REST_BASE_URL: process.env.FLOWABLE_REST_BASE_URL || "http://localhost:8080/flowable-rest/service",
+  FLOWABLE_SVC_USER: process.env.FLOWABLE_SVC_USER || "rest-admin",
+  FLOWABLE_SVC_PASSWORD: process.env.FLOWABLE_SVC_PASSWORD || "",
+  INTERNAL_SERVICE_TOKEN: process.env.INTERNAL_SERVICE_TOKEN || "",
 };
