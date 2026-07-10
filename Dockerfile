@@ -12,6 +12,7 @@ RUN pnpm build && pnpm prune --prod
 # ---
 
 FROM node:22-alpine AS runner
+RUN apk add --no-cache tini
 WORKDIR /app
 
 ARG GIT_COMMIT=unknown
@@ -25,7 +26,8 @@ ENV NODE_ENV=production \
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY package.json ecosystem.config.js .vault.json ./
+COPY package.json .vault.json ./
 
 EXPOSE 3000
-CMD ["sh", "-c", "node_modules/.bin/vault-start $VAULT_SECRET_PATH_MAPPED -- node_modules/.bin/pm2-runtime ecosystem.config.js"]
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["sh", "-c", "node_modules/.bin/vault-start $VAULT_SECRET_PATH_MAPPED -- node dist/main.js"]

@@ -14,7 +14,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.enableCors({
-    origin: ENV.CORS_ORIGINS ? ENV.CORS_ORIGINS.split(",") : ["http://localhost:3333"],
+    origin: ENV.CORS_ORIGINS ? ENV.CORS_ORIGINS.split(",") : [],
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true,
   });
@@ -24,10 +24,9 @@ async function bootstrap() {
   await orm.schema.updateSchema({ safe: true });
 
   app.getHttpAdapter().getInstance().set("trust proxy", 1);
-  // health check cho Render startup
   const httpAdapter = app.getHttpAdapter();
-  httpAdapter.get("/", (req, res) => res.status(200).send());
-  httpAdapter.head("/", (req, res) => res.status(200).send());
+  httpAdapter.get("/", (_req, res) => res.status(200).json({ timestamp: new Date() }));
+  httpAdapter.head("/", (_req, res) => res.status(200).send());
 
   app.useGlobalFilters(new HttpExceptionFilter());
 
