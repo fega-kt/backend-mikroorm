@@ -1,6 +1,5 @@
 import { Injectable, Logger, NestMiddleware } from "@nestjs/common";
 import { setRequestInfo } from "@common/request-context";
-import chalk from "chalk";
 import { NextFunction, Request, Response } from "express";
 import { compact } from "lodash";
 
@@ -27,11 +26,11 @@ export class LoggerMiddleware implements NestMiddleware {
       const message = `[${ip}] ${arrayInfo}ms`;
 
       if (status >= 500) {
-        this.logger.error(chalk.red(message));
+        this.logger.error(message);
       } else if (status >= 400) {
-        this.logger.warn(chalk.yellow(message));
+        this.logger.warn(message);
       } else {
-        this.logger.log(chalk.green(message));
+        this.logger.log(message);
       }
     });
 
