@@ -1,5 +1,4 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from "@nestjs/common";
-import chalk from "chalk";
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -14,11 +13,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const message = exception instanceof HttpException ? exception.message : "Internal server error";
 
     if (status >= 500) {
-      this.logger.error(chalk.red(message));
-      this.logger.error(chalk.red((exception as Error).stack));
+      this.logger.error(message);
+      this.logger.error((exception as Error).stack);
     } else if (status >= 400) {
-      this.logger.warn(chalk.yellow(message));
-      this.logger.error(chalk.red((exception as Error).stack));
+      this.logger.warn(message);
+      this.logger.error((exception as Error).stack);
     }
     response.status(status).json({
       message,
