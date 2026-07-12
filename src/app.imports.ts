@@ -20,9 +20,11 @@ import { RoleModule } from "@modules/role/role.module";
 import { RouteModule } from "@modules/route/route.module";
 import { UploadModule } from "@modules/upload/upload.module";
 import { UserModule } from "@modules/user/user.module";
+import { MetricsModule } from "@modules/metrics/metrics.module";
 import { type ModuleMetadata } from "@nestjs/common";
 
 export const modules: ModuleMetadata["imports"] = [
+  MetricsModule,
   DatabaseModule,
   CacheModule,
   CloudflareKvModule,
