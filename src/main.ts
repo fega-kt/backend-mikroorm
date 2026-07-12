@@ -1,5 +1,7 @@
 import { HttpExceptionFilter } from "@common/filters/http-exception.filter";
+import { MetricsInterceptor } from "@common/interceptors/metrics.interceptor";
 import { ResponseInterceptor } from "@common/interceptors/response.interceptor";
+import { MetricsService } from "@modules/metrics/metrics.service";
 import { ENV, NodeEnv } from "@config/env.config";
 import handleApplySwagger from "@config/swagger.config";
 import { MikroORM } from "@mikro-orm/core";
@@ -28,6 +30,12 @@ async function bootstrap() {
   httpAdapter.get("/", (_req, res) => res.status(200).json({ timestamp: new Date() }));
   httpAdapter.head("/", (_req, res) => res.status(200).send());
 
+  const metricsService = app.get(MetricsService);
+  httpAdapter.get("/metrics", async (_req, res) => {
+    res.setHeader("Content-Type", metricsService.registry.contentType);
+    res.send(await metricsService.registry.metrics());
+  });
+
   app.useGlobalFilters(new HttpExceptionFilter());
 
   app.setGlobalPrefix(ENV.API_PREFIX);
@@ -35,7 +43,7 @@ async function bootstrap() {
   const reflector = app.get(Reflector);
   app.useGlobalGuards(new PermissionsGuard(reflector));
 
-  app.useGlobalInterceptors(new ResponseInterceptor());
+  app.useGlobalInterceptors(new MetricsInterceptor(metricsService), new ResponseInterceptor());
 
   const port = ENV.PORT || 3000;
 
