@@ -4,8 +4,9 @@ import { Reflector } from "@nestjs/core";
 import { IUserResponse } from "@common/base/consts";
 import { PermissionType } from "@common/base/permission-type.enum";
 import { IS_PUBLIC_KEY } from "@common/decorators/public.decorator";
-import { EntityRepository } from "@mikro-orm/core";
+import { EntityRepository, MikroORM } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
+import { AppSettingEntity, AppSettingType } from "@modules/app-setting/entity/app-setting.entity";
 import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
 import { RoleEntity } from "@modules/role/entity/role.entity";
 import { SupabaseService } from "@modules/supabase/supabase.service";
@@ -16,10 +17,12 @@ import { compact, uniq } from "lodash";
 @Injectable()
 export class SupabaseAuthGuard implements CanActivate {
   private readonly logger = new Logger(SupabaseAuthGuard.name);
+  private inactiveDaysCache: { value: number; expiresAt: number } | null = null;
 
   constructor(
     private reflector: Reflector,
     private readonly supabaseService: SupabaseService,
+    private readonly orm: MikroORM,
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>,
     @InjectRepository(RoleEntity)
@@ -59,6 +62,7 @@ export class SupabaseAuthGuard implements CanActivate {
 
       if (cached) {
         request.user = { ...cached, canAccess: (pers: PermissionType[]) => pers.some((per) => cached.permissions?.includes(per)) };
+        this.refreshLastActive(cached.id);
         return true;
       }
 
@@ -68,6 +72,7 @@ export class SupabaseAuthGuard implements CanActivate {
       }
       const user = await this.validate(email);
       request.user = user;
+      this.refreshLastActive(user.id);
 
       const { canAccess: _, ...cacheable } = user;
       await this.cache.set(cacheKey, cacheable, 300);
@@ -77,6 +82,23 @@ export class SupabaseAuthGuard implements CanActivate {
       this.logger.error(error);
       throw new UnauthorizedException(error.message ?? "Invalid or expired token");
     }
+  }
+
+  private refreshLastActive(userId: string): void {
+    this.getInactiveDays()
+      .then((days) => this.cache.set(`user:last-active:${userId}`, "1", days * 24 * 3600))
+      .catch(() => {});
+  }
+
+  private async getInactiveDays(): Promise<number> {
+    if (this.inactiveDaysCache && Date.now() < this.inactiveDaysCache.expiresAt) {
+      return this.inactiveDaysCache.value;
+    }
+    const em = this.orm.em.fork();
+    const setting = await em.findOne(AppSettingEntity, { key: AppSettingType.INACTIVE_DAYS_THRESHOLD, deleted: { $ne: true } });
+    const value = setting ? Number(setting.value) || 7 : 7;
+    this.inactiveDaysCache = { value, expiresAt: Date.now() + 60_000 };
+    return value;
   }
 
   private async verifyToken(token: string): Promise<string | undefined> {

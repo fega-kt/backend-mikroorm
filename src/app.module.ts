@@ -6,6 +6,7 @@ import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
+import { ScheduleModule } from "@nestjs/schedule";
 import { modules } from "./app.imports";
 
 @Module({
@@ -19,6 +20,7 @@ import { modules } from "./app.imports";
         limit: ENV.THROTTLE_LIMIT,
       },
     ]),
+    ScheduleModule.forRoot(),
   ],
   providers: [
     {

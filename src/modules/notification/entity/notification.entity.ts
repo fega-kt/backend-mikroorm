@@ -13,6 +13,7 @@ export enum NotificationType {
   MILESTONE_DUE = "MILESTONE_DUE",
   SPRINT_STARTED = "SPRINT_STARTED",
   SPRINT_COMPLETED = "SPRINT_COMPLETED",
+  LOGIN_INACTIVE_REMINDER = "LOGIN_INACTIVE_REMINDER",
 }
 
 @Entity({ tableName: "notifications" })
