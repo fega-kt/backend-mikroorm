@@ -38,4 +38,6 @@ export const ENV = {
 
   REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
   CACHE_DRIVER: (process.env.CACHE_DRIVER as "redis" | "cloudflare") || "redis",
+
+  RABBITMQ_URL: process.env.RABBITMQ_URL,
 };

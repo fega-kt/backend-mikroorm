@@ -1,5 +1,5 @@
 export enum AppSettingType {
-  // ===== MAIL TEMPLATES =====
+  // ===== MAIL TEMPLATES (auth) =====
   MAIL_TEMPLATE_PASSWORD_CHANGED = "mail_template_password_changed",
   MAIL_TEMPLATE_FORGOT_PASSWORD_OTP = "mail_template_forgot_password_otp",
   MAIL_TEMPLATE_NEW_PASSWORD = "mail_template_new_password",
@@ -8,4 +8,8 @@ export enum AppSettingType {
 
   // ===== SYSTEM =====
   INACTIVE_DAYS_THRESHOLD = "inactive_days_threshold",
+  INACTIVE_EMAIL_ALLOWED_LIST = "inactive_email_allowed_list",
+
+  // ===== MAIL TEMPLATES (notification) =====
+  MAIL_TEMPLATE_INACTIVE_REMINDER = "mail_template_inactive_reminder",
 }

@@ -52,13 +52,13 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
     return false;
   }
 
-  async getObject<T extends Record<string, unknown>>(key: AppSettingType): Promise<T | undefined> {
+  async getObject<T extends object>(key: AppSettingType): Promise<T | undefined> {
     const value = await this.getByKey(key);
-    if (typeof value === "object" && !Array.isArray(value) && value !== null) return value as T;
+    if (typeof value === "object" && value !== null) return value as T;
     if (typeof value === "string") {
       try {
-        const parsed = JSON.parse(value);
-        if (typeof parsed === "object" && !Array.isArray(parsed) && parsed !== null) return parsed as T;
+        const parsed = JSON.parse(value) as unknown;
+        if (typeof parsed === "object" && parsed !== null) return parsed as T;
       } catch {
         this.logger.error(`Failed to parse setting "${key}" as object: ${value}`);
       }

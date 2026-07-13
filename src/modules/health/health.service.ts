@@ -1,9 +1,13 @@
 import { EntityManager } from "@mikro-orm/core";
+import { RabbitMQService } from "@modules/rabbitmq/rabbitmq.service";
 import { Injectable } from "@nestjs/common";
 
 @Injectable()
 export class HealthService {
-  constructor(private readonly em: EntityManager) {}
+  constructor(
+    private readonly em: EntityManager,
+    private readonly rabbitmq: RabbitMQService,
+  ) {}
 
   async check() {
     let database = "ok";
@@ -17,6 +21,7 @@ export class HealthService {
     return {
       status: "ok",
       database,
+      rabbitmq: this.rabbitmq.isConnected ? "ok" : "down",
       uptime: process.uptime(),
       timestamp: new Date(),
     };

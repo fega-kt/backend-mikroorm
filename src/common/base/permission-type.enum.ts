@@ -254,4 +254,12 @@ export enum PermissionType {
 
   /** xóa group */
   DeleteGroup = "permission:group:delete",
+
+  /** ===== ACTIVITY LOG QUEUE ===== */
+
+  /** xem danh sách activity log queue */
+  ViewActivityLogQueue = "permission:activity-log-queue:view",
+
+  /** retry activity log queue item */
+  RetryActivityLogQueue = "permission:activity-log-queue:retry",
 }
