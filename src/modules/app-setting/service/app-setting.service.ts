@@ -6,6 +6,7 @@ import z from "zod";
 
 import { BaseService } from "@common/base/base.service";
 import { AppSettingEntity, AppSettingType } from "../entity/app-setting.entity";
+import { parseSettingArray, parseSettingBoolean, parseSettingNumber, parseSettingObject, parseSettingString } from "../utils/app-setting.util";
 import { upsertAppSettingValidation } from "../validation/app-setting.validation";
 
 type SettingValue = string | number | boolean | Record<string, unknown> | unknown[];
@@ -28,48 +29,33 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
 
   async getString(key: AppSettingType): Promise<string | undefined> {
     const value = await this.getByKey(key);
-    if (typeof value === "string") return value;
-    if (typeof value === "number" || typeof value === "boolean") return String(value);
-    this.logger.error(`Failed to coerce setting "${key}" to string: ${JSON.stringify(value)}`);
-    return undefined;
+    const result = parseSettingString(value);
+    if (result === undefined) this.logger.error(`Failed to coerce setting "${key}" to string: ${JSON.stringify(value)}`);
+    return result;
   }
 
   async getNumber(key: AppSettingType): Promise<number | undefined> {
     const value = await this.getByKey(key);
-    if (typeof value === "number") return value;
-    if (typeof value === "string") {
-      const parsed = Number(value);
-      if (!isNaN(parsed)) return parsed;
-    }
-    this.logger.error(`Failed to coerce setting "${key}" to number: ${JSON.stringify(value)}`);
-    return undefined;
+    const result = parseSettingNumber(value);
+    if (result === undefined) this.logger.error(`Failed to coerce setting "${key}" to number: ${JSON.stringify(value)}`);
+    return result;
   }
 
   async getBoolean(key: AppSettingType): Promise<boolean> {
     const value = await this.getByKey(key);
-    if (typeof value === "boolean") return value;
-    if (value === 1 || value === "true" || value === "1") return true;
-    return false;
+    return parseSettingBoolean(value);
   }
 
   async getObject<T extends object>(key: AppSettingType): Promise<T | undefined> {
     const value = await this.getByKey(key);
-    if (typeof value === "object" && value !== null) return value as T;
-    if (typeof value === "string") {
-      try {
-        const parsed = JSON.parse(value) as unknown;
-        if (typeof parsed === "object" && parsed !== null) return parsed as T;
-      } catch {
-        this.logger.error(`Failed to parse setting "${key}" as object: ${value}`);
-      }
-    }
-    return undefined;
+    const result = parseSettingObject<T>(value);
+    if (result === undefined) this.logger.error(`Failed to parse setting "${key}" as object: ${JSON.stringify(value)}`);
+    return result;
   }
 
-  async getArray(key: AppSettingType): Promise<unknown[]> {
+  async getArray<T = unknown>(key: AppSettingType): Promise<T[]> {
     const value = await this.getByKey(key);
-    if (!Array.isArray(value)) throw new TypeError(`Setting "${key}" is not an array`);
-    return value;
+    return parseSettingArray<T>(value);
   }
 
   async getAll(): Promise<AppSettingEntity[]> {

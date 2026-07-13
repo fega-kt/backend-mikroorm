@@ -69,7 +69,7 @@ export class ActivityLogQueueService {
     const item = await em.findOne(ActivityLogQueueEntity, { id, deleted: { $ne: true } });
     if (!item) throw new NotFoundException("Activity log queue item not found");
 
-    const msg = { ...(JSON.parse(item.data) as object), queueId: item.id };
+    const msg = { ...(JSON.parse(item.data) as object), queueId: item.id, userId: item.userId };
     const queue = QUEUE_BY_TYPE[item.type];
     if (!queue) throw new Error(`No queue configured for notification type: ${item.type}`);
     await this.rabbitmq.publish(RABBITMQ_EXCHANGE.NOTIFICATION, queue, msg);
