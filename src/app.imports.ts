@@ -1,5 +1,6 @@
 import { LoggerModule } from "@common/logger/logger.module";
 import { DatabaseModule } from "@modules/database/database.module";
+import { RabbitMQModule } from "@modules/rabbitmq/rabbitmq.module";
 import { CloudflareKvModule } from "@modules/cloudflare-kv/cloudflare-kv.module";
 import { CacheModule } from "@modules/cache/cache.module";
 import { ActivityLogModule } from "@modules/activity-log/activity-log.module";
@@ -13,6 +14,8 @@ import { GroupModule } from "@modules/group/group.module";
 import { HealthModule } from "@modules/health/health.module";
 import { HomeReportModule } from "@modules/home/home-report.module";
 import { NotificationModule } from "@modules/notification/notification.module";
+import { ActivityLogQueueModule } from "@modules/activity-log-queue/activity-log-queue.module";
+import { InactiveReminderModule } from "@modules/inactive-reminder/inactive-reminder.module";
 import { RequestTypeModule } from "@modules/request-type/request-type.module";
 import { WorkflowSettingModule } from "@modules/workflow-setting/workflow-setting.module";
 import { PrincipalModule } from "@modules/principal/principal.module";
@@ -26,6 +29,7 @@ import { type ModuleMetadata } from "@nestjs/common";
 export const modules: ModuleMetadata["imports"] = [
   MetricsModule,
   DatabaseModule,
+  RabbitMQModule,
   CacheModule,
   CloudflareKvModule,
   SupabaseModule,
@@ -44,6 +48,8 @@ export const modules: ModuleMetadata["imports"] = [
   RouteModule,
   ActivityLogModule,
   NotificationModule,
+  ActivityLogQueueModule,
+  InactiveReminderModule,
   CategoryModule,
   RequestTypeModule,
   WorkflowSettingModule,
