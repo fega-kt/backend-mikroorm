@@ -1,10 +1,10 @@
 import { ManyToOne, PrimaryKey, Property } from "@mikro-orm/core";
-import { v4 as uuidv4 } from "uuid";
+import { v7 as uuidv7 } from "uuid";
 import { type UserEntity } from "@modules/user/entity/user.entity";
 
 export abstract class BaseEntity {
   @PrimaryKey({ type: "uuid" })
-  id: string = uuidv4();
+  id: string = uuidv7();
 
   @Property({ onCreate: () => new Date() })
   createdAt = new Date();
