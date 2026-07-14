@@ -20,7 +20,7 @@ export class InactiveUserReminderService {
     private readonly activityLogQueueService: ActivityLogQueueService,
   ) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_8AM)
+  @Cron(CronExpression.EVERY_DAY_AT_9AM)
   async sendInactiveReminders() {
     if (!this.rabbitmq.isConnected) return;
 

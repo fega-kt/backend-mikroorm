@@ -12,7 +12,7 @@ RUN pnpm build && pnpm prune --prod
 # ---
 
 FROM node:22-alpine AS runner
-RUN apk add --no-cache tini
+RUN apk add --no-cache tini tzdata
 WORKDIR /app
 
 ARG GIT_COMMIT=unknown
@@ -20,6 +20,7 @@ ARG GIT_BRANCH=unknown
 ARG BUILD_TIME=unknown
 
 ENV NODE_ENV=production \
+    TZ=Asia/Ho_Chi_Minh \
     GIT_COMMIT=$GIT_COMMIT \
     GIT_BRANCH=$GIT_BRANCH \
     BUILD_TIME=$BUILD_TIME
