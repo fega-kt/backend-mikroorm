@@ -1,9 +1,40 @@
 services:
-  app:
-    image: ${APP_IMAGE:-ghcr.io/fega-kt/backend-mikroorm:latest}
+  be-core:
+    image: ${CORE_IMAGE:-ghcr.io/fega-kt/backend-mikroorm-core:latest}
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       VAULT_ADDR: ${VAULT_ADDR}
       VAULT_TOKEN: ${VAULT_TOKEN}
+      CORE_PORT: 3000
+
+  be-app:
+    image: ${APP_IMAGE:-ghcr.io/fega-kt/backend-mikroorm-app:latest}
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      VAULT_TOKEN: ${VAULT_TOKEN}
+      APP_PORT: 3001
+
+  be-core-jobs:
+    image: ${CORE_JOBS_IMAGE:-ghcr.io/fega-kt/backend-mikroorm-core-jobs:latest}
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      VAULT_TOKEN: ${VAULT_TOKEN}
+      CORE_JOB_PORT: 3002
+
+  be-app-jobs:
+    image: ${APP_JOBS_IMAGE:-ghcr.io/fega-kt/backend-mikroorm-app-jobs:latest}
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      VAULT_TOKEN: ${VAULT_TOKEN}
+      APP_JOB_PORT: 3003

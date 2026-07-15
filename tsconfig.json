@@ -1,32 +1,8 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "target": "ES2021",
-    "lib": ["ES2021"],
-    "moduleResolution": "node",
-    "ignoreDeprecations": "6.0",
-    "paths": {
-      "@config/*": ["./src/config/*"],
-      "@common/*": ["./src/common/*"],
-      "@modules/*": ["./src/modules/*"],
-      "@types/*": ["./src/types/*"]
-    },
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "sourceMap": true,
     "incremental": true,
-    "tsBuildInfoFile": ".tsbuildinfo",
-    "strict": false,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "skipLibCheck": true,
-    "types": ["node", "multer"],
-    "typeRoots": ["./node_modules/@types", "./src/types"]
+    "tsBuildInfoFile": ".tsbuildinfo"
   },
   "exclude": ["node_modules", "dist", "scripts"]
 }

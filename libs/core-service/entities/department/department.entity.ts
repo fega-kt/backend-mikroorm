@@ -1,0 +1,36 @@
+import { BaseEntity } from "@common/base/base.entity";
+import { Collection, Entity, Index, ManyToOne, OneToMany, Property, types } from "@mikro-orm/core";
+import { UserEntity } from "../user/user.entity";
+
+export enum DepartmentStatus {
+  INACTIVE = 0,
+  ACTIVE = 1,
+}
+
+@Entity({ tableName: "departments" })
+export class DepartmentEntity extends BaseEntity {
+  @Property({ unique: true })
+  code!: string;
+
+  @Property()
+  name!: string;
+
+  @ManyToOne({ cascade: [], entity: () => DepartmentEntity, nullable: true })
+  parent?: DepartmentEntity;
+
+  @Index()
+  @Property({ type: types.string, nullable: true })
+  parentCode?: string; // path code từ parent đến nó
+
+  @OneToMany({ cascade: [], entity: () => UserEntity, mappedBy: "department" })
+  users = new Collection<UserEntity>(this);
+
+  @ManyToOne({ cascade: [], entity: () => UserEntity, nullable: true })
+  manager?: UserEntity; // trưởng phòng
+
+  @ManyToOne({ cascade: [], entity: () => UserEntity, nullable: true })
+  deputy?: UserEntity; // phó phòng
+
+  @Property({ type: types.integer, default: DepartmentStatus.ACTIVE })
+  status!: DepartmentStatus;
+}
