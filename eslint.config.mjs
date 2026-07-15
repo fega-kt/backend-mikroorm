@@ -8,7 +8,7 @@ export default [
     ignores: ["dist/**", "node_modules/**", "scripts/**"],
   },
   {
-    files: ["src/**/*.ts"],
+    files: ["apps/**/*.ts", "jobs/**/*.ts", "libs/**/*.ts"],
     languageOptions: {
       parser: tsparser,
       parserOptions: {

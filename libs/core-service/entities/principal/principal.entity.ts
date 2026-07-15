@@ -1,0 +1,40 @@
+import { BaseEntity } from "@common/base/base.entity";
+import { Entity, Enum, OneToOne, Property, types } from "@mikro-orm/core";
+import { GroupEntity } from "../group/group.entity";
+import { UserEntity } from "../user/user.entity";
+
+export enum PrincipalType {
+  User = "user",
+  Group = "group",
+}
+
+@Entity({ tableName: "principals" })
+export class PrincipalEntity extends BaseEntity {
+  @Property()
+  name!: string;
+
+  /**
+   * PrincipalType:
+   * user: thì Principal là user, chỉ có user ở field user
+   * group: thì Principal là group, chỉ có group ở field group
+   */
+  @Enum(() => PrincipalType)
+  public type?: PrincipalType;
+
+  @OneToOne({
+    cascade: [],
+    entity: () => GroupEntity,
+    nullable: true,
+  })
+  public group?: GroupEntity;
+
+  @OneToOne({
+    cascade: [],
+    entity: () => UserEntity,
+    nullable: true,
+  })
+  public user?: UserEntity;
+
+  @Property({ type: types.text, nullable: true })
+  description?: string;
+}

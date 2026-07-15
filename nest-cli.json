@@ -1,0 +1,46 @@
+{
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "apps/core",
+  "monorepo": true,
+  "compilerOptions": {
+    "tsConfigPath": "tsconfig.json"
+  },
+  "projects": {
+    "core": {
+      "type": "application",
+      "root": "apps/core",
+      "entryFile": "apps/core/main",
+      "sourceRoot": "apps/core",
+      "compilerOptions": {
+        "tsConfigPath": "tsconfig.json"
+      }
+    },
+    "app": {
+      "type": "application",
+      "root": "apps/app",
+      "entryFile": "apps/app/main",
+      "sourceRoot": "apps/app",
+      "compilerOptions": {
+        "tsConfigPath": "tsconfig.json"
+      }
+    },
+    "core-jobs": {
+      "type": "application",
+      "root": "jobs/core-jobs",
+      "entryFile": "jobs/core-jobs/main",
+      "sourceRoot": "jobs/core-jobs",
+      "compilerOptions": {
+        "tsConfigPath": "tsconfig.json"
+      }
+    },
+    "app-jobs": {
+      "type": "application",
+      "root": "jobs/app-jobs",
+      "entryFile": "jobs/app-jobs/main",
+      "sourceRoot": "jobs/app-jobs",
+      "compilerOptions": {
+        "tsConfigPath": "tsconfig.json"
+      }
+    }
+  }
+}

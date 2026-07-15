@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "npmScope": "app",
+  "affected": {
+    "defaultBase": "main"
+  },
+  "projects": {
+    "core": {
+      "tags": ["type:app", "scope:core"]
+    },
+    "app": {
+      "tags": ["type:app", "scope:app"]
+    },
+    "core-jobs": {
+      "tags": ["type:job", "scope:core"]
+    },
+    "app-jobs": {
+      "tags": ["type:job", "scope:app"]
+    },
+    "lib-core": {
+      "tags": ["type:lib", "scope:core"]
+    },
+    "lib-core-service": {
+      "tags": ["type:lib", "scope:core"]
+    },
+    "lib-app": {
+      "tags": ["type:lib", "scope:app"]
+    },
+    "lib-jobs": {
+      "tags": ["type:lib", "scope:app"]
+    }
+  }
+}

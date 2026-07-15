@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "rootDir": ".",
+    "module": "commonjs",
+    "target": "ES2021",
+    "lib": ["ES2021"],
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./dist",
+    "sourceMap": true,
+    "strict": false,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "types": ["node", "multer"],
+    "typeRoots": ["./node_modules/@types"],
+    "paths": {
+      "@config/*": ["libs/core-shared/config/*"],
+      "@common/*": ["libs/core/common/*"],
+      "@types/*": ["libs/core-shared/types/*"],
+
+      "@modules/cache/*":              ["libs/core/modules/cache/*"],
+      "@modules/redis/*":              ["libs/core/modules/redis/*"],
+      "@modules/cloudflare-kv/*":      ["libs/core/modules/cloudflare-kv/*"],
+      "@modules/database/*":           ["libs/core/modules/database/*"],
+      "@modules/metrics/*":            ["libs/core/modules/metrics/*"],
+      "@modules/rabbitmq/*":           ["libs/core/modules/rabbitmq/*"],
+      "@modules/mail/*":               ["libs/core/modules/mail/*"],
+      "@modules/supabase/*":           ["libs/core/modules/supabase/*"],
+      "@modules/health/*":             ["libs/core/modules/health/*"],
+
+      "@core-service":                 ["libs/core-service/index.ts"],
+      "@core-service/*":               ["libs/core-service/*"],
+
+      "@app-domain":                   ["libs/app/index.ts"],
+      "@app-domain/*":                 ["libs/app/*"]
+    }
+  }
+}
