@@ -7,12 +7,7 @@ import { coreServices } from "./services";
 import { coreEntities } from "./entities";
 
 @Module({
-  imports: [
-    SupabaseModule,
-    MailModule,
-    RabbitMQModule,
-    MikroOrmModule.forFeature([...coreEntities]),
-  ],
+  imports: [SupabaseModule, MailModule, RabbitMQModule, MikroOrmModule.forFeature([...coreEntities])],
   providers: [...coreServices],
   exports: [...coreServices],
 })

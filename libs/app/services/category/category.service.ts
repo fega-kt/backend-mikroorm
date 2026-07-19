@@ -6,7 +6,11 @@ import { ConflictException, Injectable, NotFoundException, Scope } from "@nestjs
 import { z } from "zod";
 import { CategoryEntity } from "../../entities/category";
 import { DepartmentEntity } from "@core-service/entities/department";
-import { categoryFilterValidation, createCategoryValidation, updateCategoryValidation } from "../../controllers/category/category.validation";
+import {
+  categoryFilterValidation,
+  createCategoryValidation,
+  updateCategoryValidation,
+} from "../../controllers/category/category.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class CategoryService extends BaseService<CategoryEntity> {

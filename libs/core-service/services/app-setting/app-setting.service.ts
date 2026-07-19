@@ -6,13 +6,7 @@ import z from "zod";
 
 import { BaseService } from "@common/base/base.service";
 import { AppSettingEntity, AppSettingType } from "../../entities/app-setting";
-import {
-  parseSettingArray,
-  parseSettingBoolean,
-  parseSettingNumber,
-  parseSettingObject,
-  parseSettingString,
-} from "./app-setting.util";
+import { parseSettingArray, parseSettingBoolean, parseSettingNumber, parseSettingObject, parseSettingString } from "./app-setting.util";
 import { upsertAppSettingValidation } from "../../controllers/app-setting/app-setting.validation";
 
 type SettingValue = string | number | boolean | Record<string, unknown> | unknown[];

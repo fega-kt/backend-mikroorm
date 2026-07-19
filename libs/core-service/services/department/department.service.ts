@@ -8,7 +8,11 @@ import z from "zod";
 import { DepartmentEntity, DepartmentStatus } from "../../entities/department";
 import { UserEntity } from "../../entities/user";
 import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "./department.types";
-import { DepartmentListFilterDto, createDepartmentValidation, updateDepartmentValidation } from "../../controllers/department/department.validation";
+import {
+  DepartmentListFilterDto,
+  createDepartmentValidation,
+  updateDepartmentValidation,
+} from "../../controllers/department/department.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class DepartmentService extends BaseService<DepartmentEntity> {
