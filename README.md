@@ -100,10 +100,10 @@ Key variables:
 
 ```env
 # App
-CORE_PORT=3000
-APP_PORT=3001
+CORE_PORT=2000
+APP_PORT=2001
 API_PREFIX=api
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://localhost:3333
 
 # PostgreSQL
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432
@@ -153,8 +153,8 @@ pnpm lint:fix      # auto-fix lint errors
 pnpm format        # format src/
 ```
 
-API: `http://localhost:3000`  
-Swagger: `http://localhost:3000/api`
+API: `http://localhost:2000`  
+Swagger: `http://localhost:2000/api`
 
 ---
 
