@@ -2,7 +2,7 @@ import { ENV } from "@config/env.config";
 import { MikroORM } from "@mikro-orm/core";
 import { ActivityLogQueueService } from "@core-service/services/activity-log-queue/activity-log-queue.service";
 import { AppSettingEntity, AppSettingType } from "@core-service/entities/app-setting";
-import { parseSettingArray, parseSettingString } from "@core-service/services/app-setting/app-setting.util";
+import { parseValueArray, parseValueString } from "@common/utils/parse-value.util";
 import { RABBITMQ_QUEUES } from "@modules/rabbitmq/rabbitmq.constants";
 import { ConsumerHandler, RabbitMQService } from "@modules/rabbitmq/rabbitmq.service";
 import type { InactiveReminderMessage } from "@modules/rabbitmq/types/message.types";
@@ -38,14 +38,14 @@ export class InactiveReminderConsumer implements OnModuleInit {
       em.findOne(AppSettingEntity, { key: AppSettingType.INACTIVE_EMAIL_ALLOWED_LIST, deleted: { $ne: true } }),
     ]);
 
-    const templateId: string = parseSettingString(templateSetting?.value);
+    const templateId: string = parseValueString(templateSetting?.value);
     if (!templateId) {
       this.logger.warn("MAIL_TEMPLATE_INACTIVE_REMINDER not configured, skipping");
       ack();
       return;
     }
 
-    const allowedList: string[] = parseSettingArray<string>(allowListSetting?.value).filter((v): v is string => typeof v === "string");
+    const allowedList: string[] = parseValueArray<string>(allowListSetting?.value).filter((v): v is string => typeof v === "string");
 
     const user = await em.findOne(
       UserEntity,
