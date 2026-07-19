@@ -10,17 +10,9 @@ import { coreEntities } from "./entities";
 import { SupabaseAuthGuard } from "./guards/supabase-auth.guard";
 
 @Module({
-  imports: [
-    SupabaseModule,
-    MailModule,
-    RabbitMQModule,
-    MikroOrmModule.forFeature([...coreEntities]),
-  ],
+  imports: [SupabaseModule, MailModule, RabbitMQModule, MikroOrmModule.forFeature([...coreEntities])],
   controllers: [...coreControllers],
-  providers: [
-    ...coreServices,
-    { provide: APP_GUARD, useClass: SupabaseAuthGuard },
-  ],
+  providers: [...coreServices, { provide: APP_GUARD, useClass: SupabaseAuthGuard }],
   exports: [...coreServices],
 })
 export class CoreServiceModule {}

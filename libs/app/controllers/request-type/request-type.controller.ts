@@ -4,11 +4,7 @@ import { ZodValidationPipe } from "@common/pipes";
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { z } from "zod";
 import { RequestTypeService } from "../../services/request-type/request-type.service";
-import {
-  createRequestTypeValidation,
-  requestTypeFilterValidation,
-  updateRequestTypeValidation,
-} from "./request-type.validation";
+import { createRequestTypeValidation, requestTypeFilterValidation, updateRequestTypeValidation } from "./request-type.validation";
 
 @Controller("request-type")
 export class RequestTypeController {

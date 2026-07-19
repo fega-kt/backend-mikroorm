@@ -14,7 +14,12 @@ import { PrincipalEntity, PrincipalType } from "../../entities/principal";
 import { UserEntity } from "../../entities/user";
 import { AppSettingService } from "../app-setting/app-setting.service";
 import { UploadService } from "../upload/upload.service";
-import { createUserValidation, updateProfileValidation, updateUserValidation, UserListFilterDto } from "../../controllers/user/user.validation";
+import {
+  createUserValidation,
+  updateProfileValidation,
+  updateUserValidation,
+  UserListFilterDto,
+} from "../../controllers/user/user.validation";
 
 @Injectable({ scope: Scope.REQUEST })
 export class UserService extends BaseService<UserEntity> {
