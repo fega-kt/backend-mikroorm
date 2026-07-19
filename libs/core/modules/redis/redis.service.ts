@@ -24,8 +24,10 @@ export class RedisService implements ICacheService, OnModuleInit, OnModuleDestro
       },
     });
 
+    const maskedUrl = ENV.REDIS_URL.replace(/:\/\/[^@]+@/, "://***@");
+
     this.client.on("error", (err) => this.logger.error("Redis error", err));
-    this.client.on("connect", () => this.logger.log("Redis connected"));
+    this.client.on("connect", () => this.logger.log(`Redis connected: ${maskedUrl}`));
     this.client.on("close", () => this.logger.warn("Redis connection closed"));
     this.client.on("reconnecting", () => this.logger.warn("Redis reconnecting..."));
 

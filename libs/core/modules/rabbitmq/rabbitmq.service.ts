@@ -20,7 +20,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn("RABBITMQ_URL not configured — RabbitMQ disabled");
       return;
     }
-    this.logger.log(`Connecting to RabbitMQ: ${url.replace(/:\/\/[^@]+@/, "://***@")}`);
+    this.logger.log(`Connecting to RabbitMQ: ${this.maskUrl(url)}`);
     await this.connect(url);
   }
 
@@ -49,7 +49,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
               await this.startConsuming(channelModel, queue, handler);
             }
 
-            this.logger.log("RabbitMQ connected and topology ready");
+            this.logger.log(`RabbitMQ connected and topology ready: ${this.maskUrl(url)}`);
           } catch (err) {
             const error = err instanceof Error ? err.message : String(err);
             this.logger.error(`RabbitMQ setup failed: ${error}`);
@@ -77,6 +77,10 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     this.model.on("error", (err: Error) => {
       this.logger.warn(`RabbitMQ connection error: ${err.message}`);
     });
+  }
+
+  private maskUrl(url: string): string {
+    return url.replace(/:\/\/[^@]+@/, "://***@");
   }
 
   private async setupTopology(ch: amqp.Channel) {
