@@ -6,7 +6,7 @@ import z from "zod";
 
 import { BaseService } from "@common/base/base.service";
 import { AppSettingEntity, AppSettingType } from "../../entities/app-setting";
-import { parseSettingArray, parseSettingBoolean, parseSettingNumber, parseSettingObject, parseSettingString } from "./app-setting.util";
+import { parseValueArray, parseValueBoolean, parseValueNumber, parseValueObject, parseValueString } from "@common/utils/parse-value.util";
 import { upsertAppSettingValidation } from "../../controllers/app-setting/app-setting.validation";
 
 type SettingValue = string | number | boolean | Record<string, unknown> | unknown[];
@@ -29,33 +29,33 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
 
   async getString(key: AppSettingType): Promise<string | undefined> {
     const value = await this.getByKey(key);
-    const result = parseSettingString(value);
+    const result = parseValueString(value);
     if (result === undefined) this.logger.error(`Failed to coerce setting "${key}" to string: ${JSON.stringify(value)}`);
     return result;
   }
 
   async getNumber(key: AppSettingType): Promise<number | undefined> {
     const value = await this.getByKey(key);
-    const result = parseSettingNumber(value);
+    const result = parseValueNumber(value);
     if (result === undefined) this.logger.error(`Failed to coerce setting "${key}" to number: ${JSON.stringify(value)}`);
     return result;
   }
 
   async getBoolean(key: AppSettingType): Promise<boolean> {
     const value = await this.getByKey(key);
-    return parseSettingBoolean(value);
+    return parseValueBoolean(value);
   }
 
   async getObject<T extends object>(key: AppSettingType): Promise<T | undefined> {
     const value = await this.getByKey(key);
-    const result = parseSettingObject<T>(value);
+    const result = parseValueObject<T>(value);
     if (result === undefined) this.logger.error(`Failed to parse setting "${key}" as object: ${JSON.stringify(value)}`);
     return result;
   }
 
   async getArray<T = unknown>(key: AppSettingType): Promise<T[]> {
     const value = await this.getByKey(key);
-    return parseSettingArray<T>(value);
+    return parseValueArray<T>(value);
   }
 
   async getAll(): Promise<AppSettingEntity[]> {

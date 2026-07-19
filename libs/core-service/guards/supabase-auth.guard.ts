@@ -4,25 +4,25 @@ import { Reflector } from "@nestjs/core";
 import { IUserResponse } from "@common/base/consts";
 import { PermissionType } from "@common/base/permission-type.enum";
 import { IS_PUBLIC_KEY } from "@common/decorators/public.decorator";
-import { EntityRepository, MikroORM } from "@mikro-orm/core";
+import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import { createHash } from "crypto";
 import { compact, uniq } from "lodash";
-import { AppSettingEntity, AppSettingType } from "../entities/app-setting";
 import { RoleEntity } from "../entities/role";
 import { UserEntity } from "../entities/user";
+
+// 400 ngày
+const LAST_ACTIVE_TTL_SECONDS = 400 * 24 * 3600;
 
 @Injectable()
 export class SupabaseAuthGuard implements CanActivate {
   private readonly logger = new Logger(SupabaseAuthGuard.name);
-  private inactiveDaysCache: { value: number; expiresAt: number } | null = null;
 
   constructor(
     private reflector: Reflector,
     private readonly supabaseService: SupabaseService,
-    private readonly orm: MikroORM,
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>,
     @InjectRepository(RoleEntity)
@@ -85,20 +85,7 @@ export class SupabaseAuthGuard implements CanActivate {
   }
 
   private refreshLastActive(userId: string): void {
-    this.getInactiveDays()
-      .then((days) => this.cache.set(`user:last-active:${userId}`, "1", days * 24 * 3600))
-      .catch(() => {});
-  }
-
-  private async getInactiveDays(): Promise<number> {
-    if (this.inactiveDaysCache && Date.now() < this.inactiveDaysCache.expiresAt) {
-      return this.inactiveDaysCache.value;
-    }
-    const em = this.orm.em.fork();
-    const setting = await em.findOne(AppSettingEntity, { key: AppSettingType.INACTIVE_DAYS_THRESHOLD, deleted: { $ne: true } });
-    const value = setting ? Number(setting.value) || 7 : 7;
-    this.inactiveDaysCache = { value, expiresAt: Date.now() + 60_000 };
-    return value;
+    this.cache.set(`user:last-active:${userId}`, Date.now().toString(), LAST_ACTIVE_TTL_SECONDS).catch(() => {});
   }
 
   private async verifyToken(token: string): Promise<string | undefined> {

@@ -1,6 +1,7 @@
 import { MikroORM } from "@mikro-orm/core";
 import { ActivityLogQueueService } from "@core-service/services/activity-log-queue/activity-log-queue.service";
 import { AppSettingEntity, AppSettingType } from "@core-service/entities/app-setting";
+import { parseValuePositiveInt } from "@common/utils/parse-value.util";
 import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
 import { NotificationType } from "@core-service/entities/notification";
 import { RABBITMQ_EXCHANGE, RABBITMQ_QUEUES } from "@modules/rabbitmq/rabbitmq.constants";
@@ -22,12 +23,15 @@ export class InactiveUserReminderService {
 
   @Cron(CronExpression.EVERY_DAY_AT_9AM)
   async sendInactiveReminders() {
-    if (!this.rabbitmq.isConnected) return;
+    if (!this.rabbitmq.isConnected) {
+      this.logger.warn("RabbitMQ not connected, skipping inactive user reminder job");
+      return;
+    }
 
     this.logger.log("Running inactive user reminder job...");
     const em = this.orm.em.fork();
     const setting = await em.findOne(AppSettingEntity, { key: AppSettingType.INACTIVE_DAYS_THRESHOLD, deleted: { $ne: true } });
-    const days = setting ? Number(setting.value) || 7 : 7;
+    const days = parseValuePositiveInt(setting?.value) ?? 7;
 
     const users = await em.find(UserEntity, { deleted: { $ne: true }, isActive: true }, { fields: ["id", "fullName"] });
     if (!users.length) {
@@ -36,7 +40,13 @@ export class InactiveUserReminderService {
     }
 
     const activeFlags = await Promise.all(users.map((u) => this.cache.get<string>(`user:last-active:${u.id}`)));
-    const inactiveUsers = users.filter((_, i) => !activeFlags[i]);
+    const now = Date.now();
+    const thresholdMs = days * 24 * 60 * 60 * 1000;
+    const inactiveUsers = users.filter((_, i) => {
+      const lastActive = activeFlags[i];
+      if (!lastActive) return true;
+      return now - Number(lastActive) >= thresholdMs;
+    });
 
     if (!inactiveUsers.length) {
       this.logger.log("All users are active, no inactive reminder needed");
