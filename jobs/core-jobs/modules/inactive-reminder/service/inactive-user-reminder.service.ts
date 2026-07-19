@@ -36,13 +36,7 @@ export class InactiveUserReminderService {
     }
 
     const activeFlags = await Promise.all(users.map((u) => this.cache.get<string>(`user:last-active:${u.id}`)));
-    const now = Date.now();
-    const thresholdMs = days * 24 * 60 * 60 * 1000;
-    const inactiveUsers = users.filter((_, i) => {
-      const lastActive = activeFlags[i];
-      if (!lastActive) return true;
-      return now - Number(lastActive) >= thresholdMs;
-    });
+    const inactiveUsers = users.filter((_, i) => !activeFlags[i]);
 
     if (!inactiveUsers.length) {
       this.logger.log("All users are active, no inactive reminder needed");
