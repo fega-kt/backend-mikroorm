@@ -39,6 +39,9 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
           try {
             this.currentChannelModel = channelModel;
             this.publishChannel = await channelModel.createChannel();
+            this.publishChannel.on("error", (err: Error) => {
+              this.logger.warn(`RabbitMQ publish channel error: ${err.message}`);
+            });
             await this.setupTopology(this.publishChannel);
             this._isConnected = true;
 
@@ -69,6 +72,10 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 
     this.model.on("reconnect-failed", (err: Error) => {
       this.logger.error("RabbitMQ reconnect failed permanently", err.message);
+    });
+
+    this.model.on("error", (err: Error) => {
+      this.logger.warn(`RabbitMQ connection error: ${err.message}`);
     });
   }
 
@@ -118,6 +125,9 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 
   private async startConsuming(channelModel: amqp.ChannelModel, queue: string, handler: ConsumerHandler) {
     const ch = await channelModel.createChannel();
+    ch.on("error", (err: Error) => {
+      this.logger.warn(`RabbitMQ consumer channel error (${queue}): ${err.message}`);
+    });
     await ch.prefetch(1);
     // consume callback phải là void — dùng .catch() thay vì async
     await ch.consume(queue, (msg) => {
