@@ -100,7 +100,8 @@ Key variables:
 
 ```env
 # App
-PORT=3000
+CORE_PORT=3000
+APP_PORT=3001
 API_PREFIX=api
 FRONTEND_URL=http://localhost:3000
 

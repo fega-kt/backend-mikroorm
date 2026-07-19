@@ -8,7 +8,6 @@ export enum NodeEnv {
 
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || "development",
-  PORT: Number(process.env.PORT) || 3000,
   CORE_PORT: Number(process.env.CORE_PORT) || 3000,
   APP_PORT: Number(process.env.APP_PORT) || 3001,
   CORE_JOB_PORT: Number(process.env.CORE_JOB_PORT) || 3002,

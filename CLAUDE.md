@@ -24,7 +24,7 @@ No test runner configured. No migration CLI — MikroORM uses `autoLoadEntities:
 Copy `.env.example` to `.env`. Required variables:
 - `DATABASE_URL`, `DB_NAME` — PostgreSQL connection
 - `SUPABASE_URL`, `SUPABASE_JWT_PUBLISHABLE` — token auth
-- `PORT`, `API_PREFIX` — server config
+- `CORE_PORT`, `APP_PORT`, `API_PREFIX` — server config
 - `CACHE_DRIVER` — `redis` (default) or `cloudflare`
 - `REDIS_URL` — Redis connection (e.g. `redis://localhost:6379`)
 
