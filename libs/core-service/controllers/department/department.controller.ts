@@ -3,7 +3,7 @@ import { Permissions } from "@common/decorators/permissions.decorator";
 import { IdValidationPipe } from "@common/pipes/id-validation-pipe";
 import { ZodValidationPipe } from "@common/pipes/zod-validation-pipe";
 import { WithChildren } from "@common/utils/tree.util";
-import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import z from "zod";
 import { DepartmentEntity, DepartmentStatus } from "../../entities/department";
 import { DepartmentService } from "../../services/department/department.service";
@@ -65,5 +65,11 @@ export class DepartmentController {
   @Permissions(PermissionType.ViewDeparmentDetail)
   getDetail(@Param("id", IdValidationPipe) id: string) {
     return this.departmentService.getDetail(id);
+  }
+
+  @Delete(":id")
+  @Permissions(PermissionType.DeleteDeparment)
+  remove(@Param("id", IdValidationPipe) id: string) {
+    return this.departmentService.remove(id);
   }
 }

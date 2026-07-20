@@ -236,4 +236,48 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     }
     return department;
   }
+
+  async remove(id: string) {
+    const department = await this.findOne({ id, deleted: { $ne: true } }, { fields: ["id", "code", "parentCode"] });
+    if (!department) {
+      throw new NotFoundException("Department not found");
+    }
+
+    const ownPath = department.parentCode ? `${department.parentCode}.${department.code}` : department.code;
+    const escapedOwnPath = ownPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const descendants = await this.repo.find(
+      { deleted: { $ne: true }, parentCode: { $re: `^${escapedOwnPath}(\\.|$)` } as never },
+      { fields: ["id"] },
+    );
+
+    const departmentIds = [id, ...descendants.map((d) => d.id)];
+
+    const usersInScope = await this.userRepo.find(
+      { department: { $in: departmentIds }, deleted: { $ne: true } },
+      { fields: ["id", "department", "department.id", "department.name"], populate: ["department"] },
+    );
+
+    if (usersInScope.length > 0) {
+      const departmentNames = [...new Set(usersInScope.map((user) => user.department.name))];
+      throw new ConflictException(
+        departmentNames.length > 1
+          ? "Cannot delete department because some of its sub-departments still have users"
+          : `Cannot delete department because "${departmentNames[0]}" still has users`,
+      );
+    }
+
+    const entities = await this.repo.find({ id: { $in: departmentIds }, deleted: { $ne: true } });
+    entities.forEach((entity) => {
+      entity.deleted = true;
+    });
+    await this.repo.getEntityManager().flush();
+
+    await Promise.all([
+      ...departmentIds.map((departmentId) => this.cache.del(this.cacheKey(departmentId))),
+      this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`),
+    ]);
+
+    return { message: "Deleted successfully" };
+  }
 }
