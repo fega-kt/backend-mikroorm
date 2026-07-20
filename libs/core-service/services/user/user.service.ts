@@ -1,6 +1,7 @@
 import { EntityData, EntityManager, EntityRepository, FilterQuery, serialize } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Scope } from "@nestjs/common";
+import { isAuthApiError } from "@supabase/supabase-js";
 
 import { BaseService } from "@common/base/base.service";
 import { STORAGE_PATH } from "@common/constants/storage.constant";
@@ -44,25 +45,20 @@ export class UserService extends BaseService<UserEntity> {
     }
 
     const { loginName, fullName, workEmail, password, department, isActive } = data;
-    const exist = await this.repo.findOne({ loginName: { $ilike: loginName } });
+    const [exist] = await Promise.all([this.repo.findOne({ loginName: { $ilike: loginName } }), this.assertDepartmentExists(department)]);
 
     if (exist) {
-      throw new ConflictException("Email already exists in local database");
+      throw new ConflictException("This email is already registered");
     }
 
-    await this.assertDepartmentExists(department);
-
-    const users = await this.supabaseService.listUsers().catch((error: Error) => {
-      throw new BadRequestException("Failed to check Supabase user: " + error.message);
-    });
-
-    if (!users.find((u) => u.email === loginName)) {
-      await this.supabaseService
-        .createUser({ email: loginName, password, emailConfirm: true, userMetadata: { fullName } })
-        .catch((error: Error) => {
-          throw new BadRequestException("Failed to create user in Supabase Auth: " + error.message);
-        });
-    }
+    await this.supabaseService
+      .createUser({ email: loginName, password, emailConfirm: true, userMetadata: { fullName } })
+      .catch((error: unknown) => {
+        if (isAuthApiError(error) && error.code === "email_exists") {
+          throw new ConflictException("This email is already registered");
+        }
+        throw new BadRequestException("Failed to create user in Supabase Auth: " + (error as Error).message);
+      });
 
     const defaulValueBase = this.getDefaultValuesForCreate();
     const res = await this.em.transactional(async (em) => {
@@ -90,7 +86,7 @@ export class UserService extends BaseService<UserEntity> {
 
       await em.flush();
     });
-    await this.sendAccountCreatedMail(loginName, fullName).catch((error: Error) => {
+    void this.sendAccountCreatedMail(loginName, fullName).catch((error: Error) => {
       this.logger.error("Failed to send account created email: " + error.message);
     });
     return res;
