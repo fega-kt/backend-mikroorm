@@ -35,7 +35,7 @@ export const createUserValidation = z.object({
     .max(255, "Full name must be less than 255 characters")
     .regex(/^[\p{L}]+(?:\s[\p{L}]+)*$/u, "Full name must contain only letters and single spaces between words"),
   avatar: z.string().trim().optional(),
-  department: z.string().trim().optional(),
+  department: z.string().trim().uuid("Invalid department ID"),
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
@@ -70,7 +70,7 @@ export const updateUserValidation = z.object({
     .refine((v) => v === "" || /^[0-9+ ]+$/.test(v), "Invalid phone number format")
     .optional(),
   description: z.string().trim().max(1000).optional(),
-  department: z.string().trim().optional(),
+  department: z.string().trim().uuid("Invalid department ID"),
   isActive: z.boolean().optional(),
 });
 
