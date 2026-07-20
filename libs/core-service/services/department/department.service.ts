@@ -43,7 +43,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
         throw new NotFoundException("Parent department not found");
       }
     } else {
-      const root = await this.findOne({ parent: null, deleted: { $ne: true } }, { fields: ["id", "code"] });
+      const root = await this.findOne({ parent: null, deleted: { $ne: true } }, { fields: ["id"] });
       if (root) {
         throw new ConflictException("Root department already exists");
       }
@@ -70,7 +70,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
   async update(id: string, data: z.infer<typeof updateDepartmentValidation>) {
     let { parent: parentId, manager: managerId, deputy: deputyId, ...rest } = data;
 
-    const department = await this.findOne({ id, deleted: { $ne: true } }, { fields: ["id", "code", "parent", "parentCode"] });
+    const department = await this.findOne({ id, deleted: { $ne: true } }, { fields: ["id"] });
 
     if (!department) {
       throw new NotFoundException("Department not found");
@@ -90,6 +90,11 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
 
       if (!parent) {
         throw new NotFoundException("Parent department not found");
+      }
+    } else {
+      const root = await this.findOne({ parent: null, deleted: { $ne: true }, id: { $ne: id } }, { fields: ["id"] });
+      if (root) {
+        throw new ConflictException("Root department already exists");
       }
     }
 
