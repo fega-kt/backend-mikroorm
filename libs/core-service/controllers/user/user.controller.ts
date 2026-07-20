@@ -9,6 +9,7 @@ import {
   ParseFilePipe,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseInterceptors,
@@ -69,7 +70,7 @@ export class UserController {
     return this.userService.getDetail(id);
   }
 
-  @Patch(":id")
+  @Put(":id")
   @Permissions(PermissionType.UpdateUser)
   update(
     @Param("id", new IdValidationPipe()) id: string,
