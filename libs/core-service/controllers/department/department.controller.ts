@@ -11,6 +11,8 @@ import {
   createDepartmentValidation,
   DepartmentListFilterDto,
   departmentListFilterValidation,
+  DepartmentUsersFilterDto,
+  departmentUsersFilterValidation,
   updateDepartmentValidation,
 } from "./department.validation";
 
@@ -65,6 +67,15 @@ export class DepartmentController {
   @Permissions(PermissionType.ViewDeparmentDetail)
   getDetail(@Param("id", IdValidationPipe) id: string) {
     return this.departmentService.getDetail(id);
+  }
+
+  @Get(":id/users")
+  @Permissions(PermissionType.ViewDeparmentDetail)
+  getUsers(
+    @Param("id", IdValidationPipe) id: string,
+    @Query(new ZodValidationPipe(departmentUsersFilterValidation)) query: DepartmentUsersFilterDto,
+  ) {
+    return this.departmentService.getUsers(id, query);
   }
 
   @Delete(":id")

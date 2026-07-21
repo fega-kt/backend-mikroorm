@@ -21,17 +21,9 @@ export const DEPARTMENT_DETAIL_FIELDS = defineFields<DepartmentEntity>()([
   "deputy.fullName",
   "deputy.avatar",
   "deputy.workEmail",
-  "users",
-  "users.id",
-  "users.loginName",
-  "users.fullName",
-  "users.avatar",
-  "users.workEmail",
-  "users.phoneNumber",
-  "users.isActive",
 ]);
 
-export const DEPARTMENT_DETAIL_POPULATE = definePopulate<DepartmentEntity>()(["manager", "deputy", "parent", "users"]);
+export const DEPARTMENT_DETAIL_POPULATE = definePopulate<DepartmentEntity>()(["manager", "deputy", "parent"]);
 
 export type DepartmentDetail = Loaded<
   DepartmentEntity,

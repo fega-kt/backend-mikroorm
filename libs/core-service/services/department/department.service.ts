@@ -10,6 +10,7 @@ import { UserEntity } from "../../entities/user";
 import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "./department.types";
 import {
   DepartmentListFilterDto,
+  DepartmentUsersFilterDto,
   createDepartmentValidation,
   updateDepartmentValidation,
 } from "../../controllers/department/department.validation";
@@ -153,8 +154,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     const { data, total } = await this.paginate(filter, {
       limit,
       page,
-      fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status", "parentCode", "users"],
-      populate: ["users"],
+      fields: ["id", "name", "code", "parent", "createdAt", "updatedAt", "status", "parentCode"],
       sort: { updatedAt: "DESC" },
     });
 
@@ -229,6 +229,27 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     }));
 
     return handleTree(plain);
+  }
+
+  async getUsers(id: string, { page = 1, limit = 10, keyword }: DepartmentUsersFilterDto) {
+    const department = await this.findOne({ id, deleted: { $ne: true } }, { fields: ["id"] });
+    if (!department) {
+      throw new NotFoundException("Department not found");
+    }
+
+    const filter: FilterQuery<UserEntity> = { department: id, deleted: { $ne: true } };
+    if (keyword) {
+      filter.$or = [{ fullName: { $ilike: `%${keyword}%` } }, { loginName: { $ilike: `%${keyword}%` } }];
+    }
+
+    const [data, total] = await this.userRepo.findAndCount(filter, {
+      limit,
+      offset: (page - 1) * limit,
+      fields: ["id", "fullName", "loginName", "workEmail", "phoneNumber", "avatar", "isActive"],
+      orderBy: { fullName: "ASC" },
+    });
+
+    return { data, total };
   }
 
   async getDetail(id: string): Promise<DepartmentDetail> {
