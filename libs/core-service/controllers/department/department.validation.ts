@@ -16,6 +16,10 @@ export const departmentListFilterValidation = listFilterValidation.extend({
 
 export type DepartmentListFilterDto = z.infer<typeof departmentListFilterValidation>;
 
+export const departmentUsersFilterValidation = listFilterValidation;
+
+export type DepartmentUsersFilterDto = z.infer<typeof departmentUsersFilterValidation>;
+
 export const createDepartmentValidation = z.object({
   code: z
     .string()
