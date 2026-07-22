@@ -71,7 +71,10 @@ export const updateUserValidation = z.object({
     .optional(),
   description: z.string().trim().max(1000).optional(),
   department: z.string().trim().uuid("Invalid department ID"),
-  isActive: z.boolean().optional(),
+});
+
+export const updateUserActiveValidation = z.object({
+  isActive: z.boolean(),
 });
 
 export const updateProfileValidation = z.object({

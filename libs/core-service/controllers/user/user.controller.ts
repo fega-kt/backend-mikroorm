@@ -26,6 +26,7 @@ import { UserService } from "../../services/user/user.service";
 import {
   createUserValidation,
   updateProfileValidation,
+  updateUserActiveValidation,
   updateUserValidation,
   UserListFilterDto,
   userListFilterValidation,
@@ -84,6 +85,16 @@ export class UserController {
   @Permissions(PermissionType.DeleteUser)
   remove(@Param("id", new IdValidationPipe()) id: string) {
     return this.userService.remove(id);
+  }
+
+  @Patch(":id/active")
+  @Permissions(PermissionType.UpdateUser)
+  updateActive(
+    @Param("id", new IdValidationPipe()) id: string,
+    @Body(new ZodValidationPipe(updateUserActiveValidation))
+    data: z.infer<typeof updateUserActiveValidation>,
+  ) {
+    return this.userService.updateActive(id, data.isActive);
   }
 
   @Post("avatar")
