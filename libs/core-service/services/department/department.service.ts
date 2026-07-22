@@ -5,15 +5,15 @@ import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { ConflictException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import z from "zod";
-import { DepartmentEntity, DepartmentStatus } from "../../entities/department";
-import { UserEntity } from "../../entities/user";
-import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "./department.types";
 import {
   DepartmentListFilterDto,
   DepartmentUsersFilterDto,
   createDepartmentValidation,
   updateDepartmentValidation,
 } from "../../controllers/department/department.validation";
+import { DepartmentEntity, DepartmentStatus } from "../../entities/department";
+import { UserEntity } from "../../entities/user";
+import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "./department.types";
 
 @Injectable({ scope: Scope.REQUEST })
 export class DepartmentService extends BaseService<DepartmentEntity> {
@@ -228,6 +228,52 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       updatedBy: d.updatedBy ? { id: d.updatedBy.id, fullName: d.updatedBy.fullName, avatar: d.updatedBy.avatar } : null,
     }));
 
+    return handleTree(plain);
+  }
+
+  async getActiveTree({ keyword, name, code }: Pick<DepartmentListFilterDto, "keyword" | "name" | "code">): Promise<
+    WithChildren<
+      {
+        id: string;
+        name: string;
+        code: string;
+        parentCode: string;
+        status: DepartmentStatus;
+        createdAt: Date;
+        parent: string;
+      },
+      "children"
+    >[]
+  > {
+    const filter: FilterQuery<DepartmentEntity> = { deleted: { $ne: true }, status: DepartmentStatus.ACTIVE };
+    if (keyword) {
+      filter.$or = [{ name: { $ilike: `%${keyword}%` } }, { code: { $ilike: `%${keyword}%` } }];
+    }
+    if (name) {
+      filter.name = { $ilike: `%${name}%` };
+    }
+    if (code) {
+      filter.code = { $ilike: `%${code}%` };
+    }
+
+    const { data } = await this.findAll(filter, {
+      fields: ["id", "name", "code", "parentCode", "status", "createdAt", "parent"],
+      sort: { updatedAt: "DESC" },
+    });
+
+    const plain = data.map((d) => ({
+      id: d.id,
+      name: d.name,
+      code: d.code,
+      parentCode: d.parentCode,
+      status: d.status,
+      createdAt: d.createdAt,
+      parent: d.parent?.id ?? null,
+    }));
+
+    // A node's parent is only present in `plain` if it also matched the filter above, so a node
+    // whose parent got filtered out (inactive, deleted, or just not matching keyword/name/code)
+    // is treated as a root by handleTree — same behavior as getTree.
     return handleTree(plain);
   }
 
