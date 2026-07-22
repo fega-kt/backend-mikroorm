@@ -9,7 +9,7 @@ import { MailService } from "@modules/mail/mail.service";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import z from "zod";
 import { AppSettingType } from "../../entities/app-setting";
-import { DepartmentEntity } from "../../entities/department";
+import { DepartmentEntity, DepartmentStatus } from "../../entities/department";
 import { PrincipalEntity, PrincipalType } from "../../entities/principal";
 import { UserEntity } from "../../entities/user";
 import { AppSettingService } from "../app-setting/app-setting.service";
@@ -183,6 +183,32 @@ export class UserService extends BaseService<UserEntity> {
 
   async remove(id: string) {
     return await super.remove(id);
+  }
+
+  async updateActive(id: string, isActive: boolean) {
+    const user = await this.repo.findOne(
+      { id, deleted: { $ne: true } },
+      { fields: ["id", "isActive", "department", "department.deleted", "department.status"], populate: ["department"] },
+    );
+    if (!user) {
+      throw new NotFoundException("User not found or deleted");
+    }
+
+    if (user.isActive === isActive) {
+      throw new BadRequestException(`User is already ${isActive ? "active" : "inactive"}`);
+    }
+
+    if (isActive) {
+      const { department } = user;
+      if (!department || department.deleted) {
+        throw new BadRequestException("Department not found or deleted");
+      }
+      if (department.status !== DepartmentStatus.ACTIVE) {
+        throw new BadRequestException("Department is inactive");
+      }
+    }
+
+    return await this.updateOne(id, { isActive });
   }
 
   async uploadAvatar(id: string, file: Express.Multer.File) {

@@ -63,6 +63,24 @@ export class DepartmentController {
     return this.departmentService.getTree({ keyword, name, code, status });
   }
 
+  @Get("department-tree/active")
+  getActiveTree(@Query(new ZodValidationPipe(departmentListFilterValidation)) { keyword, name, code }: DepartmentListFilterDto): Promise<
+    WithChildren<
+      {
+        id: string;
+        name: string;
+        code: string;
+        parentCode: string;
+        status: DepartmentStatus;
+        createdAt: Date;
+        parent: string;
+      },
+      "children"
+    >[]
+  > {
+    return this.departmentService.getActiveTree({ keyword, name, code });
+  }
+
   @Get(":id")
   @Permissions(PermissionType.ViewDeparmentDetail)
   getDetail(@Param("id", IdValidationPipe) id: string) {
