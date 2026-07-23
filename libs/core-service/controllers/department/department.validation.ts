@@ -56,5 +56,8 @@ export const updateDepartmentValidation = z.object({
   parent: z.string().optional().nullable(),
   manager: z.string().optional().nullable(),
   deputy: z.string().optional().nullable(),
-  status: z.nativeEnum(DepartmentStatus).optional().default(DepartmentStatus.ACTIVE),
+});
+
+export const updateDepartmentActiveValidation = z.object({
+  status: z.nativeEnum(DepartmentStatus),
 });
