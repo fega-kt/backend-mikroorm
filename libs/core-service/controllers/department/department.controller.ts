@@ -3,7 +3,7 @@ import { Permissions } from "@common/decorators/permissions.decorator";
 import { IdValidationPipe } from "@common/pipes/id-validation-pipe";
 import { ZodValidationPipe } from "@common/pipes/zod-validation-pipe";
 import { WithChildren } from "@common/utils/tree.util";
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import z from "zod";
 import { DepartmentEntity, DepartmentStatus } from "../../entities/department";
 import { DepartmentService } from "../../services/department/department.service";
@@ -13,6 +13,7 @@ import {
   departmentListFilterValidation,
   DepartmentUsersFilterDto,
   departmentUsersFilterValidation,
+  updateDepartmentActiveValidation,
   updateDepartmentValidation,
 } from "./department.validation";
 
@@ -100,5 +101,15 @@ export class DepartmentController {
   @Permissions(PermissionType.DeleteDeparment)
   remove(@Param("id", IdValidationPipe) id: string) {
     return this.departmentService.remove(id);
+  }
+
+  @Patch(":id/active")
+  @Permissions(PermissionType.UpdateDeparment)
+  updateActive(
+    @Param("id", IdValidationPipe) id: string,
+    @Body(new ZodValidationPipe(updateDepartmentActiveValidation))
+    data: z.infer<typeof updateDepartmentActiveValidation>,
+  ) {
+    return this.departmentService.updateActive(id, data.status);
   }
 }
