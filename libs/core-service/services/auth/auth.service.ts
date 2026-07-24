@@ -184,7 +184,7 @@ export class AuthService extends BaseService<UserEntity> {
     await this.mailService.sendWithTemplate({
       to: email,
       templateId,
-      variables: { USER_NAME: fullName, OTP: otp },
+      variables: { USER_NAME: fullName, OTP: otp, OTP_EXPIRE_MINUTES: AuthOtpConfig.loginOtpTtl / 60 },
     });
   }
 
@@ -194,7 +194,7 @@ export class AuthService extends BaseService<UserEntity> {
     await this.mailService.sendWithTemplate({
       to: email,
       templateId,
-      variables: { USER_NAME: fullName, OTP: otp },
+      variables: { USER_NAME: fullName, OTP: otp, OTP_EXPIRE_MINUTES: AuthOtpConfig.forgotPasswordTtl / 60 },
     });
   }
 
