@@ -13,15 +13,15 @@ export const createRequestTypeValidation = z.object({
   category: z.string().trim().min(1, "Category is required"),
   prefix: z.string().trim().min(1, "Prefix is required").max(20),
   description: z.string().trim().max(1000).optional().nullable(),
-  status: z.nativeEnum(RequestTypeStatus).optional(),
+  status: z.nativeEnum(RequestTypeStatus),
 });
 
 export const updateRequestTypeValidation = z.object({
-  name: z.string().trim().min(1).max(255).optional(),
-  category: z.string().trim().min(1).optional(),
-  prefix: z.string().trim().min(1).max(20).optional(),
+  name: z.string().trim().min(1).max(255),
+  category: z.string().trim().min(1),
+  prefix: z.string().trim().min(1).max(20),
   description: z.string().trim().max(1000).optional().nullable(),
-  status: z.nativeEnum(RequestTypeStatus).optional(),
+  status: z.nativeEnum(RequestTypeStatus),
 });
 
 export const requestTypeFilterValidation = z.object({

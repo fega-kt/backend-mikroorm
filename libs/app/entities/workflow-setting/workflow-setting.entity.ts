@@ -25,41 +25,6 @@ export enum SelfApproval {
   Skip = "skip",
 }
 
-export enum WfEndResult {
-  Approved = "approved",
-  Rejected = "rejected",
-}
-
-export enum WfNodeType {
-  Start = "start",
-  Approval = "approval",
-  End = "end",
-}
-
-export enum ConditionOperator {
-  Eq = "eq",
-  Ne = "ne",
-  Gt = "gt",
-  Lt = "lt",
-  Gte = "gte",
-  Lte = "lte",
-  Contains = "contains",
-  NotContains = "notContains",
-}
-
-export interface ConditionRule {
-  field: string;
-  operator: ConditionOperator;
-  value: string;
-}
-
-export interface WfEdgeCondition {
-  label: string;
-  rules: ConditionRule[];
-  logic: "and" | "or";
-  isDefault?: boolean;
-}
-
 export interface ApproverConfig {
   type: ApproverType;
   /** Single ID — used for dept, role */
@@ -71,41 +36,11 @@ export interface ApproverConfig {
   fieldPath?: string;
 }
 
-export interface WfStartData {
-  label: string;
-}
-
 export interface WfApprovalData {
   title: string;
   approvers: ApproverConfig[];
   approvalType: ApprovalType;
   selfApproval: SelfApproval;
-}
-
-export interface WfEndData {
-  label: string;
-  result: WfEndResult;
-}
-
-export type WfNodeData = WfStartData | WfApprovalData | WfEndData;
-
-export interface WfNode {
-  id: string;
-  type: WfNodeType;
-  position: { x: number; y: number };
-  data: WfNodeData;
-}
-
-export interface WfEdge {
-  id: string;
-  source: string;
-  target: string;
-  condition?: WfEdgeCondition;
-}
-
-export interface WorkflowDefinition {
-  nodes: WfNode[];
-  edges: WfEdge[];
 }
 
 @Entity({ tableName: "workflow_settings" })
@@ -122,6 +57,16 @@ export class WorkflowSettingEntity extends BaseEntity {
   @Property({ type: types.text, nullable: true })
   description?: string;
 
-  @Property({ nullable: true })
-  workflowDefinition?: WorkflowDefinition;
+  /** Approval step config, keyed by the BPMN element id (bpmn:UserTask) it belongs to */
+  @Property({ type: "json", nullable: true })
+  approvalConfig?: Record<string, WfApprovalData>;
+
+  /** Flowable process definition key deployed for this template — set after a successful deploy.
+   *  No deploymentId is stored (matches v5's WorkflowSettingEntity): the BPMN XML is fetched from
+   *  Flowable on demand by resolving this key to its latest process definition
+   *  (FlowableService.getLatestProcessDefinitionByKey + getProcessDefinitionResourceXml) when the
+   *  admin reopens the editor — running instances stay pinned to their own version via Flowable's
+   *  own processInstanceId binding, unaffected by later redeploys under the same key. */
+  @Property({ type: types.string, nullable: true })
+  processDefinitionKey?: string;
 }
