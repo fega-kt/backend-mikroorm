@@ -1,4 +1,5 @@
 import { SYSTEM_DEPARTMENT_ID, SYSTEM_PRINCIPAL_ID, SYSTEM_USER_ID } from "@common/constants/system.constant";
+import { ENV } from "@config/env.config";
 import { EntityManager } from "@mikro-orm/core";
 import { PostgreSqlConnection } from "@mikro-orm/postgresql";
 import { Injectable, Logger, OnApplicationBootstrap } from "@nestjs/common";
@@ -14,6 +15,9 @@ export class DatabaseSeedService implements OnApplicationBootstrap {
     const knex = (this.em.getConnection() as PostgreSqlConnection).getKnex();
     await knex.transaction(async (trx: Knex.Transaction) => {
       await trx.raw("SET LOCAL session_replication_role = replica");
+      // Raw SQL below is unqualified table names — bypasses MikroORM's schema-aware query
+      // builder, so it must set search_path itself instead of relying on the session default.
+      await trx.raw("SET LOCAL search_path TO ??", [ENV.DB_SCHEMA]);
       await trx.raw(
         `INSERT INTO departments (id, created_at, updated_at, deleted, created_by_id, updated_by_id, code, name, status)
          VALUES ('${SYSTEM_DEPARTMENT_ID}', NOW(), NOW(), true, '${SYSTEM_USER_ID}', '${SYSTEM_USER_ID}', 'SYS', 'System', 0)

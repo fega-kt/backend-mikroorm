@@ -16,6 +16,7 @@ export const ENV = {
   CORS_ORIGINS: process.env.CORS_ORIGINS,
   DATABASE_URL: process.env.DATABASE_URL,
   DB_NAME: process.env.DB_NAME || "zhizhu",
+  DB_SCHEMA: process.env.DB_SCHEMA || "public",
   R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
   R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY,
   R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_KEY,

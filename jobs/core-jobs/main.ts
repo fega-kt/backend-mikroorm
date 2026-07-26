@@ -26,6 +26,8 @@ async function bootstrap() {
     ========================================
     🚀 be-core-job : ${ENV.NODE_ENV}
     🌐 PORT        : ${port}
+    📦 DATABASE    : ${ENV.DB_NAME}
+    📂 SCHEMA      : ${ENV.DB_SCHEMA}
     ========================================
     `);
 }

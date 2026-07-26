@@ -9,6 +9,7 @@ const config: Options<PostgreSqlDriver> = {
   driver: PostgreSqlDriver,
   clientUrl: ENV.DATABASE_URL,
   dbName: ENV.DB_NAME,
+  schema: ENV.DB_SCHEMA,
   debug: isDev,
   logger: isDev
     ? (message: string) => {
