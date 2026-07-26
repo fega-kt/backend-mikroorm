@@ -238,6 +238,81 @@ export enum PermissionType {
   /** xóa workflow setting */
   DeleteWorkflowSetting = "permission:workflow-setting:delete",
 
+  /** deploy BPMN cho workflow setting */
+  DeployWorkflowSetting = "permission:workflow-setting:deploy",
+
+  /** ===== WORKFLOW INSTANCE ===== */
+
+  /** vào menu workflow instance */
+  MenuWorkflowInstance = "permission:menu:workflow-instance",
+
+  /** xem chi tiết workflow instance */
+  ViewWorkflowInstanceDetail = "permission:workflow-instance:view",
+
+  /** tạo workflow instance */
+  CreateWorkflowInstance = "permission:workflow-instance:create",
+
+  /** cập nhật workflow instance */
+  UpdateWorkflowInstance = "permission:workflow-instance:update",
+
+  /** hủy workflow instance đang chạy */
+  CancelWorkflowInstance = "permission:workflow-instance:cancel",
+
+  /** ===== WORKFLOW TASK ===== */
+
+  /** vào menu việc cần duyệt (my tasks) */
+  MenuWorkflowTask = "permission:menu:workflow-task",
+
+  /** xem chi tiết workflow task */
+  ViewWorkflowTaskDetail = "permission:workflow-task:view",
+
+  /** duyệt workflow task */
+  ApproveWorkflowTask = "permission:workflow-task:approve",
+
+  /** từ chối workflow task */
+  RejectWorkflowTask = "permission:workflow-task:reject",
+
+  /** trả lại workflow task */
+  ReturnWorkflowTask = "permission:workflow-task:return",
+
+  /** yêu cầu bổ sung thông tin (RFI) */
+  RequestChangeWorkflowTask = "permission:workflow-task:request-change",
+
+  /** nộp lại thông tin bổ sung (RFI) */
+  ApplyChangeWorkflowTask = "permission:workflow-task:apply-change",
+
+  /** tạo yêu cầu soát xét (review subtask) */
+  RequestReviewWorkflowTask = "permission:workflow-task:request-review",
+
+  /** nộp kết quả soát xét */
+  SubmitReviewWorkflowTask = "permission:workflow-task:submit-review",
+
+  /** gửi yêu cầu hủy phiếu (cần duyệt hủy) */
+  RequestToCancelWorkflowInstance = "permission:workflow-instance:request-to-cancel",
+
+  /** duyệt yêu cầu hủy phiếu */
+  ApproveCancellationWorkflowInstance = "permission:workflow-instance:approve-cancellation",
+
+  /** từ chối yêu cầu hủy phiếu */
+  RejectCancellationWorkflowInstance = "permission:workflow-instance:reject-cancellation",
+
+  /** ===== WORKFLOW DELEGATION SETTING ===== */
+
+  /** vào menu ủy quyền duyệt */
+  MenuWorkflowDelegationSetting = "permission:menu:workflow-delegation-setting",
+
+  /** xem chi tiết ủy quyền duyệt */
+  ViewWorkflowDelegationSettingDetail = "permission:workflow-delegation-setting:view",
+
+  /** tạo ủy quyền duyệt */
+  CreateWorkflowDelegationSetting = "permission:workflow-delegation-setting:create",
+
+  /** cập nhật ủy quyền duyệt */
+  UpdateWorkflowDelegationSetting = "permission:workflow-delegation-setting:update",
+
+  /** xóa ủy quyền duyệt */
+  DeleteWorkflowDelegationSetting = "permission:workflow-delegation-setting:delete",
+
   /** ===== GROUP ===== */
 
   /** vào menu group */

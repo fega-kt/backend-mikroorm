@@ -4,6 +4,7 @@ import { ResponseInterceptor } from "@common/interceptors/response.interceptor";
 import { MetricsService } from "@modules/metrics/metrics.service";
 import { ENV, NodeEnv } from "@config/env.config";
 import handleApplySwagger from "@config/swagger.config";
+import { MikroORM } from "@mikro-orm/core";
 import { PermissionsGuard } from "@core-service/guards/permissions.guard";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { WINSTON_MODULE_NEST_PROVIDER } from "nest-winston";
@@ -18,6 +19,9 @@ async function bootstrap() {
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true,
   });
+
+  const orm = app.get(MikroORM);
+  await orm.schema.updateSchema({ safe: true });
 
   app.getHttpAdapter().getInstance().set("trust proxy", 1);
   const httpAdapter = app.getHttpAdapter();

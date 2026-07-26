@@ -3,10 +3,11 @@ import { EntityData } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { PrincipalEntity } from "@core-service/entities/principal";
+import { FlowableService } from "@modules/flowable/flowable.service";
 import { BadRequestException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { z } from "zod";
 import { CategoryEntity } from "../../entities/category";
-import { ApproverType, WfApprovalData, WfNodeType, WorkflowSettingEntity } from "../../entities/workflow-setting";
+import { ApproverType, WfApprovalData, WorkflowSettingEntity } from "../../entities/workflow-setting";
 import {
   createWorkflowSettingValidation,
   updateWorkflowSettingValidation,
@@ -20,28 +21,26 @@ export class WorkflowSettingService extends BaseService<WorkflowSettingEntity> {
     protected readonly repo: EntityRepository<WorkflowSettingEntity>,
     @InjectRepository(PrincipalEntity)
     private readonly principalRepo: EntityRepository<PrincipalEntity>,
+    private readonly flowableService: FlowableService,
   ) {
     super();
   }
 
-  private collectApproverIds(wf: WorkflowSettingEntity["workflowDefinition"]): string[] {
-    if (!wf) return [];
+  private collectApproverIds(approvalConfig: WorkflowSettingEntity["approvalConfig"]): string[] {
+    if (!approvalConfig) return [];
     const ids = new Set<string>();
-    for (const node of wf.nodes) {
-      if (node.type === WfNodeType.Approval) {
-        const data = node.data as WfApprovalData;
-        for (const approver of data.approvers) {
-          if (approver.type === ApproverType.User && approver.approvers?.length) {
-            approver.approvers.forEach((uid) => ids.add(uid));
-          }
+    for (const data of Object.values(approvalConfig)) {
+      for (const approver of data.approvers) {
+        if (approver.type === ApproverType.User && approver.approvers?.length) {
+          approver.approvers.forEach((uid) => ids.add(uid));
         }
       }
     }
     return [...ids];
   }
 
-  private async validateApproverIds(wf: WorkflowSettingEntity["workflowDefinition"]) {
-    const ids = this.collectApproverIds(wf);
+  private async validateApproverIds(approvalConfig: WorkflowSettingEntity["approvalConfig"]) {
+    const ids = this.collectApproverIds(approvalConfig);
     if (!ids.length) return;
     const found = await this.principalRepo.find({ id: { $in: ids }, deleted: { $ne: true } }, { fields: ["id"] });
     if (found.length !== ids.length) {
@@ -52,7 +51,7 @@ export class WorkflowSettingService extends BaseService<WorkflowSettingEntity> {
   }
 
   async createWorkflowSetting(data: z.infer<typeof createWorkflowSettingValidation>) {
-    await this.validateApproverIds(data.workflowDefinition ?? undefined);
+    await this.validateApproverIds(data.approvalConfig ?? undefined);
     const em = this.repo.getEntityManager();
     const category = em.getReference(CategoryEntity, data.category);
     return this.addOne({
@@ -80,28 +79,16 @@ export class WorkflowSettingService extends BaseService<WorkflowSettingEntity> {
     const setting = await this.findOne(
       { id, deleted: { $ne: true } },
       {
-        fields: ["id", "name", "status", "description", "workflowDefinition", "createdAt", "category", "category.id", "category.name"],
+        fields: ["id", "name", "status", "description", "approvalConfig", "createdAt", "category", "category.id", "category.name"],
         populate: ["category"],
       },
     );
     if (!setting) throw new NotFoundException("Workflow setting not found");
 
-    const wf = setting.workflowDefinition;
-    if (!wf) return setting;
+    const approvalConfig = setting.approvalConfig;
+    if (!approvalConfig) return setting;
 
-    // Collect unique user IDs from all approval nodes
-    const userIds = new Set<string>();
-    for (const node of wf.nodes) {
-      if (node.type === WfNodeType.Approval) {
-        const data = node.data as WfApprovalData;
-        for (const approver of data.approvers) {
-          if (approver.type === ApproverType.User && approver.approvers?.length) {
-            approver.approvers.forEach((uid) => userIds.add(uid));
-          }
-        }
-      }
-    }
-
+    const userIds = new Set(this.collectApproverIds(approvalConfig));
     if (!userIds.size) return setting;
 
     // Single batch query for all referenced principals
@@ -114,34 +101,29 @@ export class WorkflowSettingService extends BaseService<WorkflowSettingEntity> {
     );
     const userMap = new Map(principals.map((p) => [p.id, p]));
 
-    // Enrich approval nodes in-place (no flush → no DB write)
-    const enrichedNodes = wf.nodes.map((node) => {
-      if (node.type !== WfNodeType.Approval) return node;
-      const data = node.data as WfApprovalData;
-      return {
-        ...node,
-        data: {
-          ...data,
-          approvers: data.approvers.map((approver) => {
-            if (approver.type !== ApproverType.User || !approver.approvers?.length) return approver;
-            return {
-              ...approver,
-              approvers: approver.approvers.map((uid) => userMap.get(uid) ?? { id: uid }),
-            };
-          }),
-        },
+    // Enrich approver entries in-place (no flush → no DB write)
+    const enriched: Record<string, WfApprovalData> = {};
+    for (const [nodeId, data] of Object.entries(approvalConfig)) {
+      enriched[nodeId] = {
+        ...data,
+        approvers: data.approvers.map((approver) => {
+          if (approver.type !== ApproverType.User || !approver.approvers?.length) return approver;
+          return {
+            ...approver,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- enriched shape (Principal objects) intentionally diverges from the stored string[] shape for display
+            approvers: approver.approvers.map((uid) => userMap.get(uid) ?? { id: uid }) as any,
+          };
+        }),
       };
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (setting as any).workflowDefinition = { nodes: enrichedNodes, edges: wf.edges };
+    }
+    setting.approvalConfig = enriched;
     return setting;
   }
 
   async updateWorkflowSetting(id: string, data: z.infer<typeof updateWorkflowSettingValidation>) {
     const setting = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!setting) throw new NotFoundException("Workflow setting not found");
-    await this.validateApproverIds(data.workflowDefinition ?? undefined);
+    await this.validateApproverIds(data.approvalConfig ?? undefined);
     const { category, ...rest } = data;
     const update: EntityData<WorkflowSettingEntity> = { ...rest };
     if (category) {
@@ -154,5 +136,37 @@ export class WorkflowSettingService extends BaseService<WorkflowSettingEntity> {
     const setting = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!setting) throw new NotFoundException("Workflow setting not found");
     return this.remove(id);
+  }
+
+  /**
+   * Forwards an already-built BPMN 2.0 XML file to flowable-helper for deployment. BPMN authoring
+   * itself happens outside this backend (matching v5's frontend-rfa role) — the caller supplies
+   * processDefinitionKey because that's the process id they baked into the XML before uploading
+   * (`<bpmn:process id="...">`); Flowable's deploy response doesn't expose it directly. No
+   * deploymentId is stored — the latest process definition for this key is resolved on demand.
+   */
+  async deployWorkflowSetting(id: string, file: Express.Multer.File, processDefinitionKey: string) {
+    const setting = await this.repo.findOne({ id, deleted: { $ne: true } });
+    if (!setting) throw new NotFoundException("Workflow setting not found");
+    if (!file) throw new BadRequestException("BPMN file is required");
+
+    await this.flowableService.deploy(file.buffer, file.originalname);
+
+    return this.updateOne(id, { processDefinitionKey });
+  }
+
+  /** The BPMN XML itself is never persisted in our DB (matches v5) — fetched from Flowable on
+   *  demand by resolving processDefinitionKey to its latest process definition, so the admin
+   *  always reopens the real, current diagram to keep editing. */
+  async getWorkflowSettingBpmnXml(id: string): Promise<{ xml: string | null }> {
+    const setting = await this.repo.findOne({ id, deleted: { $ne: true } });
+    if (!setting) throw new NotFoundException("Workflow setting not found");
+    if (!setting.processDefinitionKey) return { xml: null };
+
+    const definition = await this.flowableService.getLatestProcessDefinitionByKey(setting.processDefinitionKey);
+    if (!definition) return { xml: null };
+
+    const xml = await this.flowableService.getProcessDefinitionResourceXml(definition.id);
+    return { xml };
   }
 }

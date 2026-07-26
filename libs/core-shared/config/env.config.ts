@@ -43,4 +43,9 @@ export const ENV = {
   CACHE_DRIVER: (process.env.CACHE_DRIVER as "redis" | "cloudflare") || "redis",
 
   RABBITMQ_URL: process.env.RABBITMQ_URL,
+
+  FLOWABLE_REST_BASE_URL: process.env.FLOWABLE_REST_BASE_URL || "http://localhost:8080/flowable-rest/service/process-api",
+  FLOWABLE_SVC_USER: process.env.FLOWABLE_SVC_USER || "admin",
+  FLOWABLE_SVC_PASSWORD: process.env.FLOWABLE_SVC_PASSWORD || "admin",
+  INTERNAL_SERVICE_TOKEN: process.env.INTERNAL_SERVICE_TOKEN,
 };

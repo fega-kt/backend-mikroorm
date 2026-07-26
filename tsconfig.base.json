@@ -34,6 +34,7 @@
       "@modules/mail/*":               ["libs/core/modules/mail/*"],
       "@modules/supabase/*":           ["libs/core/modules/supabase/*"],
       "@modules/health/*":             ["libs/core/modules/health/*"],
+      "@modules/flowable/*":           ["libs/core/modules/flowable/*"],
 
       "@core-service":                 ["libs/core-service/index.ts"],
       "@core-service/*":               ["libs/core-service/*"],
