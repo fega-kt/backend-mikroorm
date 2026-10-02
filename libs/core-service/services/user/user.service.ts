@@ -51,7 +51,7 @@ export class UserService extends BaseService<UserEntity> {
       throw new ConflictException("This email is already registered");
     }
 
-    await this.supabaseService
+    const authUser = await this.supabaseService
       .createUser({ email: loginName, password, emailConfirm: true, userMetadata: { fullName } })
       .catch((error: unknown) => {
         if (isAuthApiError(error) && error.code === "email_exists") {
@@ -64,6 +64,7 @@ export class UserService extends BaseService<UserEntity> {
     const res = await this.em.transactional(async (em) => {
       // 1️⃣ create user
       const user = this.repo.create({
+        authId: authUser.id,
         fullName,
         loginName,
         workEmail,
@@ -167,7 +168,50 @@ export class UserService extends BaseService<UserEntity> {
 
     const update: EntityData<UserEntity> = { ...rest, department: this.em.getReference(DepartmentEntity, department) };
 
-    return await this.updateOne(id, update);
+    return await this.updateUserAndPrincipal(id, update);
+  }
+
+  /** Cập nhật user; nếu fullName đổi thì đồng bộ principal.name và user_metadata trên Supabase */
+  private async updateUserAndPrincipal(id: string, data: EntityData<UserEntity>): Promise<UserEntity> {
+    const baseUpdate = this.getDefaultValuesForUpdate();
+    let principalId: string | undefined;
+    let nameChanged = false;
+
+    const user = await this.em.transactional(async (em) => {
+      const user = await em.findOne(UserEntity, { id, deleted: { $ne: true } });
+      if (!user) {
+        throw new NotFoundException("User not found or deleted");
+      }
+
+      nameChanged = data.fullName !== undefined && data.fullName !== user.fullName;
+      em.assign(user, { ...data, ...baseUpdate });
+
+      if (nameChanged) {
+        const principal = await em.findOne(PrincipalEntity, { user });
+        if (principal) {
+          em.assign(principal, { name: user.fullName, ...baseUpdate });
+          principalId = principal.id;
+        }
+      }
+
+      await em.flush();
+      return user;
+    });
+
+    await Promise.all([
+      this.cache.del(this.cacheKey(id)),
+      this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`),
+      ...(nameChanged ? [this.cache.delByPattern("cache:principal:list:*")] : []),
+      ...(principalId ? [this.cache.del(`cache:principal:${principalId}`)] : []),
+    ]);
+
+    if (nameChanged && user.authId) {
+      void this.supabaseService.updateUserMetadata(user.authId, { fullName: user.fullName }).catch((error: Error) => {
+        this.logger.warn(`Failed to sync fullName to Supabase for ${user.loginName}: ${error.message}`);
+      });
+    }
+
+    return user;
   }
 
   private async assertDepartmentExists(id: string): Promise<void> {
@@ -178,7 +222,7 @@ export class UserService extends BaseService<UserEntity> {
   }
 
   async updateProfile(id: string, data: z.infer<typeof updateProfileValidation>) {
-    return await this.updateOne(id, data);
+    return await this.updateUserAndPrincipal(id, data);
   }
 
   async remove(id: string) {
