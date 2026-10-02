@@ -102,12 +102,12 @@ export class AuthService extends BaseService<UserEntity> {
 
     const user = await this.repo.findOne({ loginName: { $ilike: data.email }, deleted: { $ne: true } });
     if (!user) throw new BadRequestException("Invalid or expired OTP");
-
-    const supabaseUser = await this.supabaseService.listUsers().then((users) => users.find((u) => u.email === data.email));
-    if (!supabaseUser) throw new BadRequestException("User not found in auth system");
+    if (!user.authId) throw new BadRequestException("User not found in auth system");
 
     const newPassword = this.generatePassword();
-    await this.supabaseService.updateUserPassword(supabaseUser.id, newPassword);
+    await this.supabaseService.updateUserPassword(user.authId, newPassword).catch((error: Error) => {
+      throw new BadRequestException("Failed to update password: " + error.message);
+    });
     await this.cache.del(AuthCacheKey.forgotPasswordOtp(data.email));
 
     await this.sendNewPasswordMail(user.loginName, user.fullName, newPassword).catch((error: Error) => {
@@ -220,6 +220,8 @@ export class AuthService extends BaseService<UserEntity> {
     const payload = body?.user as Record<string, unknown> | undefined;
     const email = typeof payload?.email === "string" ? payload.email : undefined;
     if (!email) return { decision: "reject", message: "Email không hợp lệ" };
+    const authId = typeof payload?.id === "string" ? payload.id : undefined;
+    if (!authId) return { decision: "reject", message: "User id không hợp lệ" };
 
     const systemUser = { id: SYSTEM_USER_ID } as IUserResponse;
 
@@ -235,24 +237,30 @@ export class AuthService extends BaseService<UserEntity> {
             ? metadata.name
             : email.split("@")[0];
 
-      await this.createUserWithPrincipal(email, fullName, systemUser);
+      await this.createUserWithPrincipal(email, fullName, authId, systemUser);
       return { decision: "continue" };
     }
 
+    // Tài khoản Supabase được tạo mới → id mới, cập nhật lại authId
     if (user.deleted || !user.isActive) {
-      await this.updateOne(user.id, { deleted: false, isActive: true }, { user: systemUser });
+      await this.updateOne(user.id, { deleted: false, isActive: true, authId }, { user: systemUser });
       return { decision: "continue" };
+    }
+
+    if (user.authId !== authId) {
+      await this.updateOne(user.id, { authId }, { user: systemUser });
     }
 
     return { decision: "continue" };
   }
 
-  private async createUserWithPrincipal(email: string, fullName: string, systemUser: IUserResponse): Promise<void> {
+  private async createUserWithPrincipal(email: string, fullName: string, authId: string, systemUser: IUserResponse): Promise<void> {
     const defaultValues = this.getDefaultValuesForCreate({ user: systemUser });
     const em = this.repo.getEntityManager();
 
     await em.transactional(async (txEm) => {
       const user = this.repo.create({
+        authId,
         loginName: email,
         fullName,
         isActive: true,

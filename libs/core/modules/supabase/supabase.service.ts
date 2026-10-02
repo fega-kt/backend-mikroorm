@@ -28,12 +28,6 @@ export class SupabaseService {
     return data.user;
   }
 
-  async listUsers(): Promise<User[]> {
-    const { data, error } = await this.admin.auth.admin.listUsers();
-    if (error || !data) throw error ?? new Error("Failed to list users");
-    return data.users;
-  }
-
   async createUser(params: {
     email: string;
     password?: string;
@@ -48,6 +42,12 @@ export class SupabaseService {
     });
     if (error || !data.user) throw error ?? new Error("Failed to create user");
     return data.user;
+  }
+
+  /** Supabase merge user_metadata theo key, chỉ cần truyền các key thay đổi */
+  async updateUserMetadata(userId: string, userMetadata: Record<string, unknown>): Promise<void> {
+    const { error } = await this.admin.auth.admin.updateUserById(userId, { user_metadata: userMetadata });
+    if (error) throw error;
   }
 
   async updateUserPassword(userId: string, password: string): Promise<void> {

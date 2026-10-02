@@ -9,6 +9,10 @@ export class UserEntity extends BaseEntity {
   @Property({ unique: true, type: types.string })
   loginName!: string;
 
+  /** id của user bên Supabase Auth (auth.users.id) — null với system user (seed, không có tài khoản Supabase) */
+  @Property({ type: types.uuid, nullable: true, unique: true })
+  authId?: string;
+
   @Property({ type: types.string, nullable: true })
   workEmail?: string;
 
