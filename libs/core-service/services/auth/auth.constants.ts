@@ -8,7 +8,14 @@ export const AuthCacheKey = {
   loginOtp: (email: string) => `otp:login:${email}`,
   /** Rate limit gửi OTP đăng nhập (giới hạn 5 lần/giờ) */
   loginOtpRateLimit: (email: string) => `otp:login:ratelimit:${email}`,
+  /** Token đã verify với Supabase → { userId, email } */
+  token: (tokenHash: string) => `cache:auth:token:${tokenHash}`,
+  /** Thông tin user + permissions của guard — xoá khi user thay đổi để request sau load lại */
+  user: (userId: string) => `cache:auth:user:${userId}`,
 } as const;
+
+/** TTL cache auth (giây) */
+export const AUTH_CACHE_TTL = 300;
 
 export const AuthOtpConfig = {
   /** TTL OTP quên mật khẩu (giây) */
