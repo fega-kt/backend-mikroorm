@@ -51,8 +51,8 @@ importers:
         specifier: ^2.99.1
         version: 2.105.4
       '@zhizhu_dev/vault-start':
-        specifier: 1.0.1
-        version: 1.0.1
+        specifier: 1.0.4
+        version: 1.0.4
       amqplib:
         specifier: ^2.0.1
         version: 2.0.1
@@ -1032,8 +1032,8 @@ packages:
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
 
-  '@zhizhu_dev/vault-start@1.0.1':
-    resolution: {integrity: sha512-0rBcKJdUya7ZSMHpO7EPyDDNJf/Of/VnHFbHy0SAti7en0JT6nuOsL0DqUbc/kr0wqgVOJUFoY9eN23y6l6GYg==}
+  '@zhizhu_dev/vault-start@1.0.4':
+    resolution: {integrity: sha512-22NXYtZ8DVI7r3YyLuuUlRGy7YXV5iMW1OEtVl0+CRYhGiYMbn65G3vN5nSnleoWLNbgKrS9ADEVYLi6uPoV8A==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -4205,7 +4205,7 @@ snapshots:
 
   '@xtuc/long@4.2.2': {}
 
-  '@zhizhu_dev/vault-start@1.0.1': {}
+  '@zhizhu_dev/vault-start@1.0.4': {}
 
   abbrev@1.1.1: {}
 
