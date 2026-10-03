@@ -13,6 +13,7 @@ import { DepartmentEntity, DepartmentStatus } from "../../entities/department";
 import { PrincipalEntity, PrincipalType } from "../../entities/principal";
 import { UserEntity } from "../../entities/user";
 import { AppSettingService } from "../app-setting/app-setting.service";
+import { AuthCacheKey } from "../auth/auth.constants";
 import { UploadService } from "../upload/upload.service";
 import {
   createUserValidation,
@@ -199,7 +200,7 @@ export class UserService extends BaseService<UserEntity> {
     });
 
     await Promise.all([
-      this.cache.del(this.cacheKey(id)),
+      this.cache.del(this.cacheKey(id), AuthCacheKey.user(id)),
       this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`),
       ...(nameChanged ? [this.cache.delByPattern("cache:principal:list:*")] : []),
       ...(principalId ? [this.cache.del(`cache:principal:${principalId}`)] : []),
@@ -226,7 +227,9 @@ export class UserService extends BaseService<UserEntity> {
   }
 
   async remove(id: string) {
-    return await super.remove(id);
+    const result = await super.remove(id);
+    await this.cache.del(AuthCacheKey.user(id));
+    return result;
   }
 
   async updateActive(id: string, isActive: boolean) {
@@ -252,12 +255,15 @@ export class UserService extends BaseService<UserEntity> {
       }
     }
 
-    return await this.updateOne(id, { isActive });
+    const result = await this.updateOne(id, { isActive });
+    await this.cache.del(AuthCacheKey.user(id));
+    return result;
   }
 
   async uploadAvatar(id: string, file: Express.Multer.File) {
     const { url } = await this.uploadService.upload(file, `${STORAGE_PATH.USER_AVATAR}/${id}`);
     await this.updateOne(id, { avatar: url });
+    await this.cache.del(AuthCacheKey.user(id));
     return url;
   }
 

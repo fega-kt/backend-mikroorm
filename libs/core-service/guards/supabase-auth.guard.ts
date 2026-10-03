@@ -12,6 +12,7 @@ import { createHash } from "crypto";
 import { compact, uniq } from "lodash";
 import { RoleEntity } from "../entities/role";
 import { UserEntity } from "../entities/user";
+import { AUTH_CACHE_TTL, AuthCacheKey } from "../services/auth/auth.constants";
 
 // 400 ngày
 const LAST_ACTIVE_TTL_SECONDS = 400 * 24 * 3600;
@@ -57,16 +58,19 @@ export class SupabaseAuthGuard implements CanActivate {
     }
 
     try {
-      const cacheKey = `cache:auth:${createHash("sha256").update(token).digest("hex")}`;
-      const cached = await this.cache.get<Omit<IUserResponse, "canAccess">>(cacheKey);
+      const tokenKey = AuthCacheKey.token(createHash("sha256").update(token).digest("hex"));
+      let session = await this.cache.get<{ userId: string; email: string }>(tokenKey);
 
-      if (cached) {
-        request.user = { ...cached, canAccess: (pers: PermissionType[]) => pers.some((per) => cached.permissions?.includes(per)) };
-        this.refreshLastActive(cached.id);
-        return true;
+      if (session) {
+        const cached = await this.cache.get<Omit<IUserResponse, "canAccess">>(AuthCacheKey.user(session.userId));
+        if (cached) {
+          request.user = { ...cached, canAccess: (pers: PermissionType[]) => pers.some((per) => cached.permissions?.includes(per)) };
+          this.refreshLastActive(cached.id);
+          return true;
+        }
       }
 
-      const email: string | undefined = await this.verifyToken(token);
+      const email = session?.email ?? (await this.verifyToken(token));
       if (!email) {
         throw new UnauthorizedException("Could not extract email from token");
       }
@@ -75,7 +79,11 @@ export class SupabaseAuthGuard implements CanActivate {
       this.refreshLastActive(user.id);
 
       const { canAccess: _, ...cacheable } = user;
-      await this.cache.set(cacheKey, cacheable, 300);
+      session ??= { userId: user.id, email };
+      await Promise.all([
+        this.cache.set(tokenKey, session, AUTH_CACHE_TTL),
+        this.cache.set(AuthCacheKey.user(user.id), cacheable, AUTH_CACHE_TTL),
+      ]);
 
       return true;
     } catch (error) {
