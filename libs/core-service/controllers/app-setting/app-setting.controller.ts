@@ -24,6 +24,13 @@ export class AppSettingController {
     return this.appSettingService.getVisibleList(query.page, query.limit, query.keyword);
   }
 
+  /** Đặt trước các route ":key" để "available-keys" không bị hiểu là một key */
+  @Get("available-keys")
+  @Permissions(PermissionType.CreateAppSetting)
+  getAvailableKeys() {
+    return this.appSettingService.getAvailableKeys();
+  }
+
   @Get(":key/history")
   @Permissions(PermissionType.ViewAppSettingDetail)
   getHistory(

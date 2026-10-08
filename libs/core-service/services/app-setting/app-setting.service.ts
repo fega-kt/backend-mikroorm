@@ -1,4 +1,4 @@
-import { serialize } from "@mikro-orm/core";
+import { FilterQuery, serialize } from "@mikro-orm/core";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, Injectable, Logger, NotFoundException, Scope } from "@nestjs/common";
@@ -84,29 +84,42 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
 
   /* ================= MÀN QUẢN LÝ ================= */
 
-  /**
-   * Danh sách cho màn quản lý: đủ mọi key isShow kèm type, key chưa cấu hình thì value = null.
-   * keyword lọc theo key hoặc ghi chú; lọc sau khi ghép vì key chưa cấu hình không có bản ghi trong DB.
-   */
-  async getVisibleList(page = 1, limit = 10, keyword?: string) {
-    const visibleKeys = (Object.keys(APP_SETTING_META) as AppSettingType[]).filter((key) => APP_SETTING_META[key].isShow);
-
-    const settings = await this.repo.find(
-      { key: { $in: visibleKeys }, deleted: { $ne: true } },
-      { fields: [...DETAIL_FIELDS], populate: ["updatedBy"] },
-    );
-    const byKey = new Map(serialize(settings, { populate: ["updatedBy"], forceObject: true }).map((s) => [s.key, s]));
-
-    const rows = visibleKeys.map((key) => this.toRow(key, byKey.get(key)));
-    const search = keyword?.toLowerCase();
-    const filtered = search
-      ? rows.filter((row) => row.key.includes(search) || (row as { description?: string }).description?.toLowerCase().includes(search))
-      : rows;
-
-    // Phân trang sau khi ghép + lọc vì key chưa cấu hình không có bản ghi trong DB
-    return { data: filtered.slice((page - 1) * limit, page * limit), total: filtered.length };
+  private getVisibleKeys() {
+    return (Object.keys(APP_SETTING_META) as AppSettingType[]).filter((key) => APP_SETTING_META[key].isShow);
   }
 
+  /**
+   * Danh sách cho màn quản lý: chỉ các key isShow đã có giá trị trong DB, kèm type/rule để FE dựng input.
+   * Phân trang, tìm kiếm (key hoặc ghi chú) và sắp xếp (cập nhật mới nhất trước) đều làm ở DB.
+   */
+  async getVisibleList(page = 1, limit = 10, keyword?: string) {
+    const filter: FilterQuery<AppSettingEntity> = { key: { $in: this.getVisibleKeys() }, deleted: { $ne: true } };
+    if (keyword) {
+      // Escape ký tự đặc biệt của LIKE để tìm đúng chuỗi người dùng nhập
+      const pattern = `%${keyword.replace(/[\\%_]/g, "\\$&")}%`;
+      filter.$or = [{ key: { $ilike: pattern } }, { description: { $ilike: pattern } }];
+    }
+
+    const { data, total } = await this.paginate(filter, {
+      page,
+      limit,
+      fields: ["id", ...DETAIL_FIELDS],
+      populate: ["updatedBy"],
+      sort: { updatedAt: "DESC" },
+    });
+
+    const rows = serialize(data, { populate: ["updatedBy"], forceObject: true }).map((setting) => this.toRow(setting.key, setting));
+    return { data: rows, total };
+  }
+
+  /** Các key hiển thị nhưng chưa có giá trị trong DB, kèm type/rule để FE dựng input khi thêm mới */
+  async getAvailableKeys() {
+    const configured = await this.repo.find({ deleted: { $ne: true } }, { fields: ["key"] });
+    const configuredKeys = new Set(configured.map((setting) => setting.key));
+    return this.getVisibleKeys()
+      .filter((key) => !configuredKeys.has(key))
+      .map((key) => ({ key, type: APP_SETTING_META[key].type, rule: this.getClientRule(key) ?? null }));
+  }
   async getDetail(key: AppSettingType) {
     this.assertVisible(key);
     const setting = await this.repo.findOne({ key, deleted: { $ne: true } }, { fields: [...DETAIL_FIELDS], populate: ["updatedBy"] });
