@@ -4,6 +4,7 @@ import { AppRoute } from "../../entities/route";
 import { about, access, home, outside, personalCenter, routeNest } from "./order";
 import { ProjectManagementRouteService } from "./project-management";
 import { SettingManagementRouteService } from "./setting-management";
+import { SystemConfigRouteService } from "./system-config";
 import { SystemManagementService } from "./system-management";
 
 const aboutRouter = {
@@ -157,6 +158,7 @@ export class RouteService {
     private readonly systemManagementRouteService: SystemManagementService,
     private readonly projectManagementRouteService: ProjectManagementRouteService,
     private readonly settingManagementRouteService: SettingManagementRouteService,
+    private readonly systemConfigRouteService: SystemConfigRouteService,
   ) {}
 
   /**Get route by use */
@@ -229,6 +231,7 @@ export class RouteService {
     const systemManagementRouter = this.systemManagementRouteService.getRouteUserManagement();
     const projectManagementRouter = this.projectManagementRouteService.getRouteProjectManagement();
     const settingManagementRouter = this.settingManagementRouteService.getRouteSettingManagement();
+    const systemConfigRouter = this.systemConfigRouteService.getRouteSystemConfig();
     return compact([
       homeRouter,
       // accessRouter,
@@ -236,6 +239,7 @@ export class RouteService {
       projectManagementRouter,
       settingManagementRouter,
       systemManagementRouter,
+      systemConfigRouter,
       // outsideRouter,
       personalCenterRouter,
       // routeNestRouter,

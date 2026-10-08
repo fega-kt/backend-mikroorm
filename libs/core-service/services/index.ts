@@ -5,7 +5,13 @@ import { GroupService } from "./group";
 import { DepartmentService } from "./department";
 import { PrincipalService } from "./principal";
 import { AppSettingService } from "./app-setting";
-import { RouteService, ProjectManagementRouteService, SettingManagementRouteService, SystemManagementService } from "./route";
+import {
+  RouteService,
+  ProjectManagementRouteService,
+  SettingManagementRouteService,
+  SystemConfigRouteService,
+  SystemManagementService,
+} from "./route";
 import { ActivityLogService } from "./activity-log";
 import { ActivityLogQueueService } from "./activity-log-queue";
 import { NotificationService } from "./notification";
@@ -22,6 +28,7 @@ export {
   RouteService,
   ProjectManagementRouteService,
   SettingManagementRouteService,
+  SystemConfigRouteService,
   SystemManagementService,
   ActivityLogService,
   ActivityLogQueueService,
@@ -41,6 +48,7 @@ export const coreServices = [
   RouteService,
   ProjectManagementRouteService,
   SettingManagementRouteService,
+  SystemConfigRouteService,
   SystemManagementService,
   ActivityLogService,
   ActivityLogQueueService,

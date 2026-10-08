@@ -218,8 +218,17 @@ export enum PermissionType {
   /** vào menu app setting */
   MenuAppSetting = "permission:menu:app-setting",
 
+  /** xem chi tiết app setting */
+  ViewAppSettingDetail = "permission:app-setting:view",
+
+  /** thiết lập giá trị cho app setting chưa cấu hình */
+  CreateAppSetting = "permission:app-setting:create",
+
   /** cập nhật app setting */
   UpdateAppSetting = "permission:app-setting:update",
+
+  /** xóa giá trị app setting (về trạng thái chưa cấu hình) */
+  DeleteAppSetting = "permission:app-setting:delete",
 
   /** ===== WORKFLOW SETTING ===== */
 
