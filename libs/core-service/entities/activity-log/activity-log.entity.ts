@@ -41,4 +41,8 @@ export class ActivityLogEntity extends BaseEntity {
 
   @Property({ type: types.string })
   device!: string;
+
+  // "N/A" for rows created before request ids existed or outside an HTTP request
+  @Property({ type: types.string, default: "N/A" })
+  requestId!: string;
 }
