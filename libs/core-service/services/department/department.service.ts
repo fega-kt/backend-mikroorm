@@ -108,17 +108,18 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     const parentCode = parent ? (parent.parentCode ? `${parent.parentCode}.${parent.code}` : parent.code) : null;
 
     const [manager, deputy] = await Promise.all([
-      managerId ? this.resolveUser(managerId) : undefined,
-      deputyId ? this.resolveUser(deputyId) : undefined,
+      managerId ? this.resolveUser(managerId) : null,
+      deputyId ? this.resolveUser(deputyId) : null,
     ]);
 
     const oldData = (await this.loadLogData([id])).get(id);
+    // PUT gửi đủ dữ liệu: không truyền (hoặc truyền rỗng) trưởng/phó phòng nghĩa là bỏ trống
     const updated = await this.updateOne(id, {
       ...rest,
       parent: parent?.id ?? undefined,
       parentCode,
-      ...(managerId !== undefined && { manager: manager ?? null }),
-      ...(deputyId !== undefined && { deputy: deputy ?? null }),
+      manager,
+      deputy,
     });
 
     const newData = (await this.loadLogData([id])).get(id);
