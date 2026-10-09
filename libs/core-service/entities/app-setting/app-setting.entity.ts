@@ -13,6 +13,9 @@ export enum AppSettingType {
   INACTIVE_DAYS_THRESHOLD = "inactive_days_threshold",
   INACTIVE_EMAIL_ALLOWED_LIST = "inactive_email_allowed_list",
 
+  // ===== UI (client) =====
+  CONTENT_FOCUS_OUTLINE_ENABLED = "content_focus_outline_enabled",
+
   // ===== MAIL TEMPLATES (notification) =====
   MAIL_TEMPLATE_INACTIVE_REMINDER = "mail_template_inactive_reminder",
 }

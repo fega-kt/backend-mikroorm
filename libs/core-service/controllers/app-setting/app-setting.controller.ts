@@ -24,7 +24,13 @@ export class AppSettingController {
     return this.appSettingService.getVisibleList(query.page, query.limit, query.keyword);
   }
 
-  /** Đặt trước các route ":key" để "available-keys" không bị hiểu là một key */
+  /** Mọi user đăng nhập đều gọi được (không yêu cầu permission); chỉ trả các key clientVisible */
+  @Get("client")
+  getClientSettings() {
+    return this.appSettingService.getClientSettings();
+  }
+
+  /** Đặt trước các route ":key" để "available-keys" và "client" không bị hiểu là một key */
   @Get("available-keys")
   @Permissions(PermissionType.CreateAppSetting)
   getAvailableKeys() {

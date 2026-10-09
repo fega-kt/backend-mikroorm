@@ -82,6 +82,19 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
     return this.repo.find({ deleted: { $ne: true } });
   }
 
+  /**
+   * Setting cho client: map key -> value của các key khai báo clientVisible và đã có giá trị.
+   * Chỉ whitelist theo meta, không bao giờ trả toàn bộ bảng.
+   */
+  async getClientSettings(): Promise<Record<string, SettingValue>> {
+    const keys = (Object.keys(APP_SETTING_META) as AppSettingType[]).filter((key) => APP_SETTING_META[key].clientVisible);
+    if (!keys.length) return {};
+
+    const settings = await this.repo.find({ key: { $in: keys }, deleted: { $ne: true } }, { fields: ["key", "value"] });
+    // Chuẩn hóa theo type khai báo trong meta để client luôn nhận đúng kiểu (boolean là boolean, number là number)
+    return Object.fromEntries(settings.map((setting) => [setting.key, this.normalizeValue(setting.key, setting.value) as SettingValue]));
+  }
+
   /* ================= MÀN QUẢN LÝ ================= */
 
   private getVisibleKeys() {
