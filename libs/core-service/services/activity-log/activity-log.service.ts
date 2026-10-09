@@ -1,3 +1,4 @@
+import { getRequestInfo } from "@common/request-context";
 import { BaseService } from "@common/base/base.service";
 import { IUserResponse } from "@common/base/consts";
 import { EntityRepository, FilterQuery, RequiredEntityData } from "@mikro-orm/core";
@@ -17,7 +18,8 @@ export class ActivityLogService extends BaseService<ActivityLogEntity> {
   async addOne(data: RequiredEntityData<ActivityLogEntity>, options?: { user?: IUserResponse }) {
     const ip = this.request?.ip || "N/A";
     const device = this.request?.headers["user-agent"] || "N/A";
-    return super.addOne({ ...data, ip, device }, options);
+    const requestId = getRequestInfo()?.requestId || "N/A";
+    return super.addOne({ ...data, ip, device, requestId }, options);
   }
 
   findByParent(parentId: string, page: number, limit: number, action?: ActivityLogAction) {
@@ -36,6 +38,7 @@ export class ActivityLogService extends BaseService<ActivityLogEntity> {
         "newData",
         "ip",
         "device",
+        "requestId",
         "createdAt",
         "createdBy",
         "createdBy.id",
