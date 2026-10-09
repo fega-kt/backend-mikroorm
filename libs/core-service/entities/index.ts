@@ -4,7 +4,7 @@ export { GroupEntity } from "./group";
 export { DepartmentEntity, DepartmentStatus } from "./department";
 export { PrincipalEntity, PrincipalType } from "./principal";
 export { AppSettingEntity, AppSettingType } from "./app-setting";
-export { ActivityLogEntity, ActivityLogAction, ActivityLogType } from "./activity-log";
+export { ActivityLogEntity, ActivityLogAction, ActivityLogType, UNKNOWN_PARENT_TYPE } from "./activity-log";
 export { ActivityLogQueueEntity, ActivityLogQueueStatus } from "./activity-log-queue";
 export { NotificationEntity, NotificationType } from "./notification";
 export { AttachmentEntity } from "./attachment";

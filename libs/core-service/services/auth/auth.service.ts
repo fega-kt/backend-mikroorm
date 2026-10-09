@@ -56,6 +56,7 @@ export class AuthService extends BaseService<UserEntity> {
       parentId: currentUser.id,
       action: ActivityLogAction.CHANGE_PASSWORD,
       type: ActivityLogType.User,
+      parentType: this.tableName,
     });
 
     await this.sendPasswordChangedMail(currentUser);
@@ -82,7 +83,8 @@ export class AuthService extends BaseService<UserEntity> {
       {
         parentId: user.id,
         action: ActivityLogAction.FORGOT_PASSWORD,
-        type: ActivityLogType.User,
+        type: ActivityLogType.System,
+        parentType: this.tableName,
       },
       { user: { id: SYSTEM_USER_ID } as IUserResponse },
     );

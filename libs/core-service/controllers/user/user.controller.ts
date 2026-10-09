@@ -20,6 +20,7 @@ import { IUserResponse } from "@common/base/consts";
 import { PermissionType } from "@common/base/permission-type.enum";
 import { CurrentUser } from "@common/decorators/current-user.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
+import { historyQueryValidation, HistoryQueryDto } from "@common/pagination/pagination.validation";
 import { IdValidationPipe, ZodValidationPipe } from "@common/pipes";
 import z from "zod";
 import { UserService } from "../../services/user/user.service";
@@ -69,6 +70,16 @@ export class UserController {
   @Permissions(PermissionType.ViewUserDetail)
   getDetail(@Param("id", new IdValidationPipe()) id: string) {
     return this.userService.getDetail(id);
+  }
+
+  /** Người có quyền xem chi tiết hoặc cập nhật đều xem được lịch sử */
+  @Get(":id/history")
+  @Permissions(PermissionType.ViewUserDetail, PermissionType.UpdateUser)
+  getHistory(
+    @Param("id", new IdValidationPipe()) id: string,
+    @Query(new ZodValidationPipe(historyQueryValidation)) query: HistoryQueryDto,
+  ) {
+    return this.userService.getHistory(id, query.page, query.limit);
   }
 
   @Put(":id")

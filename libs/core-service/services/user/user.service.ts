@@ -8,10 +8,13 @@ import { STORAGE_PATH } from "@common/constants/storage.constant";
 import { MailService } from "@modules/mail/mail.service";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import z from "zod";
+import { ActivityLogAction, ActivityLogType } from "../../entities/activity-log";
 import { AppSettingType } from "../../entities/app-setting";
 import { DepartmentEntity, DepartmentStatus } from "../../entities/department";
 import { PrincipalEntity, PrincipalType } from "../../entities/principal";
 import { UserEntity } from "../../entities/user";
+import { ActivityLogService } from "../activity-log/activity-log.service";
+import { LogData, toLogRef } from "../activity-log/activity-log.util";
 import { AppSettingService } from "../app-setting/app-setting.service";
 import { AuthCacheKey } from "../auth/auth.constants";
 import { UploadService } from "../upload/upload.service";
@@ -34,6 +37,7 @@ export class UserService extends BaseService<UserEntity> {
     private readonly supabaseService: SupabaseService,
     private readonly mailService: MailService,
     private readonly appSettingService: AppSettingService,
+    private readonly activityLogService: ActivityLogService,
   ) {
     super();
   }
@@ -62,7 +66,7 @@ export class UserService extends BaseService<UserEntity> {
       });
 
     const defaulValueBase = this.getDefaultValuesForCreate();
-    const res = await this.em.transactional(async (em) => {
+    const userId = await this.em.transactional(async (em) => {
       // 1️⃣ create user
       const user = this.repo.create({
         authId: authUser.id,
@@ -87,11 +91,14 @@ export class UserService extends BaseService<UserEntity> {
       em.persist(principal);
 
       await em.flush();
+      return user.id;
     });
+
+    await this.writeLog(userId, ActivityLogAction.CREATE, undefined, await this.loadLogData(userId));
+
     void this.sendAccountCreatedMail(loginName, fullName).catch((error: Error) => {
       this.logger.error("Failed to send account created email: " + error.message);
     });
-    return res;
   }
 
   async findAllUser({ page = 1, limit = 10, keyword, fullName, phoneNumber, isActive }: UserListFilterDto) {
@@ -177,6 +184,7 @@ export class UserService extends BaseService<UserEntity> {
     const baseUpdate = this.getDefaultValuesForUpdate();
     let principalId: string | undefined;
     let nameChanged = false;
+    const oldData = await this.loadLogData(id);
 
     const user = await this.em.transactional(async (em) => {
       const user = await em.findOne(UserEntity, { id, deleted: { $ne: true } });
@@ -206,6 +214,8 @@ export class UserService extends BaseService<UserEntity> {
       ...(principalId ? [this.cache.del(`cache:principal:${principalId}`)] : []),
     ]);
 
+    await this.writeLog(id, ActivityLogAction.UPDATE, oldData, await this.loadLogData(id));
+
     if (nameChanged && user.authId) {
       void this.supabaseService.updateUserMetadata(user.authId, { fullName: user.fullName }).catch((error: Error) => {
         this.logger.warn(`Failed to sync fullName to Supabase for ${user.loginName}: ${error.message}`);
@@ -227,8 +237,10 @@ export class UserService extends BaseService<UserEntity> {
   }
 
   async remove(id: string) {
+    const oldData = await this.loadLogData(id);
     const result = await super.remove(id);
     await this.cache.del(AuthCacheKey.user(id));
+    await this.writeLog(id, ActivityLogAction.DELETE, oldData);
     return result;
   }
 
@@ -255,16 +267,72 @@ export class UserService extends BaseService<UserEntity> {
       }
     }
 
+    const oldData = await this.loadLogData(id);
     const result = await this.updateOne(id, { isActive });
     await this.cache.del(AuthCacheKey.user(id));
+    await this.writeLog(id, ActivityLogAction.STATUS_CHANGE, oldData, await this.loadLogData(id));
     return result;
   }
 
   async uploadAvatar(id: string, file: Express.Multer.File) {
     const { url } = await this.uploadService.upload(file, `${STORAGE_PATH.USER_AVATAR}/${id}`);
+    const oldData = await this.loadLogData(id);
     await this.updateOne(id, { avatar: url });
     await this.cache.del(AuthCacheKey.user(id));
+    await this.writeLog(id, ActivityLogAction.UPDATE, oldData, await this.loadLogData(id));
     return url;
+  }
+
+  /** Lịch sử thao tác của user, mới nhất trước; vẫn xem được sau khi bản ghi bị xóa mềm */
+  getHistory(id: string, page: number, limit: number) {
+    return this.activityLogService.findByParent(id, page, limit, undefined, this.tableName);
+  }
+
+  /** Dữ liệu user ghi vào activity log; đọc thẳng từ DB (bỏ qua identity map) để phản ánh đúng trạng thái đã lưu */
+  private async loadLogData(id: string): Promise<LogData | undefined> {
+    const user = await this.repo.findOne(
+      { id },
+      {
+        fields: [
+          "fullName",
+          "loginName",
+          "workEmail",
+          "phoneNumber",
+          "description",
+          "avatar",
+          "isActive",
+          "department",
+          "department.id",
+          "department.name",
+        ],
+        populate: ["department"],
+        disableIdentityMap: true,
+      },
+    );
+    if (!user) return undefined;
+
+    return {
+      fullName: user.fullName,
+      loginName: user.loginName,
+      workEmail: user.workEmail ?? null,
+      phoneNumber: user.phoneNumber ?? null,
+      description: user.description ?? null,
+      avatar: user.avatar ?? null,
+      isActive: user.isActive,
+      department: toLogRef(user.department, user.department?.name),
+    };
+  }
+
+  /** parentId là id của user */
+  private writeLog(id: string, action: ActivityLogAction, oldData?: LogData, newData?: LogData) {
+    return this.activityLogService.addOne({
+      parentId: id,
+      type: ActivityLogType.User,
+      parentType: this.tableName,
+      action,
+      oldData,
+      newData,
+    });
   }
 
   private async sendAccountCreatedMail(email: string, fullName: string): Promise<void> {

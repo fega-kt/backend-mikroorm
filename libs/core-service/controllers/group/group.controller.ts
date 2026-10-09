@@ -2,6 +2,7 @@ import { PermissionType } from "@common/base/permission-type.enum";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import { IdValidationPipe } from "@common/pipes/id-validation-pipe";
 import { ZodValidationPipe } from "@common/pipes/zod-validation-pipe";
+import { historyQueryValidation, HistoryQueryDto } from "@common/pagination/pagination.validation";
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import z from "zod";
 import { GroupService } from "../../services/group/group.service";
@@ -44,5 +45,15 @@ export class GroupController {
   @Permissions(PermissionType.ViewGroupDetail)
   getDetail(@Param("id", new IdValidationPipe()) id: string) {
     return this.groupService.getDetail(id);
+  }
+
+  /** Người có quyền xem chi tiết hoặc cập nhật đều xem được lịch sử */
+  @Get("/:id/history")
+  @Permissions(PermissionType.ViewGroupDetail, PermissionType.UpdateGroup)
+  getHistory(
+    @Param("id", new IdValidationPipe()) id: string,
+    @Query(new ZodValidationPipe(historyQueryValidation)) query: HistoryQueryDto,
+  ) {
+    return this.groupService.getHistory(id, query.page, query.limit);
   }
 }

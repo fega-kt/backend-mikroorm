@@ -11,8 +11,11 @@ import {
   createDepartmentValidation,
   updateDepartmentValidation,
 } from "../../controllers/department/department.validation";
+import { ActivityLogAction, ActivityLogType } from "../../entities/activity-log";
 import { DepartmentEntity, DepartmentStatus } from "../../entities/department";
 import { UserEntity } from "../../entities/user";
+import { ActivityLogService } from "../activity-log/activity-log.service";
+import { LogData, toLogRef } from "../activity-log/activity-log.util";
 import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "./department.types";
 
 @Injectable({ scope: Scope.REQUEST })
@@ -22,6 +25,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     protected readonly repo: EntityRepository<DepartmentEntity>,
     @InjectRepository(UserEntity)
     private readonly userRepo: EntityRepository<UserEntity>,
+    private readonly activityLogService: ActivityLogService,
   ) {
     super();
   }
@@ -65,6 +69,8 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       updatedBy: { id: SYSTEM_USER_ID },
     });
 
+    const newData = (await this.loadLogData([department.id])).get(department.id);
+    await this.writeLogs([{ id: department.id, newData }], ActivityLogAction.CREATE);
     return department;
   }
 
@@ -106,6 +112,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       deputyId ? this.resolveUser(deputyId) : undefined,
     ]);
 
+    const oldData = (await this.loadLogData([id])).get(id);
     const updated = await this.updateOne(id, {
       ...rest,
       parent: parent?.id ?? undefined,
@@ -114,6 +121,8 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       ...(deputyId !== undefined && { deputy: deputy ?? null }),
     });
 
+    const newData = (await this.loadLogData([id])).get(id);
+    await this.writeLogs([{ id, oldData, newData }], ActivityLogAction.UPDATE);
     return updated;
   }
 
@@ -339,6 +348,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       );
     }
 
+    const oldData = await this.loadLogData(departmentIds);
     const entities = await this.repo.find({ id: { $in: departmentIds }, deleted: { $ne: true } });
     entities.forEach((entity) => {
       entity.deleted = true;
@@ -350,6 +360,11 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`),
     ]);
 
+    // Mỗi phòng ban bị xóa (kể cả phòng ban con) đều có log riêng, cùng requestId
+    await this.writeLogs(
+      departmentIds.map((departmentId) => ({ id: departmentId, oldData: oldData.get(departmentId) })),
+      ActivityLogAction.DELETE,
+    );
     return { message: "Deleted successfully" };
   }
 
@@ -409,6 +424,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       }
     }
 
+    const oldData = await this.loadLogData(departmentIds);
     const entities = await this.repo.find({ id: { $in: departmentIds }, deleted: { $ne: true } });
     entities.forEach((entity) => {
       entity.status = status;
@@ -420,6 +436,73 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`),
     ]);
 
+    // Chỉ ghi log cho phòng ban thực sự đổi trạng thái (phòng ban con có thể đã ở sẵn trạng thái đích)
+    const newData = await this.loadLogData(departmentIds);
+    await this.writeLogs(
+      departmentIds
+        .filter((departmentId) => oldData.get(departmentId)?.status !== status)
+        .map((departmentId) => ({ id: departmentId, oldData: oldData.get(departmentId), newData: newData.get(departmentId) })),
+      ActivityLogAction.STATUS_CHANGE,
+    );
+
     return { message: `Department ${status === DepartmentStatus.ACTIVE ? "activated" : "deactivated"} successfully` };
+  }
+
+  /** Lịch sử thao tác của phòng ban, mới nhất trước; vẫn xem được sau khi bản ghi bị xóa mềm */
+  getHistory(id: string, page: number, limit: number) {
+    return this.activityLogService.findByParent(id, page, limit, undefined, this.tableName);
+  }
+
+  /** Dữ liệu phòng ban ghi vào activity log theo id; đọc thẳng từ DB (bỏ qua identity map) để phản ánh đúng trạng thái đã lưu */
+  private async loadLogData(ids: string[]): Promise<Map<string, LogData>> {
+    const departments = await this.repo.find(
+      { id: { $in: ids } },
+      {
+        fields: [
+          "code",
+          "name",
+          "status",
+          "parent",
+          "parent.id",
+          "parent.name",
+          "manager",
+          "manager.id",
+          "manager.fullName",
+          "deputy",
+          "deputy.id",
+          "deputy.fullName",
+        ],
+        populate: ["parent", "manager", "deputy"],
+        disableIdentityMap: true,
+      },
+    );
+
+    return new Map(
+      departments.map((department) => [
+        department.id,
+        {
+          code: department.code,
+          name: department.name,
+          status: department.status,
+          parent: toLogRef(department.parent, department.parent?.name),
+          manager: toLogRef(department.manager, department.manager?.fullName),
+          deputy: toLogRef(department.deputy, department.deputy?.fullName),
+        },
+      ]),
+    );
+  }
+
+  /** parentId là id của phòng ban */
+  private writeLogs(items: { id: string; oldData?: LogData; newData?: LogData }[], action: ActivityLogAction) {
+    return this.activityLogService.addMany(
+      items.map(({ id, oldData, newData }) => ({
+        parentId: id,
+        type: ActivityLogType.User,
+        parentType: this.tableName,
+        action,
+        oldData,
+        newData,
+      })),
+    );
   }
 }
