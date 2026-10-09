@@ -45,6 +45,11 @@ export interface ArrayRule {
 interface MetaBase {
   /** false: key nội bộ, không trả về FE và không cho thao tác qua API */
   isShow: boolean;
+  /**
+   * true: giá trị được trả cho mọi user đăng nhập qua GET app-setting/client (FE giữ trong memory).
+   * Mặc định (không khai báo) là false, key mới không tự lộ ra client. Không bật cho key nhạy cảm.
+   */
+  clientVisible?: boolean;
 }
 
 /** type nào chỉ khai báo được rule của type đó */
@@ -71,6 +76,9 @@ export const APP_SETTING_META: Record<AppSettingType, AppSettingMeta> = {
     rule: { min: 1, max: 365, integer: true },
   },
   [AppSettingType.INACTIVE_EMAIL_ALLOWED_LIST]: { type: AppSettingValueType.EMAILS, isShow: true },
+
+  /** Bật/tắt viền focus đen quanh vùng nội dung chính ở FE */
+  [AppSettingType.CONTENT_FOCUS_OUTLINE_ENABLED]: { type: AppSettingValueType.BOOLEAN, isShow: true, clientVisible: true },
 
   [AppSettingType.MAIL_TEMPLATE_INACTIVE_REMINDER]: { type: AppSettingValueType.STRING, isShow: true },
 };
