@@ -14,7 +14,7 @@ const config: Options<PostgreSqlDriver> = {
   logger: isDev
     ? (message: string) => {
         const info = getRequestInfo();
-        const prefix = info ? `[${info.method} ${info.path}]` : "[no-req]";
+        const prefix = info ? `[${info.requestId}] [${info.method} ${info.path}]` : "[no-req]";
         console.log(prefix, message);
       }
     : undefined,

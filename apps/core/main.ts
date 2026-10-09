@@ -1,3 +1,5 @@
+import { REQUEST_ID_HEADER } from "@common/middleware/logger.middleware";
+import { RequestIdLogger } from "@common/logger/request-id.logger";
 import { HttpExceptionFilter } from "@common/filters/http-exception.filter";
 import { MetricsInterceptor } from "@common/interceptors/metrics.interceptor";
 import { ResponseInterceptor } from "@common/interceptors/response.interceptor";
@@ -12,12 +14,13 @@ import { CoreAppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(CoreAppModule, { rawBody: true, bufferLogs: true });
-  app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
+  app.useLogger(new RequestIdLogger(app.get(WINSTON_MODULE_NEST_PROVIDER)));
 
   app.enableCors({
     origin: ENV.CORS_ORIGINS ? ENV.CORS_ORIGINS.split(",") : [],
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true,
+    exposedHeaders: [REQUEST_ID_HEADER],
   });
 
   const orm = app.get(MikroORM);

@@ -1,18 +1,17 @@
-import { RequestContext } from "@mikro-orm/core";
+import { AsyncLocalStorage } from "node:async_hooks";
 
-interface RequestInfo {
+export interface RequestInfo {
+  requestId: string;
   method: string;
   path: string;
 }
 
-const infoMap = new WeakMap<object, RequestInfo>();
+const storage = new AsyncLocalStorage<RequestInfo>();
 
-export function setRequestInfo(info: RequestInfo): void {
-  const ctx = RequestContext.currentRequestContext();
-  if (ctx) infoMap.set(ctx, info);
+export function runWithRequestInfo<T>(info: RequestInfo, fn: () => T): T {
+  return storage.run(info, fn);
 }
 
 export function getRequestInfo(): RequestInfo | undefined {
-  const ctx = RequestContext.currentRequestContext();
-  return ctx ? infoMap.get(ctx) : undefined;
+  return storage.getStore();
 }
