@@ -3,9 +3,12 @@ import { EntityManager, EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import z from "zod";
+import { ActivityLogAction, ActivityLogType } from "../../entities/activity-log";
 import { GroupEntity } from "../../entities/group";
 import { PrincipalEntity, PrincipalType } from "../../entities/principal";
 import { UserEntity } from "../../entities/user";
+import { ActivityLogService } from "../activity-log/activity-log.service";
+import { LogData, sortLogRefs } from "../activity-log/activity-log.util";
 import { createGroupValidation, updateGroupValidation } from "../../controllers/group/group.validation";
 
 @Injectable({ scope: Scope.REQUEST })
@@ -14,6 +17,7 @@ export class GroupService extends BaseService<GroupEntity> {
     @InjectRepository(GroupEntity)
     protected readonly repo: EntityRepository<GroupEntity>,
     private readonly em: EntityManager,
+    private readonly activityLogService: ActivityLogService,
   ) {
     super();
   }
@@ -23,7 +27,7 @@ export class GroupService extends BaseService<GroupEntity> {
 
     const defaultValueBase = this.getDefaultValuesForCreate();
 
-    return this.em.transactional(async (em) => {
+    const groupId = await this.em.transactional(async (em) => {
       /** 1️⃣ create group */
       const group = em.create(
         GroupEntity,
@@ -58,16 +62,20 @@ export class GroupService extends BaseService<GroupEntity> {
 
       await em.flush();
 
-      return true;
+      return group.id;
     });
+
+    await this.writeLog(groupId, ActivityLogAction.CREATE, undefined, await this.loadLogData(groupId));
+    return true;
   }
 
   async updateGroup(id: string, data: z.infer<typeof updateGroupValidation>): Promise<boolean> {
     const { users: userIds, ...groupData } = data;
 
     const defaultValueBase = this.getDefaultValuesForUpdate();
+    const oldData = await this.loadLogData(id);
 
-    return this.em.transactional(async (em) => {
+    await this.em.transactional(async (em) => {
       /** 1️⃣ find group */
       const group = await em.findOneOrFail(GroupEntity, id);
 
@@ -112,9 +120,17 @@ export class GroupService extends BaseService<GroupEntity> {
       }
 
       await em.flush();
-
-      return true;
     });
+
+    await this.writeLog(id, ActivityLogAction.UPDATE, oldData, await this.loadLogData(id));
+    return true;
+  }
+
+  async remove(id: string) {
+    const oldData = await this.loadLogData(id);
+    const result = await super.remove(id);
+    await this.writeLog(id, ActivityLogAction.DELETE, oldData);
+    return result;
   }
 
   async getList(page = 1, limit = 10, keyword?: string, name?: string, description?: string) {
@@ -167,5 +183,41 @@ export class GroupService extends BaseService<GroupEntity> {
     }
 
     return group;
+  }
+
+  /** Lịch sử thao tác của group, mới nhất trước; vẫn xem được sau khi bản ghi bị xóa mềm */
+  getHistory(id: string, page: number, limit: number) {
+    return this.activityLogService.findByParent(id, page, limit, undefined, this.tableName);
+  }
+
+  /** Dữ liệu group ghi vào activity log; đọc thẳng từ DB (bỏ qua identity map) để phản ánh đúng trạng thái đã lưu */
+  private async loadLogData(id: string): Promise<LogData | undefined> {
+    const group = await this.repo.findOne(
+      { id },
+      {
+        fields: ["name", "description", "users", "users.id", "users.fullName"],
+        populate: ["users"],
+        disableIdentityMap: true,
+      },
+    );
+    if (!group) return undefined;
+
+    return {
+      name: group.name,
+      description: group.description ?? null,
+      users: sortLogRefs(group.users.getItems().map((user) => ({ id: user.id, name: user.fullName }))),
+    };
+  }
+
+  /** parentId là id của group */
+  private writeLog(id: string, action: ActivityLogAction, oldData?: LogData, newData?: LogData) {
+    return this.activityLogService.addOne({
+      parentId: id,
+      type: ActivityLogType.User,
+      parentType: this.tableName,
+      action,
+      oldData,
+      newData,
+    });
   }
 }

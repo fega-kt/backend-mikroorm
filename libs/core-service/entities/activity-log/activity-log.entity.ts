@@ -1,6 +1,7 @@
 import { BaseEntity } from "@common/base/base.entity";
 import { Entity, Enum, Property, types } from "@mikro-orm/core";
 
+/** Ai thực hiện thao tác: người dùng qua API hay hệ thống (job, cron) */
 export enum ActivityLogType {
   System = "system",
   User = "user",
@@ -19,10 +20,20 @@ export enum ActivityLogAction {
   FORGOT_PASSWORD = "FORGOT_PASSWORD",
 }
 
+/** parentType cho log không gắn với bảng cụ thể, hoặc log tạo trước khi có cột parentType */
+export const UNKNOWN_PARENT_TYPE = "unknown";
+
 @Entity({ tableName: "activity_logs" })
 export class ActivityLogEntity extends BaseEntity {
   @Property({ type: types.string })
   parentId!: string;
+
+  /**
+   * Tên bảng mà parentId trỏ tới (vd: "users", "departments"), hoặc UNKNOWN_PARENT_TYPE.
+   * Log mới bắt buộc truyền, ActivityLogService validate theo metadata.
+   */
+  @Property({ type: types.string, default: UNKNOWN_PARENT_TYPE })
+  parentType!: string;
 
   @Enum(() => ActivityLogAction)
   action!: ActivityLogAction;

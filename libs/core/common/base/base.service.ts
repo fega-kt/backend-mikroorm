@@ -52,6 +52,11 @@ export abstract class BaseService<T extends BaseEntity> {
     return this.repo.getEntityName().toLowerCase().replace("entity", "");
   }
 
+  /** Tên bảng của entity, dùng làm parentType cho activity log */
+  protected get tableName(): string {
+    return this.repo.getEntityManager().getMetadata().get(this.repo.getEntityName()).tableName;
+  }
+
   protected cacheKey(id: string): string {
     return `cache:${this.cachePrefix}:${id}`;
   }

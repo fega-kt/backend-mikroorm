@@ -179,7 +179,6 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
 
     // Lần cập nhật nào cũng ghi log (kể cả không đổi giá trị) kèm đầy đủ dữ liệu cũ và mới; FE tự so sánh để hiển thị
     const newData = this.snapshot(key, data);
-    this.logger.log(`Setting "${key}" updated: ${JSON.stringify({ oldData, newData })}`);
     await this.writeLog(existing.id, ActivityLogAction.UPDATE, oldData, newData);
     return this.getDetail(key);
   }
@@ -226,7 +225,14 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
 
   /** parentId là id của bản ghi app setting */
   private writeLog(id: string, action: ActivityLogAction, oldData?: Record<string, unknown>, newData?: Record<string, unknown>) {
-    return this.activityLogService.addOne({ parentId: id, type: ActivityLogType.System, action, oldData, newData });
+    return this.activityLogService.addOne({
+      parentId: id,
+      type: ActivityLogType.User,
+      parentType: this.tableName,
+      action,
+      oldData,
+      newData,
+    });
   }
 
   private async findActive(key: AppSettingType) {

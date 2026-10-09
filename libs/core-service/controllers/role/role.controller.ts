@@ -1,6 +1,6 @@
 import { PermissionType } from "@common/base/permission-type.enum";
 import { Permissions } from "@common/decorators/permissions.decorator";
-import { listFilterValidation, ListFilterDto } from "@common/pagination/pagination.validation";
+import { historyQueryValidation, HistoryQueryDto, listFilterValidation, ListFilterDto } from "@common/pagination/pagination.validation";
 import { IdValidationPipe } from "@common/pipes/id-validation-pipe";
 import { ZodValidationPipe } from "@common/pipes/zod-validation-pipe";
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
@@ -41,5 +41,15 @@ export class RoleController {
   @Permissions(PermissionType.ViewRoleDetail)
   getDetail(@Param("id", new IdValidationPipe()) id: string): Promise<RoleEntity> {
     return this.roleService.getDetail(id);
+  }
+
+  /** Người có quyền xem chi tiết hoặc cập nhật đều xem được lịch sử */
+  @Get(":id/history")
+  @Permissions(PermissionType.ViewRoleDetail, PermissionType.UpdateRole)
+  getHistory(
+    @Param("id", new IdValidationPipe()) id: string,
+    @Query(new ZodValidationPipe(historyQueryValidation)) query: HistoryQueryDto,
+  ) {
+    return this.roleService.getHistory(id, query.page, query.limit);
   }
 }
