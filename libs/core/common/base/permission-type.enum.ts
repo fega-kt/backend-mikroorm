@@ -346,4 +346,15 @@ export enum PermissionType {
 
   /** retry activity log queue item */
   RetryActivityLogQueue = "permission:activity-log-queue:retry",
+
+  /** ===== ACTIVITY LOG ===== */
+
+  /** vào menu theo dõi activity log */
+  MenuActivityLog = "permission:menu:activity-log",
+
+  /** xem activity log toàn hệ thống */
+  ViewActivityLogAll = "permission:activity-log:view-all",
+
+  /** xem activity log trong phòng ban của mình và các phòng ban con (log do user trong các phòng đó thực hiện, và log auth của họ) */
+  ViewActivityLogDepartment = "permission:activity-log:view-department",
 }
