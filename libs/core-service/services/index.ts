@@ -7,6 +7,7 @@ import { PrincipalService } from "./principal";
 import { AppSettingService } from "./app-setting";
 import {
   RouteService,
+  ActivityLogRouteService,
   ProjectManagementRouteService,
   SettingManagementRouteService,
   SystemConfigRouteService,
@@ -26,6 +27,7 @@ export {
   PrincipalService,
   AppSettingService,
   RouteService,
+  ActivityLogRouteService,
   ProjectManagementRouteService,
   SettingManagementRouteService,
   SystemConfigRouteService,
@@ -46,6 +48,7 @@ export const coreServices = [
   PrincipalService,
   AppSettingService,
   RouteService,
+  ActivityLogRouteService,
   ProjectManagementRouteService,
   SettingManagementRouteService,
   SystemConfigRouteService,
