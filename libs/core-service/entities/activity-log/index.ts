@@ -1,1 +1,1 @@
-export { ActivityLogEntity, ActivityLogAction, ActivityLogType, UNKNOWN_PARENT_TYPE } from "./activity-log.entity";
+export { ActivityLogEntity, ActivityLogAction, ActivityLogSubject, ActivityLogType } from "./activity-log.entity";

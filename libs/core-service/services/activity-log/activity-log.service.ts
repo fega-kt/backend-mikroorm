@@ -4,7 +4,10 @@ import { IUserResponse } from "@common/base/consts";
 import { EntityRepository, FilterQuery, RequiredEntityData } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, InternalServerErrorException, Logger, Scope } from "@nestjs/common";
-import { ActivityLogAction, ActivityLogEntity, UNKNOWN_PARENT_TYPE } from "../../entities/activity-log";
+import { ActivityLogAction, ActivityLogEntity, ActivityLogSubject } from "../../entities/activity-log";
+
+/** parentType hợp lệ ngoài tên bảng */
+const SUBJECTS = new Set<string>(Object.values(ActivityLogSubject));
 
 @Injectable({ scope: Scope.REQUEST })
 export class ActivityLogService extends BaseService<ActivityLogEntity> {
@@ -34,12 +37,14 @@ export class ActivityLogService extends BaseService<ActivityLogEntity> {
   }
 
   /**
-   * parentType phải là tên một bảng có thật (lấy từ metadata nên tự cập nhật khi thêm entity) hoặc UNKNOWN_PARENT_TYPE.
+   * parentType phải là tên một bảng có thật (lấy từ metadata nên tự cập nhật khi thêm entity) hoặc một giá trị ActivityLogSubject.
    * Vẫn chặn trường hợp quên truyền: muốn ghi unknown thì phải truyền rõ ràng.
    */
   private assertParentType({ parentType, parentId, action }: RequiredEntityData<ActivityLogEntity>) {
-    if (parentType === UNKNOWN_PARENT_TYPE) {
-      this.logger.warn(`Bypass parentType validation (unknown): parentId=${parentId} action=${action}`);
+    if (SUBJECTS.has(parentType)) {
+      if (parentType === ActivityLogSubject.Unknown) {
+        this.logger.warn(`Bypass parentType validation (unknown): parentId=${parentId} action=${action}`);
+      }
       return;
     }
     const tableNames = Object.values(this.repo.getEntityManager().getMetadata().getAll()).map((meta) => meta.tableName);
