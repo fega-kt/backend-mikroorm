@@ -26,6 +26,9 @@ import {
   verifyOtpValidation,
 } from "../../controllers/auth/auth.validation";
 
+/** authentication_method của Custom Access Token hook không ghi log LOGIN */
+const AUTH_HOOK_SKIPPED_METHODS = new Set(["token_refresh", "magiclink"]);
+
 @Injectable({ scope: Scope.REQUEST })
 export class AuthService extends BaseService<UserEntity> {
   private readonly logger = new Logger(AuthService.name);
@@ -252,7 +255,7 @@ export class AuthService extends BaseService<UserEntity> {
     webhookSignature: string,
     body: Record<string, unknown>,
   ): Promise<{ decision: "continue" | "reject"; message?: string }> {
-    this.verifyHookSignature(rawBody, webhookId, webhookTimestamp, webhookSignature);
+    this.verifyHookSignature(ENV.SUPABASE_HOOK_SECRET, rawBody, webhookId, webhookTimestamp, webhookSignature);
 
     const payload = body?.user as Record<string, unknown> | undefined;
     const email = typeof payload?.email === "string" ? payload.email : undefined;
@@ -292,6 +295,46 @@ export class AuthService extends BaseService<UserEntity> {
     }
 
     return { decision: "continue" };
+  }
+
+  /**
+   * Supabase Custom Access Token hook: chạy mỗi lần cấp JWT, dùng để ghi log LOGIN.
+   * Hook lỗi hoặc chậm (>5s) sẽ làm user không đăng nhập/refresh được, nên luôn trả claims nguyên vẹn, không ném lỗi sau bước verify chữ ký.
+   * IP/device trong log là của request từ Supabase tới backend, không phải của client đăng nhập.
+   */
+  async accessTokenHook(
+    rawBody: Buffer | undefined,
+    webhookId: string,
+    webhookTimestamp: string,
+    webhookSignature: string,
+    body: Record<string, unknown>,
+  ): Promise<{ claims: unknown }> {
+    this.verifyHookSignature(ENV.SUPABASE_ACCESS_TOKEN_HOOK_SECRET, rawBody, webhookId, webhookTimestamp, webhookSignature);
+
+    const method = typeof body.authentication_method === "string" ? body.authentication_method : undefined;
+    const authId = typeof body.user_id === "string" ? body.user_id : undefined;
+    // token_refresh: chỉ làm mới access token; magiclink: loginWithOtp đã tự ghi LOGIN_OTP
+    if (authId && method && !AUTH_HOOK_SKIPPED_METHODS.has(method)) {
+      try {
+        const userId = await this.findUserIdByAuthId(authId);
+        if (userId) {
+          await this.writeAuthLog(userId, ActivityLogAction.LOGIN, {
+            type: ActivityLogType.User,
+            actorId: userId,
+            newData: { method },
+          });
+        }
+      } catch (error) {
+        this.logger.error(`Failed to write login activity log: ${(error as Error).message}`);
+      }
+    }
+
+    return { claims: body.claims };
+  }
+
+  private async findUserIdByAuthId(authId: string): Promise<string | undefined> {
+    const user = await this.repo.findOne({ authId, deleted: { $ne: true } }, { fields: ["id"] });
+    return user?.id;
   }
 
   /** Log thay đổi bảng users do hook đăng ký (hệ thống thực hiện); hiện trong lịch sử của user */
@@ -355,11 +398,16 @@ export class AuthService extends BaseService<UserEntity> {
     });
   }
 
-  private verifyHookSignature(rawBody: Buffer, webhookId: string, webhookTimestamp: string, webhookSignature: string): void {
+  private verifyHookSignature(
+    secret: string | undefined,
+    rawBody: Buffer | undefined,
+    webhookId: string,
+    webhookTimestamp: string,
+    webhookSignature: string,
+  ): void {
     if (!rawBody) throw new UnauthorizedException("Missing request body");
     if (!webhookId || !webhookTimestamp || !webhookSignature) throw new UnauthorizedException("Missing webhook headers");
 
-    const secret = ENV.SUPABASE_HOOK_SECRET;
     if (!secret) throw new UnauthorizedException("Hook secret not configured");
 
     // Strip "v1," và "whsec_" prefix
