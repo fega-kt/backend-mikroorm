@@ -1,8 +1,11 @@
 import { BaseService } from "@common/base/base.service";
-import { EntityRepository, FilterQuery } from "@mikro-orm/core";
+import { SYSTEM_USER_ID } from "@common/constants/system.constant";
+import { EntityRepository, FilterQuery, serialize } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, NotFoundException, Scope } from "@nestjs/common";
+import type { NotificationListDto } from "../../controllers/notification/notification.validation";
 import { NotificationEntity, NotificationType } from "../../entities/notification";
+import { UserEntity } from "../../entities/user";
 
 @Injectable({ scope: Scope.REQUEST })
 export class NotificationService extends BaseService<NotificationEntity> {
@@ -14,33 +17,66 @@ export class NotificationService extends BaseService<NotificationEntity> {
   }
 
   /** Tạo notification — gọi nội bộ từ các service khác */
-  async notify(payload: { userId: string; type: NotificationType; title: string; message: string; refId?: string; refType?: string }) {
+  async notify(payload: {
+    userId: string;
+    actorId?: string;
+    type: NotificationType;
+    data?: Record<string, string | number>;
+    refId?: string;
+    refType?: string;
+  }) {
     const em = this.repo.getEntityManager();
+    // Không dùng addOne — nó throw khi không có user trong request (vd: callback Flowable), fallback về SYSTEM
+    const creator = em.getReference(UserEntity, this.request?.user?.id ?? SYSTEM_USER_ID);
     const entity = this.repo.create({
       user: payload.userId,
+      actor: payload.actorId,
       type: payload.type,
-      title: payload.title,
-      message: payload.message,
+      data: payload.data,
       refId: payload.refId,
       refType: payload.refType,
       isRead: false,
+      createdBy: creator,
+      updatedBy: creator,
     });
     await em.persistAndFlush(entity);
     return entity;
   }
 
-  /** Lấy danh sách notification của user hiện tại */
-  getMyNotifications(page: number, limit: number, onlyUnread: boolean) {
+  /**
+   * Lấy danh sách notification của user hiện tại — cursor pagination (không COUNT, không lệch trang khi có noti mới).
+   * Cursor là id (uuidv7 tăng dần theo thời gian) nên vừa sắp xếp vừa không bị trùng như createdAt.
+   */
+  async getMyNotifications({ limit, before, onlyUnread }: NotificationListDto) {
     const user = this.getCurrentUser();
     const where: FilterQuery<NotificationEntity> = { user: user.id, deleted: { $ne: true } };
     if (onlyUnread) where.isRead = false;
+    if (before) where.id = { $lt: before };
 
-    return this.paginate(where, {
-      page,
-      limit,
-      fields: ["id", "type", "title", "message", "refId", "refType", "isRead", "readAt", "createdAt"],
-      sort: { createdAt: "DESC" },
+    // lấy dư 1 để biết còn trang sau không
+    const items = await this.repo.find(where, {
+      limit: limit + 1,
+      orderBy: { id: "DESC" },
+      fields: [
+        "id",
+        "type",
+        "data",
+        "refId",
+        "refType",
+        "isRead",
+        "readAt",
+        "createdAt",
+        "actor",
+        "actor.id",
+        "actor.fullName",
+        "actor.avatar",
+      ],
+      populate: ["actor"],
     });
+
+    const hasMore = items.length > limit;
+    const data = hasMore ? items.slice(0, limit) : items;
+    return { data: serialize(data, { populate: ["actor"], forceObject: true }), hasMore };
   }
 
   /** Đánh dấu đã đọc */

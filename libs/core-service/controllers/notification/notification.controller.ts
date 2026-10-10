@@ -1,13 +1,15 @@
+import { ZodValidationPipe } from "@common/pipes";
 import { Controller, Get, Param, Patch, Query } from "@nestjs/common";
 import { NotificationService } from "../../services/notification/notification.service";
+import { NotificationListDto, notificationListValidation } from "./notification.validation";
 
 @Controller("notification")
 export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 
   @Get()
-  getMyNotifications(@Query("page") page = 1, @Query("limit") limit = 20, @Query("onlyUnread") onlyUnread = "false") {
-    return this.notificationService.getMyNotifications(Number(page), Number(limit), onlyUnread === "true");
+  getMyNotifications(@Query(new ZodValidationPipe(notificationListValidation)) query: NotificationListDto) {
+    return this.notificationService.getMyNotifications(query);
   }
 
   @Get("unread-count")
