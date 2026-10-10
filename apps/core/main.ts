@@ -1,4 +1,5 @@
 import { REQUEST_ID_HEADER } from "@common/middleware/logger.middleware";
+import { DEVICE_ID_HEADER } from "@core-service/services/auth/login-device.service";
 import { RequestIdLogger } from "@common/logger/request-id.logger";
 import { HttpExceptionFilter } from "@common/filters/http-exception.filter";
 import { MetricsInterceptor } from "@common/interceptors/metrics.interceptor";
@@ -20,7 +21,7 @@ async function bootstrap() {
     origin: ENV.CORS_ORIGINS ? ENV.CORS_ORIGINS.split(",") : [],
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true,
-    exposedHeaders: [REQUEST_ID_HEADER],
+    exposedHeaders: [REQUEST_ID_HEADER, DEVICE_ID_HEADER],
   });
 
   const orm = app.get(MikroORM);

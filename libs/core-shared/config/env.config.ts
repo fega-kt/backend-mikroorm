@@ -35,6 +35,9 @@ export const ENV = {
   SUPABASE_HOOK_SECRET: process.env.SUPABASE_HOOK_SECRET,
   SUPABASE_ACCESS_TOKEN_HOOK_SECRET: process.env.SUPABASE_ACCESS_TOKEN_HOOK_SECRET,
 
+  /** Ký deviceId cấp cho trình duyệt (phát hiện đăng nhập thiết bị mới) — client không tự giả được */
+  DEVICE_TOKEN_SECRET: process.env.DEVICE_TOKEN_SECRET,
+
   THROTTLE_TTL: Number(process.env.THROTTLE_TTL) || 60,
   THROTTLE_LIMIT: Number(process.env.THROTTLE_LIMIT) || 100,
 
