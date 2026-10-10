@@ -114,7 +114,11 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_JWT_SECRET=
 SUPABASE_JWT_PUBLISHABLE=
 SUPABASE_SERVICE_ROLE_KEY=
+# Hook "Before User Created" (/auth/hook/signup) — Dashboard > Authentication > Auth Hooks > Secret > Reveal
 SUPABASE_HOOK_SECRET=
+# Hook "Customize Access Token (JWT) Claims" (/auth/hook/access-token, ghi log đăng nhập) — Dashboard > Authentication > Auth Hooks > Add hook
+# Đặt trước khi bật hook, nếu thiếu thì user không đăng nhập/refresh token được
+SUPABASE_ACCESS_TOKEN_HOOK_SECRET=
 
 # Cache
 CACHE_DRIVER=redis          # redis | cloudflare

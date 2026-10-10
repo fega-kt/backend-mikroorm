@@ -23,6 +23,8 @@ export enum ActivityLogAction {
   RESET_PASSWORD = "RESET_PASSWORD",
   /** Nhập sai/hết hạn OTP quên mật khẩu */
   RESET_PASSWORD_FAILED = "RESET_PASSWORD_FAILED",
+  /** Bắt đầu một phiên đăng nhập mới (mật khẩu, OAuth...); mỗi session_id chỉ ghi một lần */
+  LOGIN = "LOGIN",
   /** Yêu cầu OTP đăng nhập */
   LOGIN_OTP_REQUEST = "LOGIN_OTP_REQUEST",
   /** Đăng nhập bằng OTP thành công */

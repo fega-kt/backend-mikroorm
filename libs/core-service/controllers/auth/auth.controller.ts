@@ -57,6 +57,20 @@ export class AuthController {
     res.status(200).json(result);
   }
 
+  @Public()
+  @Post("hook/access-token")
+  async accessTokenHook(
+    @Req() req: RawBodyRequest<Request>,
+    @Res() res: Response,
+    @Body() body: Record<string, unknown>,
+    @Headers("webhook-id") webhookId: string,
+    @Headers("webhook-timestamp") webhookTimestamp: string,
+    @Headers("webhook-signature") webhookSignature: string,
+  ) {
+    const result = await this.authService.accessTokenHook(req.rawBody, webhookId, webhookTimestamp, webhookSignature, body);
+    res.status(200).json(result);
+  }
+
   @Patch("change-password")
   changePassword(
     @CurrentUser() user: IUserResponse,
