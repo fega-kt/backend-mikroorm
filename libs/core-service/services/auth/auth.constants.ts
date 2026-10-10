@@ -12,6 +12,8 @@ export const AuthCacheKey = {
   token: (tokenHash: string) => `cache:auth:token:${tokenHash}`,
   /** Thông tin user + permissions của guard — xoá khi user thay đổi để request sau load lại */
   user: (userId: string) => `cache:auth:user:${userId}`,
+  /** deviceId của phiên đăng nhập (session_id trong JWT) — có nghĩa là phiên đã kiểm tra thiết bị mới */
+  deviceSession: (sessionId: string) => `auth:device-session:${sessionId}`,
 } as const;
 
 /** TTL cache auth (giây) */

@@ -13,6 +13,8 @@ import { compact, uniq } from "lodash";
 import { RoleEntity } from "../entities/role";
 import { UserEntity } from "../entities/user";
 import { AUTH_CACHE_TTL, AuthCacheKey } from "../services/auth/auth.constants";
+import { DEVICE_ID_HEADER, LoginDeviceService } from "../services/auth/login-device.service";
+import type { Request, Response } from "express";
 
 // 400 ngày
 const LAST_ACTIVE_TTL_SECONDS = 400 * 24 * 3600;
@@ -29,6 +31,7 @@ export class SupabaseAuthGuard implements CanActivate {
     @InjectRepository(RoleEntity)
     private readonly roleEntity: EntityRepository<RoleEntity>,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
+    private readonly loginDeviceService: LoginDeviceService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -66,6 +69,7 @@ export class SupabaseAuthGuard implements CanActivate {
         if (cached) {
           request.user = { ...cached, canAccess: (pers: PermissionType[]) => pers.some((per) => cached.permissions?.includes(per)) };
           this.refreshLastActive(cached.id);
+          await this.checkLoginDevice(context, token, cached.id);
           return true;
         }
       }
@@ -84,11 +88,29 @@ export class SupabaseAuthGuard implements CanActivate {
         this.cache.set(tokenKey, session, AUTH_CACHE_TTL),
         this.cache.set(AuthCacheKey.user(user.id), cacheable, AUTH_CACHE_TTL),
       ]);
+      await this.checkLoginDevice(context, token, user.id);
 
       return true;
     } catch (error) {
       this.logger.error(error);
       throw new UnauthorizedException(error.message ?? "Invalid or expired token");
+    }
+  }
+
+  /** Phát hiện đăng nhập thiết bị mới (1 lần/phiên) và trả device token cho client lưu; lỗi không làm hỏng xác thực */
+  private async checkLoginDevice(context: ExecutionContext, accessToken: string, userId: string): Promise<void> {
+    const request = context.switchToHttp().getRequest<Request>();
+    try {
+      const deviceToken = await this.loginDeviceService.handleRequest({
+        userId,
+        accessToken,
+        deviceToken: request.header(DEVICE_ID_HEADER),
+        userAgent: request.header("user-agent"),
+        ip: request.ip,
+      });
+      if (deviceToken) context.switchToHttp().getResponse<Response>().setHeader(DEVICE_ID_HEADER, deviceToken);
+    } catch (error) {
+      this.logger.error(`Login device check failed: ${(error as Error).message}`);
     }
   }
 

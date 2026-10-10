@@ -1,4 +1,4 @@
-import { AuthService, AuthSessionService } from "./auth";
+import { AuthService, AuthSessionService, LoginDeviceService } from "./auth";
 import { UserService } from "./user";
 import { RoleService } from "./role";
 import { GroupService } from "./group";
@@ -21,6 +21,7 @@ import { UploadService, AttachmentService } from "./upload";
 export {
   AuthService,
   AuthSessionService,
+  LoginDeviceService,
   UserService,
   RoleService,
   GroupService,
@@ -43,6 +44,7 @@ export {
 export const coreServices = [
   AuthService,
   AuthSessionService,
+  LoginDeviceService,
   UserService,
   RoleService,
   GroupService,
