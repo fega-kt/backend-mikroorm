@@ -1,5 +1,5 @@
 import { BaseEntity } from "@common/base/base.entity";
-import { Entity, Enum, ManyToOne, Property, types } from "@mikro-orm/core";
+import { Entity, Enum, Index, ManyToOne, Property, types } from "@mikro-orm/core";
 import { UserEntity } from "../user/user.entity";
 
 export enum NotificationType {
@@ -17,24 +17,26 @@ export enum NotificationType {
 }
 
 @Entity({ tableName: "notifications" })
+@Index({ properties: ["user", "id"] })
 export class NotificationEntity extends BaseEntity {
   @ManyToOne({ cascade: [], entity: () => UserEntity })
   user!: UserEntity;
 
+  /** Người gây ra noti (vd: người duyệt) — null nếu do hệ thống, FE hiện icon theo `type` */
+  @ManyToOne({ cascade: [], entity: () => UserEntity, nullable: true })
+  actor?: UserEntity;
+
   @Enum(() => NotificationType)
   type!: NotificationType;
 
-  @Property({ type: types.string })
-  title!: string;
-
-  @Property({ type: types.string })
-  message!: string;
-
+  /** Tham số để FE merge vào câu dịch theo `type` (vd: { days: 7 }) — BE không lưu câu chữ */
+  @Property({ type: types.json, nullable: true })
+  data?: Record<string, string | number>;
   /** ID của entity liên quan (task, project, timelog...) */
   @Property({ type: types.string, nullable: true })
   refId?: string;
 
-  /** Loại entity liên quan */
+  /** Tên bảng của entity liên quan (vd: "users") — giống `parentType` của activity log. FE map sang trang để mở khi bấm */
   @Property({ type: types.string, nullable: true })
   refType?: string;
 
