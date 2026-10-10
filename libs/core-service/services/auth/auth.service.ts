@@ -10,7 +10,7 @@ import { SYSTEM_DEPARTMENT_ID, SYSTEM_USER_ID } from "@common/constants/system.c
 import { ENV } from "@config/env.config";
 import { MailService } from "@modules/mail/mail.service";
 import { SupabaseService } from "@modules/supabase/supabase.service";
-import { ActivityLogAction, ActivityLogType } from "../../entities/activity-log";
+import { ActivityLogAction, ActivityLogSubject, ActivityLogType } from "../../entities/activity-log";
 import { AppSettingType } from "../../entities/app-setting";
 import { DepartmentEntity } from "../../entities/department";
 import { PrincipalEntity, PrincipalType } from "../../entities/principal";
@@ -52,12 +52,7 @@ export class AuthService extends BaseService<UserEntity> {
       throw new BadRequestException("Failed to update password: " + error.message);
     });
 
-    await this.activityLogService.addOne({
-      parentId: currentUser.id,
-      action: ActivityLogAction.CHANGE_PASSWORD,
-      type: ActivityLogType.User,
-      parentType: this.tableName,
-    });
+    await this.writeAuthLog(currentUser.id, ActivityLogAction.CHANGE_PASSWORD, { type: ActivityLogType.User, actorId: currentUser.id });
 
     await this.sendPasswordChangedMail(currentUser);
   }
@@ -79,15 +74,7 @@ export class AuthService extends BaseService<UserEntity> {
     await this.cache.set(AuthCacheKey.forgotPasswordOtp(data.email), otp.toLowerCase(), AuthOtpConfig.forgotPasswordTtl);
     await this.cache.set(AuthCacheKey.forgotPasswordSendCount(data.email, today), (parseInt(sendCountRaw ?? "0") + 1).toString(), 86400);
 
-    await this.activityLogService.addOne(
-      {
-        parentId: user.id,
-        action: ActivityLogAction.FORGOT_PASSWORD,
-        type: ActivityLogType.System,
-        parentType: this.tableName,
-      },
-      { user: { id: SYSTEM_USER_ID } as IUserResponse },
-    );
+    await this.writeAuthLog(user.id, ActivityLogAction.FORGOT_PASSWORD, { newData: { email: user.loginName } });
 
     await this.sendOtpMail(user.loginName, user.fullName, otp).catch((error: Error) => {
       this.logger.error("Failed to send OTP email: " + error.message);
@@ -99,6 +86,7 @@ export class AuthService extends BaseService<UserEntity> {
     const stored = await this.cache.get(AuthCacheKey.forgotPasswordOtp(data.email));
     if (!stored || stored !== data.otp.toLowerCase()) {
       await this.cache.del(AuthCacheKey.forgotPasswordOtp(data.email));
+      await this.logAuthFailure(data.email, ActivityLogAction.RESET_PASSWORD_FAILED, stored ? "invalid_otp" : "otp_expired_or_not_found");
       throw new BadRequestException("Invalid or expired OTP");
     }
 
@@ -111,6 +99,7 @@ export class AuthService extends BaseService<UserEntity> {
       throw new BadRequestException("Failed to update password: " + error.message);
     });
     await this.cache.del(AuthCacheKey.forgotPasswordOtp(data.email));
+    await this.writeAuthLog(user.id, ActivityLogAction.RESET_PASSWORD, { newData: { email: user.loginName } });
 
     await this.sendNewPasswordMail(user.loginName, user.fullName, newPassword).catch((error: Error) => {
       this.logger.error("Failed to send new password email: " + error.message);
@@ -133,6 +122,7 @@ export class AuthService extends BaseService<UserEntity> {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await this.cache.set(AuthCacheKey.loginOtp(data.email), JSON.stringify({ code: otp, attempts: 0 }), AuthOtpConfig.loginOtpTtl);
     await this.cache.set(AuthCacheKey.loginOtpRateLimit(data.email), (parseInt(countRaw ?? "0") + 1).toString(), 3600);
+    await this.writeAuthLog(user.id, ActivityLogAction.LOGIN_OTP_REQUEST, { newData: { email: user.loginName } });
 
     await this.sendLoginOtpMail(user.loginName, user.fullName, otp).catch((error: Error) => {
       this.logger.error("Failed to send login OTP email: " + error.message);
@@ -143,27 +133,72 @@ export class AuthService extends BaseService<UserEntity> {
   async loginWithOtp(data: z.infer<typeof loginWithOtpValidation>) {
     const cacheKey = AuthCacheKey.loginOtp(data.email);
     const raw = await this.cache.get(cacheKey);
-    if (!raw) throw new BadRequestException("OTP expired or not found");
+    if (!raw) {
+      await this.logAuthFailure(data.email, ActivityLogAction.LOGIN_OTP_FAILED, "otp_expired_or_not_found");
+      throw new BadRequestException("OTP expired or not found");
+    }
 
     const stored: { code: string; attempts: number } = JSON.parse(raw) as { code: string; attempts: number };
 
     if (stored.attempts >= AuthOtpConfig.loginOtpMaxAttempts) {
       await this.cache.del(cacheKey);
+      await this.logAuthFailure(data.email, ActivityLogAction.LOGIN_OTP_FAILED, "too_many_attempts");
       throw new BadRequestException("Too many failed attempts, please request a new OTP");
     }
 
     if (stored.code !== data.otp) {
       stored.attempts += 1;
       await this.cache.set(cacheKey, JSON.stringify(stored), AuthOtpConfig.loginOtpTtl);
+      await this.logAuthFailure(data.email, ActivityLogAction.LOGIN_OTP_FAILED, "invalid_otp", { attempts: stored.attempts });
       throw new BadRequestException("Invalid OTP");
     }
 
     await this.cache.del(cacheKey);
 
-    return this.supabaseService.createSessionFromEmail(data.email).catch((error: Error) => {
+    const session = await this.supabaseService.createSessionFromEmail(data.email).catch((error: Error) => {
       this.logger.error("Failed to create session: " + error.message);
       throw new InternalServerErrorException("Failed to create session");
     });
+
+    const userId = await this.findUserIdByEmail(data.email);
+    if (userId) {
+      await this.writeAuthLog(userId, ActivityLogAction.LOGIN_OTP, {
+        type: ActivityLogType.User,
+        actorId: userId,
+        newData: { email: data.email },
+      });
+    }
+    return session;
+  }
+
+  /**
+   * Ghi log nhóm auth (parentType = auth, parentId = id user); không chứa OTP hay mật khẩu.
+   * Mặc định do hệ thống thực hiện (request chưa đăng nhập). Lỗi ghi log chỉ in ra, không làm hỏng luồng xác thực.
+   */
+  private async writeAuthLog(
+    userId: string,
+    action: ActivityLogAction,
+    {
+      type = ActivityLogType.System,
+      actorId = SYSTEM_USER_ID,
+      newData,
+    }: { type?: ActivityLogType; actorId?: string; newData?: Record<string, unknown> } = {},
+  ) {
+    await this.activityLogService
+      .addOne({ parentId: userId, parentType: ActivityLogSubject.Auth, action, type, newData }, { user: { id: actorId } as IUserResponse })
+      .catch((error: Error) => this.logger.error(`Failed to write auth activity log (${action}): ${error.message}`));
+  }
+
+  /** Ghi log thất bại theo email; email không thuộc user nào thì bỏ qua để không sinh log rác */
+  private async logAuthFailure(email: string, action: ActivityLogAction, reason: string, extra?: Record<string, unknown>) {
+    const userId = await this.findUserIdByEmail(email);
+    if (!userId) return;
+    await this.writeAuthLog(userId, action, { newData: { email, reason, ...extra } });
+  }
+
+  private async findUserIdByEmail(email: string): Promise<string | undefined> {
+    const user = await this.repo.findOne({ loginName: { $ilike: email }, deleted: { $ne: true } }, { fields: ["id"] });
+    return user?.id;
   }
 
   private getVNDate(): string {
@@ -239,13 +274,16 @@ export class AuthService extends BaseService<UserEntity> {
             ? metadata.name
             : email.split("@")[0];
 
-      await this.createUserWithPrincipal(email, fullName, authId, systemUser);
+      const userId = await this.createUserWithPrincipal(email, fullName, authId, systemUser);
+      await this.writeUserLog(userId, ActivityLogAction.CREATE, undefined, { fullName, loginName: email, isActive: true });
       return { decision: "continue" };
     }
 
     // Tài khoản Supabase được tạo mới → id mới, cập nhật lại authId
     if (user.deleted || !user.isActive) {
+      const oldData = { isActive: user.isActive && !user.deleted };
       await this.updateOne(user.id, { deleted: false, isActive: true, authId }, { user: systemUser });
+      await this.writeUserLog(user.id, ActivityLogAction.RESTORE, oldData, { isActive: true });
       return { decision: "continue" };
     }
 
@@ -256,11 +294,26 @@ export class AuthService extends BaseService<UserEntity> {
     return { decision: "continue" };
   }
 
-  private async createUserWithPrincipal(email: string, fullName: string, authId: string, systemUser: IUserResponse): Promise<void> {
+  /** Log thay đổi bảng users do hook đăng ký (hệ thống thực hiện); hiện trong lịch sử của user */
+  private async writeUserLog(
+    userId: string,
+    action: ActivityLogAction,
+    oldData?: Record<string, unknown>,
+    newData?: Record<string, unknown>,
+  ) {
+    await this.activityLogService
+      .addOne(
+        { parentId: userId, parentType: this.tableName, action, type: ActivityLogType.System, oldData, newData },
+        { user: { id: SYSTEM_USER_ID } as IUserResponse },
+      )
+      .catch((error: Error) => this.logger.error(`Failed to write user activity log (${action}): ${error.message}`));
+  }
+
+  private async createUserWithPrincipal(email: string, fullName: string, authId: string, systemUser: IUserResponse): Promise<string> {
     const defaultValues = this.getDefaultValuesForCreate({ user: systemUser });
     const em = this.repo.getEntityManager();
 
-    await em.transactional(async (txEm) => {
+    const userId = await em.transactional(async (txEm) => {
       const user = this.repo.create({
         authId,
         loginName: email,
@@ -280,11 +333,13 @@ export class AuthService extends BaseService<UserEntity> {
       txEm.persist(principal);
 
       await txEm.flush();
+      return user.id;
     });
 
     await this.sendAccountCreatedMail(email, fullName).catch((error: Error) => {
       this.logger.error("Failed to send account created email: " + error.message);
     });
+    return userId;
   }
 
   private async sendAccountCreatedMail(email: string, fullName: string): Promise<void> {
