@@ -18,6 +18,7 @@ import { UserEntity } from "../../entities/user";
 import { ActivityLogService } from "../activity-log/activity-log.service";
 import { AppSettingService } from "../app-setting/app-setting.service";
 import { AuthCacheKey, AuthOtpConfig } from "./auth.constants";
+import { AuthSessionService } from "./auth-session.service";
 import {
   changePasswordValidation,
   forgotPasswordValidation,
@@ -40,6 +41,7 @@ export class AuthService extends BaseService<UserEntity> {
     private readonly mailService: MailService,
     private readonly appSettingService: AppSettingService,
     private readonly activityLogService: ActivityLogService,
+    private readonly authSessionService: AuthSessionService,
   ) {
     super();
   }
@@ -187,9 +189,12 @@ export class AuthService extends BaseService<UserEntity> {
       newData,
     }: { type?: ActivityLogType; actorId?: string; newData?: Record<string, unknown> } = {},
   ) {
-    await this.activityLogService
+    return this.activityLogService
       .addOne({ parentId: userId, parentType: ActivityLogSubject.Auth, action, type, newData }, { user: { id: actorId } as IUserResponse })
-      .catch((error: Error) => this.logger.error(`Failed to write auth activity log (${action}): ${error.message}`));
+      .catch((error: Error) => {
+        this.logger.error(`Failed to write auth activity log (${action}): ${error.message}`);
+        return undefined;
+      });
   }
 
   /** Ghi log thất bại theo email; email không thuộc user nào thì bỏ qua để không sinh log rác */
@@ -300,7 +305,8 @@ export class AuthService extends BaseService<UserEntity> {
   /**
    * Supabase Custom Access Token hook: chạy mỗi lần cấp JWT, dùng để ghi log LOGIN.
    * Hook lỗi hoặc chậm (>5s) sẽ làm user không đăng nhập/refresh được, nên luôn trả claims nguyên vẹn, không ném lỗi sau bước verify chữ ký.
-   * IP/device trong log là của request từ Supabase tới backend, không phải của client đăng nhập.
+   * IP/device của request hook là của máy chủ Supabase, nên log được ghi trước rồi AuthSessionService
+   * tra auth.sessions (theo session_id) để thay bằng IP/device thật của người đăng nhập.
    */
   async accessTokenHook(
     rawBody: Buffer | undefined,
@@ -313,16 +319,18 @@ export class AuthService extends BaseService<UserEntity> {
 
     const method = typeof body.authentication_method === "string" ? body.authentication_method : undefined;
     const authId = typeof body.user_id === "string" ? body.user_id : undefined;
+    const sessionId = (body.claims as { session_id?: unknown } | undefined)?.session_id;
     // token_refresh: chỉ làm mới access token; magiclink: loginWithOtp đã tự ghi LOGIN_OTP
     if (authId && method && !AUTH_HOOK_SKIPPED_METHODS.has(method)) {
       try {
         const userId = await this.findUserIdByAuthId(authId);
         if (userId) {
-          await this.writeAuthLog(userId, ActivityLogAction.LOGIN, {
+          const log = await this.writeAuthLog(userId, ActivityLogAction.LOGIN, {
             type: ActivityLogType.User,
             actorId: userId,
-            newData: { method },
+            newData: { method, sessionId },
           });
+          if (log && typeof sessionId === "string") this.authSessionService.fillLoginLogFromSession(log.id, sessionId);
         }
       } catch (error) {
         this.logger.error(`Failed to write login activity log: ${(error as Error).message}`);
