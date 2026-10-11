@@ -16,8 +16,8 @@ import { AUTH_CACHE_TTL, AuthCacheKey } from "../services/auth/auth.constants";
 import { DEVICE_ID_HEADER, LoginDeviceService } from "../services/auth/login-device.service";
 import type { Request, Response } from "express";
 
-// 400 ngày
-const LAST_ACTIVE_TTL_SECONDS = 400 * 24 * 3600;
+/** Ghi users.lastActiveAt tối đa 1 lần/giờ/user — đủ chính xác để đếm số ngày không online, không ghi DB mỗi request */
+const LAST_ACTIVE_SYNC_TTL_SECONDS = 3600;
 
 @Injectable()
 export class SupabaseAuthGuard implements CanActivate {
@@ -115,7 +115,16 @@ export class SupabaseAuthGuard implements CanActivate {
   }
 
   private refreshLastActive(userId: string): void {
-    this.cache.set(`user:last-active:${userId}`, Date.now().toString(), LAST_ACTIVE_TTL_SECONDS).catch(() => {});
+    const syncedKey = AuthCacheKey.lastActiveSynced(userId);
+    this.cache
+      .get<string>(syncedKey)
+      .then(async (synced) => {
+        if (synced) return;
+        await this.cache.set(syncedKey, "1", LAST_ACTIVE_SYNC_TTL_SECONDS);
+        // nativeUpdate: không đụng updatedAt/updatedBy — đây không phải thay đổi dữ liệu user
+        await this.userRepo.nativeUpdate({ id: userId }, { lastActiveAt: new Date() });
+      })
+      .catch((error: Error) => this.logger.warn(`Failed to update lastActiveAt (${userId}): ${error.message}`));
   }
 
   private async verifyToken(token: string): Promise<string | undefined> {
