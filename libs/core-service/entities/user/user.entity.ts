@@ -1,5 +1,5 @@
 import { BaseEntity } from "@common/base/base.entity";
-import { Collection, Entity, ManyToMany, ManyToOne, OneToOne, Property, types } from "@mikro-orm/core";
+import { Collection, Entity, Index, ManyToMany, ManyToOne, OneToOne, Property, types } from "@mikro-orm/core";
 import { DepartmentEntity } from "../department/department.entity";
 import { GroupEntity } from "../group/group.entity";
 import { PrincipalEntity } from "../principal/principal.entity";
@@ -24,6 +24,14 @@ export class UserEntity extends BaseEntity {
 
   @Property({ type: types.string, nullable: true })
   avatar?: string;
+
+  /**
+   * Lần cuối user gọi API (đã đăng nhập) — SupabaseAuthGuard ghi, tối đa 1 lần/giờ/user.
+   * null: chưa ghi nhận (chưa từng online, hoặc user cũ trước khi có cột — cron nhắc đăng nhập tự điền lần đầu).
+   */
+  @Index()
+  @Property({ type: types.datetime, nullable: true })
+  lastActiveAt?: Date;
 
   @ManyToOne({ cascade: [], entity: () => DepartmentEntity })
   department: DepartmentEntity;

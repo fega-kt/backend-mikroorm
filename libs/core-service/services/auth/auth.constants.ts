@@ -12,6 +12,13 @@ export const AuthCacheKey = {
   token: (tokenHash: string) => `cache:auth:token:${tokenHash}`,
   /** Thông tin user + permissions của guard — xoá khi user thay đổi để request sau load lại */
   user: (userId: string) => `cache:auth:user:${userId}`,
+  /**
+   * @deprecated Mốc online cuối (ms) guard từng ghi mỗi request, TTL 400 ngày — đã thay bằng users.lastActiveAt.
+   * Chỉ còn cron nhắc đăng nhập đọc để điền lastActiveAt cho user cũ; xoá khi các key này hết hạn.
+   */
+  lastActiveLegacy: (userId: string) => `user:last-active:${userId}`,
+  /** Đánh dấu đã ghi users.lastActiveAt gần đây — guard chỉ ghi DB khi key hết hạn */
+  lastActiveSynced: (userId: string) => `auth:last-active-synced:${userId}`,
   /** deviceId của phiên đăng nhập (session_id trong JWT) — có nghĩa là phiên đã kiểm tra thiết bị mới */
   deviceSession: (sessionId: string) => `auth:device-session:${sessionId}`,
 } as const;
