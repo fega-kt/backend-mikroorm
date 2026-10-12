@@ -19,7 +19,6 @@ export class SettingManagementRouteService {
 
     const canViewCategoryList = currentUser.canAccess([PermissionType.MenuCategory]);
     const canViewRequestList = currentUser.canAccess([PermissionType.MenuRequestType]);
-    const canViewWorkflowSettingList = currentUser.canAccess([PermissionType.MenuWorkflowSetting]);
 
     const children = [];
 
@@ -43,19 +42,6 @@ export class SettingManagementRouteService {
         handle: {
           icon: "FileTextOutlined",
           title: "common.menu.requestType",
-          permissions: [],
-        },
-      });
-    }
-    if (canViewWorkflowSettingList) {
-      children.push({
-        path: "/setting/workflow-setting",
-        component: "/setting/workflow-setting/index.tsx",
-        handle: {
-          keepAlive: false,
-          icon: "NodeIndexOutlined",
-          title: "common.menu.workflowSetting",
-          roles: [PermissionType.MenuWorkflowSetting],
           permissions: [],
         },
       });

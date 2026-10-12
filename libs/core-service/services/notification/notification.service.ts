@@ -26,7 +26,7 @@ export class NotificationService extends BaseService<NotificationEntity> {
     refType?: string;
   }) {
     const em = this.repo.getEntityManager();
-    // Không dùng addOne — nó throw khi không có user trong request (vd: callback Flowable), fallback về SYSTEM
+    // Không dùng addOne — nó throw khi không có user trong request (vd: cron/consumer), fallback về SYSTEM
     const creator = em.getReference(UserEntity, this.request?.user?.id ?? SYSTEM_USER_ID);
     const entity = this.repo.create({
       user: payload.userId,

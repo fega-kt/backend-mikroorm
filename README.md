@@ -64,8 +64,7 @@ src/
     ├── route/                  ← navigation routes / menu structure
     ├── supabase/               ← Supabase client service
     ├── upload/                 ← file uploads + attachments (R2)
-    ├── user/                   ← user accounts
-    └── workflow-setting/       ← workflow configuration
+    └── user/                   ← user accounts
 ```
 
 ---
