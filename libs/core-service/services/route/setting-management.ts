@@ -19,6 +19,8 @@ export class SettingManagementRouteService {
 
     const canViewCategoryList = currentUser.canAccess([PermissionType.MenuCategory]);
     const canViewRequestList = currentUser.canAccess([PermissionType.MenuRequestType]);
+    const canManageApprovalWorkflows = currentUser.canAccess([PermissionType.MenuApprovalWorkflow]);
+    const canViewAllApprovalRequests = currentUser.canAccess([PermissionType.MenuAllApprovalRequest]);
 
     const children = [];
 
@@ -42,6 +44,46 @@ export class SettingManagementRouteService {
         handle: {
           icon: "FileTextOutlined",
           title: "common.menu.requestType",
+          permissions: [],
+        },
+      });
+    }
+    if (canManageApprovalWorkflows) {
+      children.push(
+        {
+          path: "/setting/approval-workflow",
+          component: "/approval/workflows/index.tsx",
+          handle: {
+            keepAlive: false,
+            icon: "NodeIndexOutlined",
+            title: "common.menu.approvalWorkflows",
+            roles: [PermissionType.MenuApprovalWorkflow],
+            permissions: [],
+          },
+        },
+        {
+          path: "/setting/approval-workflow/:id",
+          component: "/approval/workflow-designer/index.tsx",
+          handle: {
+            keepAlive: false,
+            hideInMenu: true,
+            title: "common.menu.approvalWorkflowDesigner",
+            currentActiveMenu: "/setting/approval-workflow",
+            roles: [PermissionType.MenuApprovalWorkflow],
+            permissions: [],
+          },
+        },
+      );
+    }
+    if (canViewAllApprovalRequests) {
+      children.push({
+        path: "/setting/approval-requests",
+        component: "/approval/all-requests/index.tsx",
+        handle: {
+          keepAlive: false,
+          icon: "ProfileOutlined",
+          title: "common.menu.approvalAllRequests",
+          roles: [PermissionType.MenuAllApprovalRequest],
           permissions: [],
         },
       });

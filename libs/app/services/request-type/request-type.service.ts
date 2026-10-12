@@ -35,6 +35,7 @@ export class RequestTypeService extends BaseService<RequestTypeEntity> {
       prefix: data.prefix,
       description: data.description,
       status: data.status,
+      formSchema: data.formSchema ?? undefined,
       category,
     });
   }

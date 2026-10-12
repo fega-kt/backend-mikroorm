@@ -1,3 +1,4 @@
+import { syncSchema } from "@modules/database/sync-schema";
 import { REQUEST_ID_HEADER } from "@common/middleware/logger.middleware";
 import { DEVICE_ID_HEADER } from "@core-service/services/auth/login-device.service";
 import { RequestIdLogger } from "@common/logger/request-id.logger";
@@ -25,7 +26,7 @@ async function bootstrap() {
   });
 
   const orm = app.get(MikroORM);
-  await orm.schema.updateSchema({ safe: true });
+  await syncSchema(orm);
 
   app.getHttpAdapter().getInstance().set("trust proxy", 1);
   const httpAdapter = app.getHttpAdapter();

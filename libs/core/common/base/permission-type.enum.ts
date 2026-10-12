@@ -50,130 +50,6 @@ export enum PermissionType {
   /** xóa department */
   DeleteDeparment = "permission:department:delete",
 
-  /** ===== PROJECT ===== */
-
-  /** vào menu project */
-  MenuProject = "permission:menu:project",
-
-  /** xem chi tiết project */
-  ViewProjectDetail = "permission:project:view",
-
-  /** tạo project */
-  CreateProject = "permission:project:create",
-
-  /** cập nhật project */
-  UpdateProject = "permission:project:update",
-
-  /** xóa project */
-  DeleteProject = "permission:project:delete",
-
-  /** ===== SECTION ===== */
-
-  /** tạo section */
-  CreateSection = "permission:section:create",
-
-  /** cập nhật section */
-  UpdateSection = "permission:section:update",
-
-  /** xóa section */
-  DeleteSection = "permission:section:delete",
-
-  /** ===== TASK ===== */
-
-  /** vào menu task */
-  MenuTask = "permission:menu:task",
-
-  /** xem chi tiết task */
-  ViewTaskDetail = "permission:task:view",
-
-  /** tạo task */
-  CreateTask = "permission:task:create",
-
-  /** cập nhật task */
-  UpdateTask = "permission:task:update",
-
-  /** xóa task */
-  DeleteTask = "permission:task:delete",
-
-  /** giao task */
-  AssignTask = "permission:task:assign",
-
-  /** ===== PROJECT MEMBER ===== */
-
-  /** xem thành viên dự án */
-  ViewProjectMember = "permission:project-member:view",
-
-  /** thêm thành viên vào dự án */
-  AddProjectMember = "permission:project-member:add",
-
-  /** cập nhật vai trò thành viên */
-  UpdateProjectMember = "permission:project-member:update",
-
-  /** xóa thành viên khỏi dự án */
-  RemoveProjectMember = "permission:project-member:remove",
-
-  /** ===== SPRINT ===== */
-
-  /** vào menu sprint */
-  MenuSprint = "permission:menu:sprint",
-
-  /** xem chi tiết sprint */
-  ViewSprintDetail = "permission:sprint:view",
-
-  /** tạo sprint */
-  CreateSprint = "permission:sprint:create",
-
-  /** cập nhật sprint */
-  UpdateSprint = "permission:sprint:update",
-
-  /** xóa sprint */
-  DeleteSprint = "permission:sprint:delete",
-
-  /** ===== MILESTONE ===== */
-
-  /** vào menu milestone */
-  MenuMilestone = "permission:menu:milestone",
-
-  /** xem chi tiết milestone */
-  ViewMilestoneDetail = "permission:milestone:view",
-
-  /** tạo milestone */
-  CreateMilestone = "permission:milestone:create",
-
-  /** cập nhật milestone */
-  UpdateMilestone = "permission:milestone:update",
-
-  /** xóa milestone */
-  DeleteMilestone = "permission:milestone:delete",
-
-  /** ===== TIME LOG ===== */
-
-  /** vào menu timelog */
-  MenuTimeLog = "permission:menu:timelog",
-
-  /** xem timelog */
-  ViewTimeLog = "permission:timelog:view",
-
-  /** tạo timelog (log giờ làm) */
-  CreateTimeLog = "permission:timelog:create",
-
-  /** duyệt / từ chối timelog */
-  ApproveTimeLog = "permission:timelog:approve",
-
-  /** xóa timelog */
-  DeleteTimeLog = "permission:timelog:delete",
-
-  /** ===== COMMENT ===== */
-
-  /** tạo comment */
-  CreateComment = "permission:comment:create",
-
-  /** cập nhật comment */
-  UpdateComment = "permission:comment:update",
-
-  /** xóa comment */
-  DeleteComment = "permission:comment:delete",
-
   /** ===== NOTIFICATION ===== */
 
   /** xem notification */
@@ -212,6 +88,31 @@ export enum PermissionType {
 
   /** xóa request type */
   DeleteRequestType = "permission:request-type:delete",
+
+  /** ===== APPROVAL WORKFLOW ===== */
+
+  /** vào menu quy trình phê duyệt (danh sách + thiết kế) */
+  MenuApprovalWorkflow = "permission:menu:approval-workflow",
+
+  /** tạo quy trình phê duyệt */
+  CreateApprovalWorkflow = "permission:approval-workflow:create",
+
+  /** sửa thông tin + lưu bản nháp quy trình */
+  UpdateApprovalWorkflow = "permission:approval-workflow:update",
+
+  /** xuất bản phiên bản quy trình */
+  PublishApprovalWorkflow = "permission:approval-workflow:publish",
+
+  /** xóa quy trình phê duyệt */
+  DeleteApprovalWorkflow = "permission:approval-workflow:delete",
+
+  /** ===== APPROVAL REQUEST (quản trị) ===== */
+
+  /** vào menu tất cả đơn + xem chi tiết mọi đơn */
+  MenuAllApprovalRequest = "permission:menu:approval-request-all",
+
+  /** gán lại người duyệt của bước đang chờ (vd: người duyệt nghỉ việc) */
+  ReassignApprovalTask = "permission:approval-task:reassign",
 
   /** ===== APP SETTING ===== */
 

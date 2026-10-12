@@ -8,6 +8,7 @@ import { ActivityLogAction, ActivityLogType } from "../../entities/activity-log"
 import { PrincipalEntity } from "../../entities/principal";
 import { RoleEntity } from "../../entities/role";
 import { ActivityLogService } from "../activity-log/activity-log.service";
+import { AuthCacheKey } from "../auth/auth.constants";
 import { LogData, sortLogRefs } from "../activity-log/activity-log.util";
 import { createRoleValidation, updateRoleValidation } from "../../controllers/role/role.validation";
 
@@ -21,6 +22,11 @@ export class RoleService extends BaseService<RoleEntity> {
     private readonly activityLogService: ActivityLogService,
   ) {
     super();
+  }
+
+  /** Quyền của user được cache trong guard (AuthCacheKey.user) — đổi role thì xoá để request sau nạp lại */
+  private async clearPermissionCache() {
+    await this.cache.delByPattern(AuthCacheKey.user("*"));
   }
 
   private async validatePrincipalIds(ids: string[]): Promise<void> {
@@ -41,6 +47,7 @@ export class RoleService extends BaseService<RoleEntity> {
     const role = await this.addOne(rest);
     role.usersAndGroups.set((usersAndGroups ?? []).map((principalId) => em.getReference(PrincipalEntity, principalId)));
     await em.flush();
+    await this.clearPermissionCache();
     await this.writeLog(role.id, ActivityLogAction.CREATE, undefined, await this.loadLogData(role.id));
     return role;
   }
@@ -54,6 +61,7 @@ export class RoleService extends BaseService<RoleEntity> {
     const role = await this.updateOne(id, rest);
     role.usersAndGroups.set((usersAndGroups ?? []).map((principalId) => em.getReference(PrincipalEntity, principalId)));
     await em.flush();
+    await this.clearPermissionCache();
     await this.writeLog(id, ActivityLogAction.UPDATE, oldData, await this.loadLogData(id));
     return role;
   }
