@@ -1,1 +1,1 @@
-export { ApprovalRequestEntity, ApprovalRequestStatus } from "./approval-request.entity";
+export { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "./approval-request.entity";

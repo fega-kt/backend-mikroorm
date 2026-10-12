@@ -36,6 +36,7 @@ export class RequestTypeService extends BaseService<RequestTypeEntity> {
       description: data.description,
       status: data.status,
       formSchema: data.formSchema ?? undefined,
+      attachmentConfig: data.attachmentConfig ?? undefined,
       category,
     });
   }

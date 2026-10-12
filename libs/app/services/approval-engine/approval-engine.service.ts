@@ -6,13 +6,14 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { ApprovalCounterEntity } from "../../entities/approval-counter";
 import { ApprovalDelegationEntity } from "../../entities/approval-delegation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
-import { ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
+import { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-version";
 import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
 import { ApprovalEventType, ApprovalEventsPublisher, type ApprovalEventMessage } from "./approval-events";
 import { ApproverResolver } from "./approver-resolver";
+import { resolveAttachmentConfig, validateFileBlock } from "./attachment-config";
 import {
   NodeType,
   NotifyChannel,
@@ -80,6 +81,7 @@ export class ApprovalEngineService {
         throw new BadRequestException("Request type is not available");
       }
       request.payload = this.validatePayload(requestType, request.payload);
+      await this.validateFiles(tx.em, request, requestType);
 
       const resubmit = request.status === ApprovalRequestStatus.Returned;
       if (!resubmit || !request.workflowVersion) {
@@ -245,7 +247,7 @@ export class ApprovalEngineService {
       const definition = await this.loadDefinition(tx.em, request);
       const node = definition.nodes.find((n) => n.id === task.nodeId) as WaitNode | undefined;
       if (!node) return "none" as const;
-      const slaMs = (node.slaHours ?? 24) * HOUR_MS;
+      const slaMs = this.effectiveSlaHours(request, node.slaHours ?? 24) * HOUR_MS;
       const now = Date.now();
 
       if (node.onOverdue === OverdueAction.AutoApprove) return "auto_approve" as const;
@@ -287,12 +289,12 @@ export class ApprovalEngineService {
    * Chạy thử: đi graph với payload mẫu, giả định mọi bước đều được duyệt, trả về đường đi và người duyệt.
    * Không ghi gì vào DB.
    */
-  async simulate(definition: WorkflowDefinition, payload: Record<string, unknown>, requesterId: string) {
+  async simulate(definition: WorkflowDefinition, payload: Record<string, unknown>, requesterId: string, departmentId?: string) {
     const em = this.orm.em.fork();
     const requester = await em.findOne(UserEntity, { id: requesterId }, { fields: ["id", "department"] });
     if (!requester) throw new NotFoundException("Requester not found");
     const resolver = new ApproverResolver(em);
-    const ctx = { requesterId, departmentId: requester.department.id };
+    const ctx = { requesterId, departmentId: departmentId ?? requester.department.id };
 
     const start = findStartNode(definition);
     const path = [start.id];
@@ -328,6 +330,28 @@ export class ApprovalEngineService {
       from = node.id;
     }
     return { path, steps, outcome: "blocked" as const };
+  }
+
+  /**
+   * Xem trước luồng cho màn tạo tờ trình: chọn quy trình như khi gửi (theo loại + đơn vị trình) rồi chạy thử.
+   * Không có quy trình → workflow null. Không ghi gì vào DB.
+   */
+  async previewForRequest(input: { requestTypeId: string; departmentId: string; payload: Record<string, unknown>; requesterId: string }) {
+    const em = this.orm.em.fork();
+    let versionRef: ApprovalWorkflowVersionEntity;
+    try {
+      versionRef = await this.pickWorkflowVersion(em, input.requestTypeId, input.departmentId);
+    } catch {
+      return { workflow: null, path: [], steps: [], outcome: "blocked" as const };
+    }
+    const version = await em.findOne(ApprovalWorkflowVersionEntity, { id: versionRef.id }, { populate: ["workflow"] });
+    const result = await this.simulate(
+      workflowDefinitionSchema.parse(version.definition),
+      input.payload,
+      input.requesterId,
+      input.departmentId,
+    );
+    return { workflow: { id: version.workflow.id, name: version.workflow.name, version: version.version }, ...result };
   }
 
   /* ================= GRAPH ================= */
@@ -385,7 +409,7 @@ export class ApprovalEngineService {
       const delegations = node.options.allowDelegation
         ? await this.activeDelegations(tx.em, approverIds, request)
         : new Map<string, string>();
-      const dueAt = node.slaHours ? new Date(now.getTime() + node.slaHours * HOUR_MS) : undefined;
+      const dueAt = node.slaHours ? new Date(now.getTime() + this.effectiveSlaHours(request, node.slaHours) * HOUR_MS) : undefined;
       const assignees: string[] = [];
       for (const { slot, users } of openSlots) {
         for (const approverId of users) {
@@ -455,6 +479,25 @@ export class ApprovalEngineService {
     if (!request.workflowVersion) throw new BadRequestException("Request has no workflow");
     const version = await em.findOne(ApprovalWorkflowVersionEntity, { id: request.workflowVersion.id });
     return workflowDefinitionSchema.parse(version.definition);
+  }
+
+  /** Tờ trình Khẩn: hạn xử lý mỗi bước rút còn một nửa (nhắc / chuyển cấp sớm hơn) */
+  private effectiveSlaHours(request: ApprovalRequestEntity, slaHours: number) {
+    return request.priority === ApprovalPriority.Urgent ? slaHours / 2 : slaHours;
+  }
+
+  /** Văn bản tờ trình + tài liệu đính kèm phải đúng cấu hình của loại tờ trình */
+  private async validateFiles(em: EntityManager, request: ApprovalRequestEntity, requestType: RequestTypeEntity) {
+    await em.populate(request, ["documents", "attachments"]);
+    const config = resolveAttachmentConfig(requestType.attachmentConfig);
+    const errors = [
+      ...validateFileBlock(config.documents, request.documents.getItems()).map((e) => ({ block: "documents", ...e })),
+      ...validateFileBlock(config.attachments, request.attachments.getItems()).map((e) => ({ block: "attachments", ...e })),
+    ];
+    if (errors.length) {
+      const detail = errors.map((e) => `${e.block}.${e.code}${"filename" in e ? `(${e.filename})` : ""}`).join(", ");
+      throw new BadRequestException(`Invalid files: ${detail}`);
+    }
   }
 
   private validatePayload(requestType: RequestTypeEntity, payload: Record<string, unknown>) {

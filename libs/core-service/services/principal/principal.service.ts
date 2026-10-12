@@ -2,7 +2,7 @@ import { BaseService } from "@common/base/base.service";
 import { FilterQuery } from "@mikro-orm/core";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { Injectable, Scope } from "@nestjs/common";
+import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import { PrincipalEntity } from "../../entities/principal";
 
 @Injectable({ scope: Scope.REQUEST })
@@ -29,5 +29,18 @@ export class PrincipalService extends BaseService<PrincipalEntity> {
     });
 
     return { data, total };
+  }
+
+  /** Một principal (người dùng hoặc nhóm) — dùng để hiện tên người duyệt trong quy trình */
+  async getPrincipalById(id: string) {
+    const principal = await this.repo.findOne(
+      { id, deleted: { $ne: true } },
+      {
+        populate: ["user", "group"],
+        fields: ["id", "name", "type", "description", "user", "group", "user.id", "user.fullName", "user.avatar", "group.id", "group.name"],
+      },
+    );
+    if (!principal) throw new NotFoundException("Principal not found");
+    return principal;
   }
 }
