@@ -65,6 +65,19 @@ export class RedisService implements ICacheService, OnModuleInit, OnModuleDestro
     }
   }
 
+  /**
+   * Khóa phân tán đơn giản (SET NX PX). Trả về true nếu lấy được khóa, false nếu instance khác đang giữ,
+   * null nếu Redis lỗi — caller tự quyết định có chạy tiếp không.
+   */
+  async acquireLock(key: string, ttlMs: number): Promise<boolean | null> {
+    try {
+      return (await this.client.set(key, String(Date.now()), "PX", ttlMs, "NX")) === "OK";
+    } catch (err) {
+      this.logger.warn(`Redis lock failed for key "${key}"`, err);
+      return null;
+    }
+  }
+
   /** Dùng SCAN thay vì KEYS để an toàn với production */
   async delByPattern(pattern: string): Promise<void> {
     try {

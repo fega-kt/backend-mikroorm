@@ -1,30 +1,32 @@
 import { CategoryService } from "./category";
 import { RequestTypeService } from "./request-type";
-import { WorkflowSettingService } from "./workflow-setting";
 import { HomeReportService } from "./home";
-import { WorkflowInstanceService } from "./workflow-instance";
-import { WorkflowTaskService } from "./workflow-task";
-import { WorkflowActionsService } from "./workflow-actions";
-import { WorkflowDelegationSettingService } from "./workflow-delegation-setting";
+import { ApprovalEngineService, ApprovalEventsPublisher } from "./approval-engine";
+import { ApprovalWorkflowService } from "./approval-workflow";
+import { ApprovalRequestService } from "./approval-request";
+import { ApprovalTaskService } from "./approval-task";
+import { ApprovalDelegationService } from "./approval-delegation";
 
 export {
   CategoryService,
   RequestTypeService,
-  WorkflowSettingService,
   HomeReportService,
-  WorkflowInstanceService,
-  WorkflowTaskService,
-  WorkflowActionsService,
-  WorkflowDelegationSettingService,
+  ApprovalEngineService,
+  ApprovalEventsPublisher,
+  ApprovalWorkflowService,
+  ApprovalRequestService,
+  ApprovalTaskService,
+  ApprovalDelegationService,
 };
 
 export const appServices = [
   CategoryService,
   RequestTypeService,
-  WorkflowSettingService,
   HomeReportService,
-  WorkflowInstanceService,
-  WorkflowTaskService,
-  WorkflowActionsService,
-  WorkflowDelegationSettingService,
+  ApprovalEngineService,
+  ApprovalEventsPublisher,
+  ApprovalWorkflowService,
+  ApprovalRequestService,
+  ApprovalTaskService,
+  ApprovalDelegationService,
 ];

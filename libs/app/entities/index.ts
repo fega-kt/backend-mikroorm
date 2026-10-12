@@ -1,26 +1,31 @@
 export { CategoryEntity } from "./category";
 export { RequestTypeEntity, RequestTypeStatus } from "./request-type";
-export { WorkflowSettingEntity, WorkflowSettingStatus, ApproverType, ApprovalType, SelfApproval } from "./workflow-setting";
-export type { WfApprovalData, ApproverConfig } from "./workflow-setting";
-export { WorkflowInstanceEntity, WorkflowInstanceStatus } from "./workflow-instance";
-export { WorkflowTaskEntity, WorkflowTaskStatus } from "./workflow-task";
-export { WorkflowActionEntity, WorkflowActionType } from "./workflow-action";
-export { WorkflowDelegationSettingEntity } from "./workflow-delegation-setting";
+export { ApprovalWorkflowEntity } from "./approval-workflow";
+export { ApprovalWorkflowVersionEntity, ApprovalWorkflowVersionStatus } from "./approval-workflow-version";
+export { ApprovalRequestEntity, ApprovalRequestStatus } from "./approval-request";
+export { ApprovalTaskEntity, ApprovalTaskStatus } from "./approval-task";
+export { ApprovalHistoryEntity, ApprovalHistoryAction } from "./approval-history";
+export { ApprovalDelegationEntity } from "./approval-delegation";
+export { ApprovalCounterEntity } from "./approval-counter";
 
 import { CategoryEntity } from "./category";
 import { RequestTypeEntity } from "./request-type";
-import { WorkflowSettingEntity } from "./workflow-setting";
-import { WorkflowInstanceEntity } from "./workflow-instance";
-import { WorkflowTaskEntity } from "./workflow-task";
-import { WorkflowActionEntity } from "./workflow-action";
-import { WorkflowDelegationSettingEntity } from "./workflow-delegation-setting";
+import { ApprovalWorkflowEntity } from "./approval-workflow";
+import { ApprovalWorkflowVersionEntity } from "./approval-workflow-version";
+import { ApprovalRequestEntity } from "./approval-request";
+import { ApprovalTaskEntity } from "./approval-task";
+import { ApprovalHistoryEntity } from "./approval-history";
+import { ApprovalDelegationEntity } from "./approval-delegation";
+import { ApprovalCounterEntity } from "./approval-counter";
 
 export const appEntities = [
   CategoryEntity,
   RequestTypeEntity,
-  WorkflowSettingEntity,
-  WorkflowInstanceEntity,
-  WorkflowTaskEntity,
-  WorkflowActionEntity,
-  WorkflowDelegationSettingEntity,
+  ApprovalWorkflowEntity,
+  ApprovalWorkflowVersionEntity,
+  ApprovalRequestEntity,
+  ApprovalTaskEntity,
+  ApprovalHistoryEntity,
+  ApprovalDelegationEntity,
+  ApprovalCounterEntity,
 ];

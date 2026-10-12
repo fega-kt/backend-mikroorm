@@ -43,6 +43,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
               this.logger.warn(`RabbitMQ publish channel error: ${err.message}`);
             });
             await this.setupTopology(this.publishChannel);
+            await this.setupApprovalTopology(this.publishChannel);
             this._isConnected = true;
 
             for (const { queue, handler } of this.registeredConsumers) {
@@ -106,6 +107,20 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       RABBITMQ_EXCHANGE.NOTIFICATION_DLX,
       RABBITMQ_QUEUES.NOTIFICATION_EMAIL_INACTIVE_REMINDER_DLQ,
     );
+  }
+
+  private async setupApprovalTopology(ch: amqp.Channel) {
+    await ch.assertExchange(RABBITMQ_EXCHANGE.APPROVAL, "topic", { durable: true });
+    await ch.assertQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL, {
+      durable: true,
+      arguments: {
+        "x-dead-letter-exchange": RABBITMQ_EXCHANGE.NOTIFICATION_DLX,
+        "x-dead-letter-routing-key": RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ,
+      },
+    });
+    await ch.bindQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL, RABBITMQ_EXCHANGE.APPROVAL, "approval.#");
+    await ch.assertQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ, { durable: true });
+    await ch.bindQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ, RABBITMQ_EXCHANGE.NOTIFICATION_DLX, RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ);
   }
 
   async publish(exchange: string, routingKey: string, message: unknown): Promise<boolean> {

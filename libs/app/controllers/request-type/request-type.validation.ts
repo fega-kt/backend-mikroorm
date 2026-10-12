@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { RequestTypeStatus } from "../../entities/request-type";
+import { formSchemaSchema } from "../../services/approval-engine/form-schema";
 
 export const createRequestTypeValidation = z.object({
   code: z
@@ -14,6 +15,7 @@ export const createRequestTypeValidation = z.object({
   prefix: z.string().trim().min(1, "Prefix is required").max(20),
   description: z.string().trim().max(1000).optional().nullable(),
   status: z.nativeEnum(RequestTypeStatus),
+  formSchema: formSchemaSchema.optional().nullable(),
 });
 
 export const updateRequestTypeValidation = z.object({
@@ -22,6 +24,7 @@ export const updateRequestTypeValidation = z.object({
   prefix: z.string().trim().min(1).max(20),
   description: z.string().trim().max(1000).optional().nullable(),
   status: z.nativeEnum(RequestTypeStatus),
+  formSchema: formSchemaSchema.optional().nullable(),
 });
 
 export const requestTypeFilterValidation = z.object({

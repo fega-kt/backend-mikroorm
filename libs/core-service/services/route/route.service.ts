@@ -2,8 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { compact } from "lodash";
 import { AppRoute } from "../../entities/route";
 import { ActivityLogRouteService } from "./activity-log";
+import { ApprovalRouteService } from "./approval";
 import { about, access, home, outside, personalCenter, routeNest } from "./order";
-import { ProjectManagementRouteService } from "./project-management";
 import { SettingManagementRouteService } from "./setting-management";
 import { SystemConfigRouteService } from "./system-config";
 import { SystemManagementService } from "./system-management";
@@ -157,10 +157,10 @@ const _routeNestRouter = {
 export class RouteService {
   constructor(
     private readonly systemManagementRouteService: SystemManagementService,
-    private readonly projectManagementRouteService: ProjectManagementRouteService,
     private readonly settingManagementRouteService: SettingManagementRouteService,
     private readonly systemConfigRouteService: SystemConfigRouteService,
     private readonly activityLogRouteService: ActivityLogRouteService,
+    private readonly approvalRouteService: ApprovalRouteService,
   ) {}
 
   /**Get route by use */
@@ -231,15 +231,15 @@ export class RouteService {
     };
 
     const systemManagementRouter = this.systemManagementRouteService.getRouteUserManagement();
-    const projectManagementRouter = this.projectManagementRouteService.getRouteProjectManagement();
     const settingManagementRouter = this.settingManagementRouteService.getRouteSettingManagement();
     const systemConfigRouter = this.systemConfigRouteService.getRouteSystemConfig();
     const activityLogRouter = this.activityLogRouteService.getRouteActivityLog();
+    const approvalRouters = this.approvalRouteService.getRouteApproval();
     return compact([
       homeRouter,
+      ...approvalRouters,
       // accessRouter,
       aboutRouter,
-      projectManagementRouter,
       settingManagementRouter,
       systemManagementRouter,
       systemConfigRouter,

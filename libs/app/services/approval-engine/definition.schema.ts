@@ -1,0 +1,143 @@
+import { z } from "zod";
+
+/** Cách xác định người duyệt của một bước */
+export enum ApproverType {
+  /** Trưởng phòng của người tạo đơn (người tạo là trưởng phòng → trưởng phòng cấp cha) */
+  DeptHead = "DEPT_HEAD",
+  /** Phó phòng của người tạo đơn (không có phó phòng → trưởng phòng) */
+  DeptDeputy = "DEPT_DEPUTY",
+  /** Người cụ thể (cũ — giữ để đọc định nghĩa đã lưu; màn thiết kế mới dùng PRINCIPAL) */
+  SpecificUser = "SPECIFIC_USER",
+  /** Người dùng hoặc nhóm (principal). Nhóm: mọi thành viên nhận task, một người duyệt là đủ */
+  Principal = "PRINCIPAL",
+}
+
+export enum OverdueAction {
+  Remind = "REMIND",
+  RemindThenEscalate = "REMIND_THEN_ESCALATE",
+  AutoApprove = "AUTO_APPROVE",
+}
+
+export enum ParallelMode {
+  /** Tất cả cùng duyệt */
+  All = "ALL",
+  /** Một người duyệt là đủ */
+  Any = "ANY",
+}
+
+export enum NotifyChannel {
+  Email = "EMAIL",
+  InApp = "IN_APP",
+}
+
+export enum NodeType {
+  Start = "start",
+  Approval = "approval",
+  Condition = "condition",
+  Parallel = "parallel",
+  Notify = "notify",
+  End = "end",
+}
+
+export const approverSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal(ApproverType.DeptHead) }),
+  z.object({ type: z.literal(ApproverType.DeptDeputy) }),
+  z.object({ type: z.literal(ApproverType.SpecificUser), userId: z.string().min(1) }),
+  z.object({ type: z.literal(ApproverType.Principal), principalId: z.string().min(1) }),
+]);
+
+export const stepOptionsSchema = z.object({
+  allowDelegation: z.boolean().default(true),
+  skipIfRequester: z.boolean().default(false),
+  /** Không tìm được người duyệt (phòng thiếu trưởng/phó, nhóm trống…) thì bỏ qua thay vì báo lỗi */
+  skipIfNoApprover: z.boolean().default(false),
+  requireRejectReason: z.boolean().default(true),
+  allowReturn: z.boolean().default(true),
+});
+
+const nodeBase = {
+  id: z.string().min(1).max(64),
+  name: z.string().trim().max(255).optional(),
+};
+
+const slaFields = {
+  slaHours: z
+    .number()
+    .positive()
+    .max(24 * 365)
+    .optional(),
+  onOverdue: z.enum(OverdueAction).default(OverdueAction.Remind),
+  options: stepOptionsSchema.default(stepOptionsSchema.parse({})),
+};
+
+export const startNodeSchema = z.object({ ...nodeBase, type: z.literal(NodeType.Start) });
+
+export const approvalNodeSchema = z.object({
+  ...nodeBase,
+  type: z.literal(NodeType.Approval),
+  /** null khi admin chưa chọn — chỉ hợp lệ ở bản nháp, validate-graph sẽ báo lỗi */
+  approver: approverSchema.nullable(),
+  ...slaFields,
+});
+
+export const conditionNodeSchema = z.object({ ...nodeBase, type: z.literal(NodeType.Condition) });
+
+export const parallelNodeSchema = z.object({
+  ...nodeBase,
+  type: z.literal(NodeType.Parallel),
+  mode: z.enum(ParallelMode).default(ParallelMode.All),
+  approvers: z.array(approverSchema).default([]),
+  ...slaFields,
+});
+
+export const notifyNodeSchema = z.object({
+  ...nodeBase,
+  type: z.literal(NodeType.Notify),
+  channels: z.array(z.enum(NotifyChannel)).min(1).default([NotifyChannel.InApp]),
+  /** Rỗng → chỉ báo cho người tạo đơn */
+  recipients: z.array(approverSchema).default([]),
+  message: z.string().max(1000).optional(),
+});
+
+export const endNodeSchema = z.object({ ...nodeBase, type: z.literal(NodeType.End) });
+
+export const nodeSchema = z.discriminatedUnion("type", [
+  startNodeSchema,
+  approvalNodeSchema,
+  conditionNodeSchema,
+  parallelNodeSchema,
+  notifyNodeSchema,
+  endNodeSchema,
+]);
+
+/** Biểu thức json-logic, ví dụ { ">": [{ "var": "payload.days" }, 3] } */
+export const jsonLogicSchema = z.record(z.string(), z.unknown());
+
+export const edgeSchema = z.object({
+  id: z.string().min(1).max(64).optional(),
+  from: z.string().min(1),
+  to: z.string().min(1),
+  label: z.string().max(100).optional(),
+  condition: jsonLogicSchema.optional(),
+  default: z.boolean().optional(),
+});
+
+export const workflowDefinitionSchema = z.object({
+  nodes: z.array(nodeSchema),
+  edges: z.array(edgeSchema),
+  /** Vị trí node trên canvas — engine không dùng */
+  layout: z.record(z.string(), z.object({ x: z.number(), y: z.number() })).default({}),
+});
+
+export type Approver = z.infer<typeof approverSchema>;
+export type StepOptions = z.infer<typeof stepOptionsSchema>;
+export type WorkflowNode = z.infer<typeof nodeSchema>;
+export type ApprovalNode = z.infer<typeof approvalNodeSchema>;
+export type ParallelNode = z.infer<typeof parallelNodeSchema>;
+export type NotifyNode = z.infer<typeof notifyNodeSchema>;
+export type WorkflowEdge = z.infer<typeof edgeSchema>;
+export type WorkflowDefinition = z.infer<typeof workflowDefinitionSchema>;
+/** Node mà engine dừng lại chờ người duyệt */
+export type WaitNode = ApprovalNode | ParallelNode;
+
+export const isWaitNode = (node: WorkflowNode): node is WaitNode => node.type === NodeType.Approval || node.type === NodeType.Parallel;
