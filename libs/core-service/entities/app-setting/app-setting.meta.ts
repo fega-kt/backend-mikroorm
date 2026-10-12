@@ -76,6 +76,11 @@ export const APP_SETTING_META: Record<AppSettingType, AppSettingMeta> = {
     rule: { min: 1, max: 365, integer: true },
   },
   [AppSettingType.INACTIVE_EMAIL_ALLOWED_LIST]: { type: AppSettingValueType.EMAILS, isShow: true },
+  [AppSettingType.OUTBOX_RETENTION_DAYS]: {
+    type: AppSettingValueType.NUMBER,
+    isShow: true,
+    rule: { min: 0, max: 3650, integer: true },
+  },
 
   /** Bật/tắt viền focus đen quanh vùng nội dung chính ở FE */
   [AppSettingType.CONTENT_FOCUS_OUTLINE_ENABLED]: { type: AppSettingValueType.BOOLEAN, isShow: true, clientVisible: true },

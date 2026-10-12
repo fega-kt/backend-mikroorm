@@ -5,7 +5,10 @@ import { renderTemplate, wrapEmailHtml } from "@app-domain/services/email-templa
 import { resolveEmailTemplate } from "@app-domain/services/email-template/email-template.resolve";
 import { buildRequestVariables } from "@app-domain/services/email-template/email-template.vars";
 import { ENV } from "@config/env.config";
+import { ActivityLogQueueStatus } from "@core-service/entities/activity-log-queue";
+import { NotificationType } from "@core-service/entities/notification";
 import { UserEntity } from "@core-service/entities/user";
+import { ActivityLogQueueService } from "@core-service/services/activity-log-queue/activity-log-queue.service";
 import { MikroORM } from "@mikro-orm/core";
 import { RABBITMQ_QUEUES } from "@modules/rabbitmq/rabbitmq.constants";
 import { ConsumerHandler, RabbitMQService } from "@modules/rabbitmq/rabbitmq.service";
@@ -13,27 +16,63 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import type { ConsumeMessage } from "amqplib";
 import { Resend } from "resend";
 
-/** Sự kiện → mẫu email hệ thống; sự kiện không có ở đây thì không gửi email */
-const TEMPLATE_BY_EVENT: Partial<Record<ApprovalEventType, SystemEmailTemplate>> = {
-  [ApprovalEventType.StepPending]: SystemEmailTemplate.StepPending,
-  [ApprovalEventType.Approved]: SystemEmailTemplate.Approved,
-  [ApprovalEventType.Rejected]: SystemEmailTemplate.Rejected,
-  [ApprovalEventType.Returned]: SystemEmailTemplate.Returned,
-  [ApprovalEventType.Cancelled]: SystemEmailTemplate.Cancelled,
-  [ApprovalEventType.Reminder]: SystemEmailTemplate.Reminder,
-  [ApprovalEventType.Escalated]: SystemEmailTemplate.Escalated,
-  [ApprovalEventType.Notify]: SystemEmailTemplate.Notify,
+/** Sự kiện → mẫu email hệ thống + loại ghi ở hàng đợi gửi mail; sự kiện không có ở đây thì không gửi email */
+const EVENT_MAP: Partial<Record<ApprovalEventType, { template: SystemEmailTemplate; type: NotificationType }>> = {
+  [ApprovalEventType.StepPending]: { template: SystemEmailTemplate.StepPending, type: NotificationType.APPROVAL_PENDING },
+  [ApprovalEventType.Approved]: { template: SystemEmailTemplate.Approved, type: NotificationType.APPROVAL_APPROVED },
+  [ApprovalEventType.Rejected]: { template: SystemEmailTemplate.Rejected, type: NotificationType.APPROVAL_REJECTED },
+  [ApprovalEventType.Returned]: { template: SystemEmailTemplate.Returned, type: NotificationType.APPROVAL_RETURNED },
+  [ApprovalEventType.Cancelled]: { template: SystemEmailTemplate.Cancelled, type: NotificationType.APPROVAL_CANCELLED },
+  [ApprovalEventType.Reminder]: { template: SystemEmailTemplate.Reminder, type: NotificationType.APPROVAL_REMINDER },
+  [ApprovalEventType.Escalated]: { template: SystemEmailTemplate.Escalated, type: NotificationType.APPROVAL_ESCALATED },
+  [ApprovalEventType.Notify]: { template: SystemEmailTemplate.Notify, type: NotificationType.APPROVAL_NOTIFY },
+  [ApprovalEventType.StepApproved]: { template: SystemEmailTemplate.StepApproved, type: NotificationType.APPROVAL_STEP_APPROVED },
 };
 
-/** Gửi email theo mẫu (Mẫu email trong Quản trị) cho người nhận của event phê duyệt */
+const REF_TYPE = "approval_requests";
+/** Số lần gửi mỗi lượt (lỗi tạm thời thì thử lại sau 2s, 10s) */
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAYS_MS = [2_000, 10_000];
+
+/** Message từ engine (nhiều người nhận) hoặc từ "Gửi lại" ở hàng đợi gửi mail (có queueId, một người nhận) */
+type EmailMessage = ApprovalEventMessage & { queueId?: string; userId?: string };
+
+type Recipient = Pick<UserEntity, "id" | "fullName" | "workEmail" | "loginName">;
+
+interface EmailContext {
+  template: { subject: string; body: string };
+  vars: Record<string, string>;
+  link: string;
+  users: Map<string, Recipient>;
+}
+
+class SendError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/**
+ * Gửi email theo mẫu (Mẫu email trong Quản trị) cho người nhận của event phê duyệt.
+ * Mỗi người nhận là một dòng ở hàng đợi gửi mail (activity_log_queue): trạng thái, số lần thử, lỗi — gửi lại được từ màn quản trị.
+ */
 @Injectable()
 export class ApprovalEmailConsumer implements OnModuleInit {
   private readonly logger = new Logger(ApprovalEmailConsumer.name);
   private readonly resend = ENV.RESEND_API_KEY ? new Resend(ENV.RESEND_API_KEY) : null;
+  /** Giãn cách giữa các lần thử (test đặt về 0) */
+  protected retryDelaysMs = RETRY_DELAYS_MS;
 
   constructor(
     private readonly rabbitmq: RabbitMQService,
     private readonly orm: MikroORM,
+    private readonly queue: ActivityLogQueueService,
   ) {}
 
   async onModuleInit() {
@@ -41,28 +80,64 @@ export class ApprovalEmailConsumer implements OnModuleInit {
   }
 
   private async handle(msg: ConsumeMessage, ack: () => void, nack: (requeue?: boolean) => void) {
-    const event = JSON.parse(msg.content.toString()) as ApprovalEventMessage;
-    const systemTemplate = TEMPLATE_BY_EVENT[event.type];
-    if (!systemTemplate || !event.recipientIds?.length) return ack();
-    if (!this.resend) {
-      this.logger.warn("RESEND_API_KEY not configured, skipping approval email");
-      return ack();
+    let event: EmailMessage;
+    try {
+      event = JSON.parse(msg.content.toString()) as EmailMessage;
+    } catch {
+      this.logger.error("Invalid approval email message");
+      return nack(false);
     }
+    const mapping = EVENT_MAP[event.type];
+    if (!mapping) return ack();
 
+    try {
+      if (event.queueId) {
+        const userId = event.userId ?? event.recipientIds?.[0];
+        const context = await this.buildContext(event, mapping.template, [userId]);
+        await this.deliver(context, userId, event.queueId);
+        return ack();
+      }
+      if (!event.recipientIds?.length) return ack();
+
+      // Outbox đảm bảo "ít nhất một lần" → event có thể tới lại; người nhận đã có dòng cho event này thì bỏ qua
+      const handled = new Set(event.eventId ? (await this.queue.findByEvent(event.eventId)).map((row) => row.userId) : []);
+      const recipients = event.recipientIds.filter((userId) => !handled.has(userId));
+      if (!recipients.length) return ack();
+
+      const context = await this.buildContext(event, mapping.template, recipients);
+      const items = [];
+      for (const userId of recipients) {
+        items.push(
+          await this.queue.create({
+            userId,
+            type: mapping.type,
+            payload: { ...event, recipientIds: [userId] },
+            refType: REF_TYPE,
+            refId: event.requestId,
+            eventId: event.eventId,
+          }),
+        );
+      }
+      for (const item of items) await this.deliver(context, item.userId, item.id);
+      ack();
+    } catch (err) {
+      // Lỗi hệ thống (DB…) trước khi ghi được trạng thái từng người → đưa vào DLQ
+      this.logger.error(`Approval email ${event.type} for ${event.requestId} failed: ${errorMessage(err)}`);
+      nack(false);
+    }
+  }
+
+  private async buildContext(event: EmailMessage, systemTemplate: SystemEmailTemplate, userIds: string[]): Promise<EmailContext> {
     const em = this.orm.em.fork();
-    const code = event.type === ApprovalEventType.Notify && event.templateCode ? event.templateCode : systemTemplate;
-    const template = await resolveEmailTemplate(em, code, systemTemplate);
+    // Mẫu chọn trong cấu hình quy trình (bước Thông báo / thông báo của bước duyệt), không có thì mẫu hệ thống
+    const template = await resolveEmailTemplate(em, event.templateCode || systemTemplate, systemTemplate);
     const request = await em.findOne(
       ApprovalRequestEntity,
       { id: event.requestId },
       { populate: ["requestType", "requester", "department"] },
     );
     const [users, actor] = await Promise.all([
-      em.find(
-        UserEntity,
-        { id: { $in: event.recipientIds }, deleted: { $ne: true } },
-        { fields: ["id", "fullName", "workEmail", "loginName"] },
-      ),
+      em.find(UserEntity, { id: { $in: userIds }, deleted: { $ne: true } }, { fields: ["id", "fullName", "workEmail", "loginName"] }),
       event.actorId ? em.findOne(UserEntity, { id: event.actorId }, { fields: ["id", "fullName"] }) : Promise.resolve(null),
     ]);
 
@@ -82,24 +157,46 @@ export class ApprovalEmailConsumer implements OnModuleInit {
       comment: event.comment,
       message: event.message,
     });
+    return { template, vars, link, users: new Map(users.map((user) => [user.id, user])) };
+  }
 
-    try {
-      for (const user of users) {
-        const to = user.workEmail || user.loginName;
-        if (!to?.includes("@")) continue;
-        const personal = { ...vars, "recipient.name": user.fullName };
-        const { error } = await this.resend.emails.send({
-          from: ENV.MAIL_FROM,
-          to,
-          subject: renderTemplate(template.subject, personal, { html: false }),
-          html: wrapEmailHtml(renderTemplate(template.body, personal, { html: true }), link),
-        });
-        if (error) throw new Error(error.message);
+  /** Gửi cho một người nhận và ghi kết quả vào dòng hàng đợi `queueId` */
+  private async deliver(context: EmailContext, userId: string, queueId: string) {
+    const user = context.users.get(userId);
+    if (!user) return this.queue.markSkipped(queueId, "User not found");
+    const to = user.workEmail || user.loginName;
+    if (!to?.includes("@")) return this.queue.markSkipped(queueId, "Recipient has no email address");
+
+    const personal = { ...context.vars, "recipient.name": user.fullName };
+    const subject = renderTemplate(context.template.subject, personal, { html: false });
+    if (!this.resend) return this.queue.markSkipped(queueId, "RESEND_API_KEY not configured", { recipient: to, subject });
+    const html = wrapEmailHtml(renderTemplate(context.template.body, personal, { html: true }), context.link);
+
+    const previous = (await this.queue.findOne(queueId))?.attempts ?? 0;
+    await this.queue.update(queueId, { status: ActivityLogQueueStatus.IN_PROGRESS, recipient: to, subject, lastAttemptAt: new Date() });
+
+    let attempts = previous;
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      attempts++;
+      try {
+        await this.send(to, subject, html);
+        return this.queue.markCompleted(queueId, { attempts });
+      } catch (err) {
+        const retryable = !(err instanceof SendError) || err.retryable;
+        if (!retryable || i === MAX_ATTEMPTS - 1) {
+          this.logger.warn(`Approval email to ${to} failed after ${attempts} attempt(s): ${errorMessage(err)}`);
+          return this.queue.markFailed(queueId, errorMessage(err), attempts);
+        }
+        await sleep(this.retryDelaysMs[i] ?? this.retryDelaysMs[this.retryDelaysMs.length - 1] ?? 0);
       }
-      ack();
-    } catch (err) {
-      this.logger.error(`Approval email ${event.type} for ${event.requestId} failed: ${err instanceof Error ? err.message : String(err)}`);
-      nack(false);
     }
+  }
+
+  private async send(to: string, subject: string, html: string) {
+    const { error } = await this.resend.emails.send({ from: ENV.MAIL_FROM, to, subject, html });
+    if (!error) return;
+    // Lỗi dữ liệu (địa chỉ sai, thiếu quyền domain…) thử lại cũng vậy; còn lại (quá tải, mạng, 5xx) thì thử lại
+    const permanent = /validation|invalid|missing|restricted|not_found|forbidden/i.test(error.name ?? "");
+    throw new SendError(error.message, !permanent);
   }
 }

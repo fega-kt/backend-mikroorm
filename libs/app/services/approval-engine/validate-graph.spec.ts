@@ -71,6 +71,27 @@ describe("validate-graph", () => {
     expect(codes(legacy)).not.toContain(GraphErrorCode.NotifyNoRecipient);
   });
 
+  it("enabled step notifications need at least one recipient", () => {
+    const def = leaveWorkflow();
+    const n1 = def.nodes.find((n) => n.id === "n1");
+    if (n1.type !== NodeType.Approval) throw new Error("n1");
+    const rule = {
+      enabled: true,
+      channels: [],
+      notifyRequester: false,
+      notifyNextApprovers: false,
+      notifyPreviousApprovers: false,
+      recipients: [],
+    };
+    n1.notifications = { rejected: { ...rule, enabled: false } };
+    expect(codes(def)).not.toContain(GraphErrorCode.StepNotifyNoRecipient);
+    // "người duyệt bước sau" không áp dụng cho từ chối
+    n1.notifications = { rejected: { ...rule, notifyNextApprovers: true } };
+    expect(codes(def)).toContain(GraphErrorCode.StepNotifyNoRecipient);
+    n1.notifications = { rejected: { ...rule, notifyPreviousApprovers: true }, approved: { ...rule, notifyNextApprovers: true } };
+    expect(codes(def)).not.toContain(GraphErrorCode.StepNotifyNoRecipient);
+  });
+
   it("rule 6: conditions only use form fields", () => {
     expect(validateGraph(leaveWorkflow(), ["reason"])).toContainEqual(
       expect.objectContaining({ code: GraphErrorCode.UnknownField, edgeId: "c1->n2" }),

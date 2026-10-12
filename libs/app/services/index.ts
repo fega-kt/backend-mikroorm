@@ -1,7 +1,7 @@
 import { CategoryService } from "./category";
 import { RequestTypeService } from "./request-type";
 import { HomeReportService } from "./home";
-import { ApprovalEngineService, ApprovalEventsPublisher } from "./approval-engine";
+import { ApprovalEngineService } from "./approval-engine";
 import { ApprovalWorkflowService } from "./approval-workflow";
 import { ApprovalRequestService } from "./approval-request";
 import { ApprovalTaskService } from "./approval-task";
@@ -13,7 +13,6 @@ export {
   RequestTypeService,
   HomeReportService,
   ApprovalEngineService,
-  ApprovalEventsPublisher,
   ApprovalWorkflowService,
   ApprovalRequestService,
   ApprovalTaskService,
@@ -26,7 +25,6 @@ export const appServices = [
   RequestTypeService,
   HomeReportService,
   ApprovalEngineService,
-  ApprovalEventsPublisher,
   ApprovalWorkflowService,
   ApprovalRequestService,
   ApprovalTaskService,

@@ -7,6 +7,7 @@ export enum SystemEmailTemplate {
   Cancelled = "approval.cancelled",
   Reminder = "approval.reminder",
   Escalated = "approval.escalated",
+  StepApproved = "approval.step_approved",
   /** Mặc định của bước Thông báo khi không chọn mẫu riêng */
   Notify = "approval.notify",
 }
@@ -34,6 +35,16 @@ export const SYSTEM_EMAIL_TEMPLATES: Record<SystemEmailTemplate, EmailTemplateCo
     name: "Tờ trình đã được duyệt",
     subject: "[Phê duyệt] {{request.code}} – {{request.title}} đã được duyệt",
     body: "<p>Xin chào {{recipient.name}},</p><p>Tờ trình <strong>{{request.code}}</strong> {{request.title}} của bạn đã được duyệt xong.</p>",
+  },
+  [SystemEmailTemplate.StepApproved]: {
+    code: SystemEmailTemplate.StepApproved,
+    name: "Một bước đã được duyệt",
+    subject: "[Phê duyệt] {{request.code}} – {{request.title}}: bước {{step.name}} đã được duyệt",
+    body:
+      "<p>Xin chào {{recipient.name}},</p>" +
+      "<p>Bước <strong>{{step.name}}</strong> của tờ trình <strong>{{request.code}}</strong> {{request.title}} đã được {{actor.name}} duyệt.</p>" +
+      "<p>Ý kiến: {{comment}}</p><p>{{message}}</p>" +
+      "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
   },
   [SystemEmailTemplate.Rejected]: {
     code: SystemEmailTemplate.Rejected,

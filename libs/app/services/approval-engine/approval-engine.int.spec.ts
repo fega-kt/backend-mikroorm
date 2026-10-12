@@ -6,7 +6,10 @@ import "reflect-metadata";
 import { SYSTEM_USER_ID } from "@common/constants/system.constant";
 import { AttachmentEntity, coreEntities, DepartmentEntity, NotificationEntity, NotificationType, UserEntity } from "@core-service/entities";
 import { MikroORM } from "@mikro-orm/postgresql";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { OutboxEventEntity, OutboxEventStatus } from "@modules/outbox/outbox-event.entity";
+import { OutboxService } from "@modules/outbox/outbox.service";
+import type { RabbitMQService } from "@modules/rabbitmq/rabbitmq.service";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { appEntities } from "../../entities";
 import { ApprovalDelegationEntity } from "../../entities/approval-delegation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
@@ -17,7 +20,6 @@ import { ApprovalWorkflowVersionEntity, ApprovalWorkflowVersionStatus } from "..
 import { CategoryEntity } from "../../entities/category";
 import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
 import { ApprovalAction, ApprovalEngineService } from "./approval-engine.service";
-import { ApprovalEventsPublisher } from "./approval-events";
 import { workflowDefinitionSchema } from "./definition.schema";
 import { formSchemaSchema } from "./form-schema";
 
@@ -70,6 +72,39 @@ const notifyDefinition = () =>
       { from: "notify1", to: "n1" },
       { from: "n1", to: "notify2" },
       { from: "notify2", to: "end" },
+    ],
+  });
+
+/** Thông báo theo sự kiện của bước duyệt: n1 duyệt xong → người duyệt bước sau + staff2; n1 từ chối → tắt; n2 trả lại → người trình + người đã duyệt */
+const stepNotifyDefinition = () =>
+  workflowDefinitionSchema.parse({
+    nodes: [
+      { id: "start", type: "start" },
+      {
+        id: "n1",
+        type: "approval",
+        approver: { type: "DEPT_HEAD" },
+        notifications: {
+          approved: {
+            notifyRequester: false,
+            notifyNextApprovers: true,
+            recipients: [{ type: "PRINCIPAL", principalId: G.principalStaff2 }],
+          },
+          rejected: { enabled: false },
+        },
+      },
+      {
+        id: "n2",
+        type: "approval",
+        approver: { type: "SPECIFIC_USER", userId: U.director },
+        notifications: { returned: { notifyRequester: true, notifyPreviousApprovers: true } },
+      },
+      { id: "end", type: "end" },
+    ],
+    edges: [
+      { from: "start", to: "n1" },
+      { from: "n1", to: "n2" },
+      { from: "n2", to: "end" },
     ],
   });
 
@@ -173,13 +208,15 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
   let groupRequestTypeId: string;
   let emptyRequestTypeId: string;
   let notifyRequestTypeId: string;
+  let stepNotifyRequestTypeId: string;
 
   const em = () => orm.em.fork();
 
   beforeAll(async () => {
-    orm = await MikroORM.init({ entities: [...coreEntities, ...appEntities], clientUrl: DB_URL, debug: false });
+    orm = await MikroORM.init({ entities: [...coreEntities, ...appEntities, OutboxEventEntity], clientUrl: DB_URL, debug: false });
     await orm.schema.refreshDatabase();
-    engine = new ApprovalEngineService(orm, new ApprovalEventsPublisher());
+    // Không có RabbitMQ → event nằm lại outbox ở trạng thái chờ
+    engine = new ApprovalEngineService(orm, new OutboxService(orm));
 
     await em().transactional(async (tx) => {
       await tx.execute("set local session_replication_role = replica");
@@ -333,6 +370,31 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       });
       await tx.flush();
       notifyRequestTypeId = notifyType.id;
+      const stepNotifyType = tx.create(RequestTypeEntity, {
+        code: "STEP_NOTIFY",
+        name: "Thông báo theo bước",
+        prefix: "TBB",
+        category,
+        status: RequestTypeStatus.Published,
+        ...audit,
+      });
+      const stepNotifyWorkflow = tx.create(ApprovalWorkflowEntity, {
+        name: "Thông báo theo bước",
+        requestType: stepNotifyType,
+        priority: 0,
+        isActive: true,
+        ...audit,
+      });
+      stepNotifyWorkflow.publishedVersion = tx.create(ApprovalWorkflowVersionEntity, {
+        workflow: stepNotifyWorkflow,
+        version: 1,
+        definition: stepNotifyDefinition(),
+        status: ApprovalWorkflowVersionStatus.Published,
+        publishedAt: new Date(),
+        ...audit,
+      });
+      await tx.flush();
+      stepNotifyRequestTypeId = stepNotifyType.id;
       requestTypeId = requestType.id;
       versionId = version.id;
       groupRequestTypeId = groupType.id;
@@ -652,6 +714,73 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     // notify2: người trình; "người duyệt bước sau" rỗng vì sau đó là kết thúc
     expect(await notified(id)).toEqual([U.itHead, U.staff2, U.staff].sort());
     expect((await load(id)).status).toBe(ApprovalRequestStatus.Approved);
+  });
+
+  it("sends step notifications on approve / return and respects a disabled rule", async () => {
+    const notified = async (id: string, type: NotificationType) =>
+      (await em().find(NotificationEntity, { refId: id, type })).map((n) => n.user.id).sort();
+
+    const id = await createRequest(U.staff, D.it, {}, stepNotifyRequestTypeId);
+    await engine.submit(id, U.staff);
+    await approve(id, U.itHead, "OK");
+    // n1 duyệt xong: người duyệt n2 (director) + staff2 cố định, không gửi người trình
+    expect(await notified(id, NotificationType.APPROVAL_STEP_APPROVED)).toEqual([U.director, U.staff2].sort());
+
+    await engine.act(id, ApprovalAction.Return, { actorId: U.director, comment: "Bổ sung" });
+    // n2 trả lại: người trình + người đã duyệt trước đó (itHead)
+    expect(await notified(id, NotificationType.APPROVAL_RETURNED)).toEqual([U.staff, U.itHead].sort());
+
+    // n1 từ chối với thông báo đã tắt → không ai nhận
+    const rejected = await createRequest(U.staff, D.it, {}, stepNotifyRequestTypeId);
+    await engine.submit(rejected, U.staff);
+    await engine.act(rejected, ApprovalAction.Reject, { actorId: U.itHead, comment: "Không" });
+    expect((await load(rejected)).status).toBe(ApprovalRequestStatus.Rejected);
+    expect(await notified(rejected, NotificationType.APPROVAL_REJECTED)).toEqual([]);
+  });
+
+  it("writes events to the outbox in the same transaction and relays them later", async () => {
+    const id = await createRequest(U.staff, D.it, { days: 1, reason: "Outbox" });
+    await engine.submit(id, U.staff);
+    const pending = await em().find(OutboxEventEntity, { status: OutboxEventStatus.Pending }, { orderBy: { createdAt: "ASC" } });
+    const mine = pending.filter((event) => event.payload.requestId === id);
+    expect(mine.map((event) => event.routingKey)).toEqual(["approval.request.submitted", "approval.request.step_pending"]);
+    expect(mine.every((event) => event.payload.eventId === event.id && event.exchange === "approval")).toBe(true);
+
+    // RabbitMQ lỗi: tăng số lần thử, vẫn chờ
+    const broken = { isConnected: true, publishConfirmed: vi.fn().mockRejectedValue(new Error("channel closed")) };
+    await new OutboxService(orm, broken as unknown as RabbitMQService).relayPending(0);
+    const afterFail = await em().findOneOrFail(OutboxEventEntity, mine[0].id);
+    expect(afterFail).toMatchObject({ status: OutboxEventStatus.Pending, attempts: 1, error: "channel closed" });
+
+    // RabbitMQ sống lại: cron đẩy bù hết, đánh đã đẩy
+    const healthy = { isConnected: true, publishConfirmed: vi.fn().mockResolvedValue(undefined) };
+    await new OutboxService(orm, healthy as unknown as RabbitMQService).relayPending(0);
+    expect(healthy.publishConfirmed).toHaveBeenCalledWith(
+      "approval",
+      "approval.request.submitted",
+      expect.objectContaining({ eventId: mine[0].id }),
+      mine[0].id,
+    );
+    const relayed = await em().find(OutboxEventEntity, { id: { $in: mine.map((event) => event.id) } });
+    expect(relayed.every((event) => event.status === OutboxEventStatus.Published && event.publishedAt)).toBe(true);
+  });
+
+  it("cleanup removes only old published outbox events", async () => {
+    const outbox = new OutboxService(orm);
+    const e = em();
+    const old = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    const make = (status: OutboxEventStatus, publishedAt?: Date) =>
+      e.create(OutboxEventEntity, { exchange: "test", routingKey: "test.cleanup", payload: {}, status, publishedAt });
+    const oldPublished = make(OutboxEventStatus.Published, old);
+    const recentPublished = make(OutboxEventStatus.Published, new Date());
+    const oldPending = make(OutboxEventStatus.Pending);
+    oldPending.createdAt = old;
+    await e.flush();
+
+    await outbox.cleanup(7);
+    const left = (await em().find(OutboxEventEntity, { routingKey: "test.cleanup" })).map((event) => event.id).sort();
+    expect(left).toEqual([recentPublished.id, oldPending.id].sort());
+    expect(left).not.toContain(oldPublished.id);
   });
 
   it("simulates without writing", async () => {

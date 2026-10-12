@@ -13,7 +13,7 @@ export class ActivityLogQueueController {
   @Get()
   @Permissions(PermissionType.ViewActivityLogQueue)
   findAll(@Query(new ZodValidationPipe(activityLogQueueFilterValidation)) query: z.infer<typeof activityLogQueueFilterValidation>) {
-    return this.service.findAll(query.page, query.limit, query.status);
+    return this.service.findAll(query);
   }
 
   @Post(":id/retry")

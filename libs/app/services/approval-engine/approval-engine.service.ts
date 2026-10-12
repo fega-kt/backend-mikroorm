@@ -2,6 +2,8 @@ import { SYSTEM_USER_ID } from "@common/constants/system.constant";
 import { NotificationEntity, NotificationType } from "@core-service/entities/notification";
 import { UserEntity } from "@core-service/entities/user";
 import { EntityManager, LockMode, MikroORM } from "@mikro-orm/core";
+import { OutboxService } from "@modules/outbox/outbox.service";
+import { RABBITMQ_EXCHANGE } from "@modules/rabbitmq/rabbitmq.constants";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ApprovalCounterEntity } from "../../entities/approval-counter";
 import { ApprovalDelegationEntity } from "../../entities/approval-delegation";
@@ -11,7 +13,7 @@ import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-version";
 import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
-import { ApprovalEventType, ApprovalEventsPublisher, type ApprovalEventMessage } from "./approval-events";
+import { ApprovalEventType, type ApprovalEventMessage } from "./approval-events";
 import { ApproverResolver } from "./approver-resolver";
 import { resolveAttachmentConfig, validateFileBlock } from "./attachment-config";
 import {
@@ -22,6 +24,7 @@ import {
   ParallelMode,
   workflowDefinitionSchema,
   type NotifyNode,
+  type StepNotifyRule,
   type WaitNode,
   type WorkflowDefinition,
 } from "./definition.schema";
@@ -51,6 +54,30 @@ export interface SimulateStep {
   error?: string;
 }
 
+/** Cấu hình người nhận + kênh dùng chung cho bước Thông báo và thông báo theo sự kiện của bước duyệt */
+type NotifyRule = Pick<
+  StepNotifyRule,
+  "channels" | "notifyRequester" | "notifyNextApprovers" | "recipients" | "emailTemplate" | "message"
+> & {
+  notifyPreviousApprovers?: boolean;
+};
+
+/** Thông báo chờ tới khi biết người duyệt bước kế tiếp mới gửi */
+interface PendingNotify {
+  node: WaitNode | NotifyNode;
+  rule: NotifyRule;
+  type: NotificationType;
+  event: ApprovalEventType;
+  comment?: string;
+}
+
+const notifyNodeItem = (node: NotifyNode): PendingNotify => ({
+  node,
+  rule: { ...node, notifyRequester: notifiesRequester(node) },
+  type: NotificationType.APPROVAL_NOTIFY,
+  event: ApprovalEventType.Notify,
+});
+
 const HOUR_MS = 60 * 60 * 1000;
 const REF_TYPE = "approval_requests";
 
@@ -63,7 +90,7 @@ const REF_TYPE = "approval_requests";
 export class ApprovalEngineService {
   constructor(
     private readonly orm: MikroORM,
-    private readonly publisher: ApprovalEventsPublisher,
+    private readonly outbox: OutboxService,
   ) {}
 
   /* ================= PUBLIC API ================= */
@@ -147,7 +174,11 @@ export class ApprovalEngineService {
           if (others.some((t) => t.status === ApprovalTaskStatus.Pending)) return request;
         }
         skipOthers();
-        await this.advance(tx, request, definition, node.id);
+        const rule = node.notifications.approved;
+        const stepNotify: PendingNotify[] = rule?.enabled
+          ? [{ node, rule, type: NotificationType.APPROVAL_STEP_APPROVED, event: ApprovalEventType.StepApproved, comment }]
+          : [];
+        await this.advance(tx, request, definition, node.id, stepNotify);
         return request;
       }
 
@@ -157,10 +188,7 @@ export class ApprovalEngineService {
         skipOthers();
         this.finish(request, ApprovalRequestStatus.Rejected);
         this.history(tx, request, ApprovalHistoryAction.Reject, { node, comment });
-        await this.notify(tx, request, [request.requester.id], NotificationType.APPROVAL_REJECTED, ApprovalEventType.Rejected, {
-          node,
-          comment,
-        });
+        await this.stepEventNotify(tx, request, node, "rejected", comment);
         return request;
       }
 
@@ -171,10 +199,7 @@ export class ApprovalEngineService {
       request.status = ApprovalRequestStatus.Returned;
       request.currentNodeIds = [];
       this.history(tx, request, ApprovalHistoryAction.Return, { node, comment });
-      await this.notify(tx, request, [request.requester.id], NotificationType.APPROVAL_RETURNED, ApprovalEventType.Returned, {
-        node,
-        comment,
-      });
+      await this.stepEventNotify(tx, request, node, "returned", comment);
       return request;
     });
   }
@@ -358,17 +383,23 @@ export class ApprovalEngineService {
   /* ================= GRAPH ================= */
 
   /** Đi tiếp từ `fromNodeId` tới bước chờ duyệt kế tiếp (tạo task) hoặc tới end (đóng đơn APPROVED) */
-  private async advance(tx: Tx, request: ApprovalRequestEntity, definition: WorkflowDefinition, fromNodeId: string) {
+  private async advance(
+    tx: Tx,
+    request: ApprovalRequestEntity,
+    definition: WorkflowDefinition,
+    fromNodeId: string,
+    initialNotifies: PendingNotify[] = [],
+  ) {
     const resolver = new ApproverResolver(tx.em);
-    const ctx = { requesterId: request.requester.id, departmentId: request.department.id };
+    const ctx = this.resolveContext(request);
     let from = fromNodeId;
     // Bước thông báo chờ tới khi biết người duyệt bước kế tiếp (hoặc tới kết thúc) mới gửi
-    const pendingNotifies: NotifyNode[] = [];
+    const pendingNotifies: PendingNotify[] = [...initialNotifies];
 
     for (let guard = 0; guard <= definition.nodes.length; guard++) {
       const result = walkFrom(definition, from, request.payload);
       request.visitedNodeIds = [...request.visitedNodeIds, ...result.path];
-      pendingNotifies.push(...result.notifies);
+      pendingNotifies.push(...result.notifies.map(notifyNodeItem));
 
       if (result.type === "end") {
         await this.flushNotifies(tx, request, pendingNotifies, resolver, ctx, []);
@@ -442,33 +473,72 @@ export class ApprovalEngineService {
     throw new BadRequestException("Workflow contains a loop");
   }
 
-  /**
-   * Gửi các bước thông báo đang chờ. Người nhận = người trình (nếu tích) + người duyệt bước kế tiếp
-   * (nếu tích; `nextApprovers` rỗng khi sau đó là kết thúc) + người nhận cố định (người dùng / nhóm).
-   */
+  /** Gửi các thông báo đang chờ; `nextApprovers` rỗng khi sau đó là kết thúc */
   private async flushNotifies(
     tx: Tx,
     request: ApprovalRequestEntity,
-    nodes: NotifyNode[],
+    items: PendingNotify[],
     resolver: ApproverResolver,
     ctx: { requesterId: string; departmentId: string },
     nextApprovers: string[],
   ) {
-    for (const node of nodes.splice(0)) {
-      const recipients = new Set<string>();
-      if (notifiesRequester(node)) recipients.add(request.requester.id);
-      if (node.notifyNextApprovers) nextApprovers.forEach((id) => recipients.add(id));
-      (await resolver.resolveMany(node.recipients, ctx)).forEach((id) => recipients.add(id));
-
-      this.history(tx, request, ApprovalHistoryAction.Notify, { node, data: { recipients: [...recipients] } });
-      await this.notify(tx, request, [...recipients], NotificationType.APPROVAL_NOTIFY, ApprovalEventType.Notify, {
-        node,
-        message: node.message,
-        templateCode: node.emailTemplate,
-        inApp: node.channels.includes(NotifyChannel.InApp),
-        email: node.channels.includes(NotifyChannel.Email),
+    for (const item of items.splice(0)) {
+      const recipients = await this.ruleRecipients(tx, request, item.rule, resolver, ctx, nextApprovers);
+      this.history(tx, request, ApprovalHistoryAction.Notify, { node: item.node, data: { recipients } });
+      await this.notify(tx, request, recipients, item.type, item.event, {
+        node: item.node,
+        comment: item.comment,
+        ...this.ruleChannels(item.rule),
       });
     }
+  }
+
+  /** Từ chối / trả lại: chưa cấu hình → báo người trình như cũ; đã tắt → không gửi; còn lại theo cấu hình của bước */
+  private async stepEventNotify(tx: Tx, request: ApprovalRequestEntity, node: WaitNode, event: "rejected" | "returned", comment?: string) {
+    const type = event === "rejected" ? NotificationType.APPROVAL_REJECTED : NotificationType.APPROVAL_RETURNED;
+    const eventType = event === "rejected" ? ApprovalEventType.Rejected : ApprovalEventType.Returned;
+    const rule = node.notifications[event];
+    if (!rule) return this.notify(tx, request, [request.requester.id], type, eventType, { node, comment });
+    if (!rule.enabled) return;
+    const recipients = await this.ruleRecipients(tx, request, rule, new ApproverResolver(tx.em), this.resolveContext(request), []);
+    await this.notify(tx, request, recipients, type, eventType, { node, comment, ...this.ruleChannels(rule) });
+  }
+
+  /** Người nhận theo cấu hình: người trình, người duyệt bước sau, người đã duyệt trước đó, người cố định */
+  private async ruleRecipients(
+    tx: Tx,
+    request: ApprovalRequestEntity,
+    rule: NotifyRule,
+    resolver: ApproverResolver,
+    ctx: { requesterId: string; departmentId: string },
+    nextApprovers: string[],
+  ) {
+    const ids = new Set<string>();
+    if (rule.notifyRequester) ids.add(request.requester.id);
+    if (rule.notifyNextApprovers) nextApprovers.forEach((id) => ids.add(id));
+    if (rule.notifyPreviousApprovers) {
+      const approved = await tx.em.find(ApprovalTaskEntity, {
+        request: request.id,
+        round: request.round,
+        status: ApprovalTaskStatus.Approved,
+      });
+      approved.forEach((task) => ids.add((task.actedBy ?? task.approver).id));
+    }
+    (await resolver.resolveMany(rule.recipients, ctx)).forEach((id) => ids.add(id));
+    return [...ids];
+  }
+
+  private ruleChannels(rule: NotifyRule) {
+    return {
+      message: rule.message,
+      templateCode: rule.emailTemplate,
+      inApp: rule.channels.includes(NotifyChannel.InApp),
+      email: rule.channels.includes(NotifyChannel.Email),
+    };
+  }
+
+  private resolveContext(request: ApprovalRequestEntity) {
+    return { requesterId: request.requester.id, departmentId: request.department.id };
   }
 
   private nodeApprovers(node: WaitNode) {
@@ -479,9 +549,15 @@ export class ApprovalEngineService {
 
   private async run<T>(actorId: string | null, fn: (tx: Tx) => Promise<T>): Promise<T> {
     const events: ApprovalEventMessage[] = [];
-    const result = await this.orm.em.fork().transactional((em) => fn({ em, events, actorId }));
-    // Chỉ publish sau khi commit — rollback thì không phát event
-    await this.publisher.publishAll(events);
+    const outboxIds: string[] = [];
+    const result = await this.orm.em.fork().transactional(async (em) => {
+      const value = await fn({ em, events, actorId });
+      // Ghi event vào outbox cùng transaction — rollback thì không có event, commit thì chắc chắn không mất
+      for (const event of events) outboxIds.push(this.outbox.add(em, RABBITMQ_EXCHANGE.APPROVAL, `approval.${event.type}`, event).id);
+      return value;
+    });
+    // Đẩy ngay sau commit; lỗi / RabbitMQ chưa kết nối thì cron outbox trong app-jobs đẩy bù
+    await this.outbox.publish(outboxIds).catch(() => 0);
     return result;
   }
 

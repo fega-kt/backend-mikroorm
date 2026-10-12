@@ -1,9 +1,13 @@
 import {
   ApproverType,
+  hasStepNotifyRecipient,
+  isWaitNode,
   NodeType,
   notifiesRequester,
   OverdueAction,
   type Approver,
+  type StepEvent,
+  type StepNotifyRule,
   type WorkflowDefinition,
   type WorkflowEdge,
 } from "./definition.schema";
@@ -28,6 +32,7 @@ export enum GraphErrorCode {
   UnknownField = "UNKNOWN_FIELD",
   SlaRequired = "SLA_REQUIRED",
   NotifyNoRecipient = "NOTIFY_NO_RECIPIENT",
+  StepNotifyNoRecipient = "STEP_NOTIFY_NO_RECIPIENT",
   /** Chỉ backend kiểm tra (cần DB) */
   InactiveUser = "INACTIVE_USER",
 }
@@ -161,6 +166,16 @@ export function validateGraph(definition: WorkflowDefinition, formFields?: strin
     }
     if (node.type === NodeType.Notify && !notifiesRequester(node) && !node.notifyNextApprovers && !node.recipients.length) {
       errors.push({ code: GraphErrorCode.NotifyNoRecipient, message: "Notification step needs at least one recipient", nodeId: node.id });
+    }
+    if (isWaitNode(node)) {
+      const rules = Object.entries(node.notifications) as [StepEvent, StepNotifyRule | undefined][];
+      if (rules.some(([event, rule]) => rule?.enabled && !hasStepNotifyRecipient(rule, event))) {
+        errors.push({
+          code: GraphErrorCode.StepNotifyNoRecipient,
+          message: "Step notification needs at least one recipient",
+          nodeId: node.id,
+        });
+      }
     }
     if (node.type === NodeType.Parallel && new Set(node.approvers.map(approverKey)).size < 2) {
       errors.push({
