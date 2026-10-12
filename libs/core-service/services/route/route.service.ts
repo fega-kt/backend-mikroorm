@@ -71,35 +71,16 @@ const _outsideRouter = {
   ],
 };
 
+/** Hồ sơ cá nhân — một mục đơn (trang Cài đặt cá nhân chưa có nội dung nên đã bỏ) */
 const personalCenterRouter = {
-  path: "/personal-center",
+  path: "/personal-center/my-profile",
+  component: "/personal-center/my-profile/index.tsx",
   handle: {
     keepAlive: false,
-
     order: personalCenter,
-    title: "common.menu.personalCenter",
-    icon: "RiAccountCircleLine",
+    title: "common.menu.profile",
+    icon: "ProfileCardIcon",
   },
-  children: [
-    {
-      path: "/personal-center/my-profile",
-      handle: {
-        keepAlive: false,
-
-        title: "common.menu.profile",
-        icon: "ProfileCardIcon",
-      },
-    },
-    {
-      path: "/personal-center/settings",
-      handle: {
-        keepAlive: false,
-
-        title: "common.menu.settings",
-        icon: "RiUserSettingsLine",
-      },
-    },
-  ],
 };
 
 const _routeNestRouter = {
