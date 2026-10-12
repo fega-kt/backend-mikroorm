@@ -4,7 +4,7 @@
  */
 import "reflect-metadata";
 import { SYSTEM_USER_ID } from "@common/constants/system.constant";
-import { AttachmentEntity, coreEntities, DepartmentEntity, NotificationEntity, UserEntity } from "@core-service/entities";
+import { AttachmentEntity, coreEntities, DepartmentEntity, NotificationEntity, NotificationType, UserEntity } from "@core-service/entities";
 import { MikroORM } from "@mikro-orm/postgresql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appEntities } from "../../entities";
@@ -49,6 +49,30 @@ const G = {
 };
 
 /** Nhóm trống + skipIfNoApprover: bước thường bị bỏ qua, bước song song bỏ suất trống */
+/** Thông báo: người duyệt bước sau + người cố định (staff2); sau bước duyệt: chỉ người trình */
+const notifyDefinition = () =>
+  workflowDefinitionSchema.parse({
+    nodes: [
+      { id: "start", type: "start" },
+      {
+        id: "notify1",
+        type: "notify",
+        notifyRequester: false,
+        notifyNextApprovers: true,
+        recipients: [{ type: "PRINCIPAL", principalId: G.principalStaff2 }],
+      },
+      { id: "n1", type: "approval", approver: { type: "DEPT_HEAD" } },
+      { id: "notify2", type: "notify", notifyRequester: true, notifyNextApprovers: true },
+      { id: "end", type: "end" },
+    ],
+    edges: [
+      { from: "start", to: "notify1" },
+      { from: "notify1", to: "n1" },
+      { from: "n1", to: "notify2" },
+      { from: "notify2", to: "end" },
+    ],
+  });
+
 const emptyGroupDefinition = () =>
   workflowDefinitionSchema.parse({
     nodes: [
@@ -148,6 +172,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
   let versionId: string;
   let groupRequestTypeId: string;
   let emptyRequestTypeId: string;
+  let notifyRequestTypeId: string;
 
   const em = () => orm.em.fork();
 
@@ -283,6 +308,31 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       });
       await tx.flush();
       emptyRequestTypeId = emptyType.id;
+      const notifyType = tx.create(RequestTypeEntity, {
+        code: "NOTIFY",
+        name: "Thông báo",
+        prefix: "TB",
+        category,
+        status: RequestTypeStatus.Published,
+        ...audit,
+      });
+      const notifyWorkflow = tx.create(ApprovalWorkflowEntity, {
+        name: "Thông báo",
+        requestType: notifyType,
+        priority: 0,
+        isActive: true,
+        ...audit,
+      });
+      notifyWorkflow.publishedVersion = tx.create(ApprovalWorkflowVersionEntity, {
+        workflow: notifyWorkflow,
+        version: 1,
+        definition: notifyDefinition(),
+        status: ApprovalWorkflowVersionStatus.Published,
+        publishedAt: new Date(),
+        ...audit,
+      });
+      await tx.flush();
+      notifyRequestTypeId = notifyType.id;
       requestTypeId = requestType.id;
       versionId = version.id;
       groupRequestTypeId = groupType.id;
@@ -587,6 +637,21 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     } finally {
       await em().nativeUpdate(RequestTypeEntity, { id: requestTypeId }, { attachmentConfig: null });
     }
+  });
+
+  it("sends notification steps to next approvers, fixed recipients and the requester", async () => {
+    const notified = async (id: string) =>
+      (await em().find(NotificationEntity, { refId: id, type: NotificationType.APPROVAL_NOTIFY })).map((n) => n.user.id).sort();
+
+    const id = await createRequest(U.staff, D.it, {}, notifyRequestTypeId);
+    await engine.submit(id, U.staff);
+    // notify1: người duyệt bước sau (trưởng phòng IT) + staff2 cố định, không gửi người trình
+    expect(await notified(id)).toEqual([U.itHead, U.staff2].sort());
+
+    await approve(id, U.itHead);
+    // notify2: người trình; "người duyệt bước sau" rỗng vì sau đó là kết thúc
+    expect(await notified(id)).toEqual([U.itHead, U.staff2, U.staff].sort());
+    expect((await load(id)).status).toBe(ApprovalRequestStatus.Approved);
   });
 
   it("simulates without writing", async () => {

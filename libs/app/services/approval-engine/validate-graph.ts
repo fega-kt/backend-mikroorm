@@ -1,4 +1,12 @@
-import { ApproverType, NodeType, OverdueAction, type Approver, type WorkflowDefinition, type WorkflowEdge } from "./definition.schema";
+import {
+  ApproverType,
+  NodeType,
+  notifiesRequester,
+  OverdueAction,
+  type Approver,
+  type WorkflowDefinition,
+  type WorkflowEdge,
+} from "./definition.schema";
 
 export enum GraphErrorCode {
   DuplicateNodeId = "DUPLICATE_NODE_ID",
@@ -19,6 +27,7 @@ export enum GraphErrorCode {
   ParallelApprovers = "PARALLEL_APPROVERS",
   UnknownField = "UNKNOWN_FIELD",
   SlaRequired = "SLA_REQUIRED",
+  NotifyNoRecipient = "NOTIFY_NO_RECIPIENT",
   /** Chỉ backend kiểm tra (cần DB) */
   InactiveUser = "INACTIVE_USER",
 }
@@ -149,6 +158,9 @@ export function validateGraph(definition: WorkflowDefinition, formFields?: strin
     }
     if ((node.type === NodeType.Approval || node.type === NodeType.Parallel) && node.onOverdue !== OverdueAction.Remind && !node.slaHours) {
       errors.push({ code: GraphErrorCode.SlaRequired, message: "Overdue handling needs an SLA", nodeId: node.id });
+    }
+    if (node.type === NodeType.Notify && !notifiesRequester(node) && !node.notifyNextApprovers && !node.recipients.length) {
+      errors.push({ code: GraphErrorCode.NotifyNoRecipient, message: "Notification step needs at least one recipient", nodeId: node.id });
     }
     if (node.type === NodeType.Parallel && new Set(node.approvers.map(approverKey)).size < 2) {
       errors.push({

@@ -29,6 +29,8 @@ export interface ApprovalEventMessage {
   comment?: string;
   /** Nội dung tùy chỉnh của node notify */
   message?: string;
+  /** Mẫu email của node notify (bỏ trống → mẫu mặc định) */
+  templateCode?: string;
   occurredAt: string;
 }
 

@@ -21,6 +21,7 @@ export class SettingManagementRouteService {
     const canViewRequestList = currentUser.canAccess([PermissionType.MenuRequestType]);
     const canManageApprovalWorkflows = currentUser.canAccess([PermissionType.MenuApprovalWorkflow]);
     const canViewAllApprovalRequests = currentUser.canAccess([PermissionType.MenuAllApprovalRequest]);
+    const canManageEmailTemplates = currentUser.canAccess([PermissionType.MenuEmailTemplate]);
 
     const children = [];
 
@@ -84,6 +85,19 @@ export class SettingManagementRouteService {
           icon: "ProfileOutlined",
           title: "common.menu.approvalAllRequests",
           roles: [PermissionType.MenuAllApprovalRequest],
+          permissions: [],
+        },
+      });
+    }
+    if (canManageEmailTemplates) {
+      children.push({
+        path: "/setting/email-template",
+        component: "/setting/email-template/index.tsx",
+        handle: {
+          keepAlive: false,
+          icon: "MailOutlined",
+          title: "common.menu.emailTemplate",
+          roles: [PermissionType.MenuEmailTemplate],
           permissions: [],
         },
       });

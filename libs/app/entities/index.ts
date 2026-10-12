@@ -7,6 +7,7 @@ export { ApprovalTaskEntity, ApprovalTaskStatus } from "./approval-task";
 export { ApprovalHistoryEntity, ApprovalHistoryAction } from "./approval-history";
 export { ApprovalDelegationEntity } from "./approval-delegation";
 export { ApprovalCounterEntity } from "./approval-counter";
+export { EmailTemplateEntity } from "./email-template";
 
 import { CategoryEntity } from "./category";
 import { RequestTypeEntity } from "./request-type";
@@ -17,6 +18,7 @@ import { ApprovalTaskEntity } from "./approval-task";
 import { ApprovalHistoryEntity } from "./approval-history";
 import { ApprovalDelegationEntity } from "./approval-delegation";
 import { ApprovalCounterEntity } from "./approval-counter";
+import { EmailTemplateEntity } from "./email-template";
 
 export const appEntities = [
   CategoryEntity,
@@ -28,4 +30,5 @@ export const appEntities = [
   ApprovalHistoryEntity,
   ApprovalDelegationEntity,
   ApprovalCounterEntity,
+  EmailTemplateEntity,
 ];

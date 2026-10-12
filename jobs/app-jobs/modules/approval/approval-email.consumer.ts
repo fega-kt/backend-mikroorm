@@ -1,4 +1,9 @@
+import { ApprovalRequestEntity } from "@app-domain/entities/approval-request";
 import { ApprovalEventType, type ApprovalEventMessage } from "@app-domain/services/approval-engine/approval-events";
+import { SystemEmailTemplate } from "@app-domain/services/email-template/email-template.defaults";
+import { renderTemplate, wrapEmailHtml } from "@app-domain/services/email-template/email-template.render";
+import { resolveEmailTemplate } from "@app-domain/services/email-template/email-template.resolve";
+import { buildRequestVariables } from "@app-domain/services/email-template/email-template.vars";
 import { ENV } from "@config/env.config";
 import { UserEntity } from "@core-service/entities/user";
 import { MikroORM } from "@mikro-orm/core";
@@ -8,58 +13,19 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import type { ConsumeMessage } from "amqplib";
 import { Resend } from "resend";
 
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+/** Sự kiện → mẫu email hệ thống; sự kiện không có ở đây thì không gửi email */
+const TEMPLATE_BY_EVENT: Partial<Record<ApprovalEventType, SystemEmailTemplate>> = {
+  [ApprovalEventType.StepPending]: SystemEmailTemplate.StepPending,
+  [ApprovalEventType.Approved]: SystemEmailTemplate.Approved,
+  [ApprovalEventType.Rejected]: SystemEmailTemplate.Rejected,
+  [ApprovalEventType.Returned]: SystemEmailTemplate.Returned,
+  [ApprovalEventType.Cancelled]: SystemEmailTemplate.Cancelled,
+  [ApprovalEventType.Reminder]: SystemEmailTemplate.Reminder,
+  [ApprovalEventType.Escalated]: SystemEmailTemplate.Escalated,
+  [ApprovalEventType.Notify]: SystemEmailTemplate.Notify,
+};
 
-interface MailContent {
-  subject: string;
-  lead: string;
-}
-
-/** Nội dung email theo loại event; null → không gửi */
-function buildContent(event: ApprovalEventMessage): MailContent | null {
-  const ref = `${event.code ?? ""} – ${event.title}`.replace(/^ – /, "");
-  const step = event.nodeName ? ` (bước “${event.nodeName}”)` : "";
-  switch (event.type) {
-    case ApprovalEventType.StepPending:
-      return { subject: `[Phê duyệt] ${ref} đang chờ bạn duyệt`, lead: `Bạn có một tờ trình cần duyệt${step}.` };
-    case ApprovalEventType.Approved:
-      return { subject: `[Phê duyệt] ${ref} đã được duyệt`, lead: "Tờ trình của bạn đã được duyệt xong." };
-    case ApprovalEventType.Rejected:
-      return { subject: `[Phê duyệt] ${ref} bị từ chối`, lead: `Tờ trình của bạn bị từ chối${step}.` };
-    case ApprovalEventType.Returned:
-      return {
-        subject: `[Phê duyệt] ${ref} được trả lại để bổ sung`,
-        lead: `Tờ trình của bạn được trả lại${step}. Vui lòng bổ sung và gửi lại.`,
-      };
-    case ApprovalEventType.Cancelled:
-      return { subject: `[Phê duyệt] ${ref} đã bị hủy`, lead: "Người tạo đã hủy tờ trình, bạn không cần duyệt nữa." };
-    case ApprovalEventType.Reminder:
-      return { subject: `[Nhắc duyệt] ${ref} đã quá hạn`, lead: `Tờ trình đang chờ bạn duyệt đã quá hạn xử lý${step}.` };
-    case ApprovalEventType.Escalated:
-      return { subject: `[Phê duyệt] ${ref} được chuyển cấp cho bạn`, lead: `Bước duyệt quá hạn nên được chuyển cho bạn${step}.` };
-    case ApprovalEventType.Notify:
-      return { subject: `[Thông báo] ${ref}`, lead: event.message || `Tờ trình đã đi qua bước thông báo${step}.` };
-    default:
-      return null;
-  }
-}
-
-function renderHtml(event: ApprovalEventMessage, content: MailContent, fullName: string) {
-  const link = `${ENV.FRONTEND_URL.replace(/\/$/, "")}/approval/requests/${event.requestId}`;
-  const comment = event.comment
-    ? `<p style="margin:12px 0;padding:8px 12px;background:#f5f5f5;border-left:3px solid #999">${escapeHtml(event.comment)}</p>`
-    : "";
-  return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">
-  <p>Xin chào ${escapeHtml(fullName)},</p>
-  <p>${escapeHtml(content.lead)}</p>
-  <p><b>${escapeHtml(event.code ?? "")}</b> ${escapeHtml(event.title)}${event.requestTypeName ? ` · ${escapeHtml(event.requestTypeName)}` : ""}</p>
-  ${comment}
-  <p><a href="${link}" style="display:inline-block;padding:8px 16px;background:#2457D6;color:#fff;text-decoration:none;border-radius:6px">Xem tờ trình</a></p>
-</div>`;
-}
-
-/** Gửi email cho người nhận của event phê duyệt (thông báo trong ứng dụng đã ghi ở app) */
+/** Gửi email theo mẫu (Mẫu email trong Quản trị) cho người nhận của event phê duyệt */
 @Injectable()
 export class ApprovalEmailConsumer implements OnModuleInit {
   private readonly logger = new Logger(ApprovalEmailConsumer.name);
@@ -76,30 +42,57 @@ export class ApprovalEmailConsumer implements OnModuleInit {
 
   private async handle(msg: ConsumeMessage, ack: () => void, nack: (requeue?: boolean) => void) {
     const event = JSON.parse(msg.content.toString()) as ApprovalEventMessage;
-    const content = buildContent(event);
-    if (!content || !event.recipientIds?.length) return ack();
+    const systemTemplate = TEMPLATE_BY_EVENT[event.type];
+    if (!systemTemplate || !event.recipientIds?.length) return ack();
     if (!this.resend) {
       this.logger.warn("RESEND_API_KEY not configured, skipping approval email");
       return ack();
     }
 
-    const users = await this.orm.em
-      .fork()
-      .find(
+    const em = this.orm.em.fork();
+    const code = event.type === ApprovalEventType.Notify && event.templateCode ? event.templateCode : systemTemplate;
+    const template = await resolveEmailTemplate(em, code, systemTemplate);
+    const request = await em.findOne(
+      ApprovalRequestEntity,
+      { id: event.requestId },
+      { populate: ["requestType", "requester", "department"] },
+    );
+    const [users, actor] = await Promise.all([
+      em.find(
         UserEntity,
         { id: { $in: event.recipientIds }, deleted: { $ne: true } },
         { fields: ["id", "fullName", "workEmail", "loginName"] },
-      );
+      ),
+      event.actorId ? em.findOne(UserEntity, { id: event.actorId }, { fields: ["id", "fullName"] }) : Promise.resolve(null),
+    ]);
+
+    const link = `${ENV.FRONTEND_URL.replace(/\/$/, "")}/approval/requests/${event.requestId}`;
+    const vars = buildRequestVariables({
+      code: request?.code ?? event.code,
+      title: request?.title ?? event.title,
+      typeName: request?.requestType?.name ?? event.requestTypeName,
+      formSchema: request?.requestType?.formSchema,
+      payload: request?.payload,
+      requesterName: request?.requester?.fullName,
+      departmentName: request?.department?.name,
+      priority: request?.priority,
+      link,
+      stepName: event.nodeName,
+      actorName: actor?.fullName,
+      comment: event.comment,
+      message: event.message,
+    });
 
     try {
       for (const user of users) {
         const to = user.workEmail || user.loginName;
         if (!to?.includes("@")) continue;
+        const personal = { ...vars, "recipient.name": user.fullName };
         const { error } = await this.resend.emails.send({
           from: ENV.MAIL_FROM,
           to,
-          subject: content.subject,
-          html: renderHtml(event, content, user.fullName),
+          subject: renderTemplate(template.subject, personal, { html: false }),
+          html: wrapEmailHtml(renderTemplate(template.body, personal, { html: true }), link),
         });
         if (error) throw new Error(error.message);
       }

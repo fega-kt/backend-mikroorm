@@ -60,6 +60,17 @@ describe("validate-graph", () => {
     expect(codes(def)).toEqual(expect.arrayContaining([GraphErrorCode.MissingApprover, GraphErrorCode.ParallelApprovers]));
   });
 
+  it("notification steps need at least one recipient", () => {
+    const def = leaveWorkflow();
+    const notify = def.nodes.find((n) => n.id === "notify1");
+    if (notify.type === NodeType.Notify) Object.assign(notify, { notifyRequester: false, notifyNextApprovers: false, recipients: [] });
+    expect(codes(def)).toContain(GraphErrorCode.NotifyNoRecipient);
+
+    // định nghĩa cũ: không có cờ + không có người nhận → mặc định gửi người trình, hợp lệ
+    const legacy = leaveWorkflow();
+    expect(codes(legacy)).not.toContain(GraphErrorCode.NotifyNoRecipient);
+  });
+
   it("rule 6: conditions only use form fields", () => {
     expect(validateGraph(leaveWorkflow(), ["reason"])).toContainEqual(
       expect.objectContaining({ code: GraphErrorCode.UnknownField, edgeId: "c1->n2" }),

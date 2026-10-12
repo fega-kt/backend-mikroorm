@@ -5,6 +5,7 @@ import { ApprovalWorkflowController } from "./approval-workflow";
 import { ApprovalRequestController } from "./approval-request";
 import { ApprovalTaskController } from "./approval-task";
 import { ApprovalDelegationController } from "./approval-delegation";
+import { EmailTemplateController } from "./email-template";
 
 export {
   CategoryController,
@@ -14,6 +15,7 @@ export {
   ApprovalRequestController,
   ApprovalTaskController,
   ApprovalDelegationController,
+  EmailTemplateController,
 };
 
 export const appControllers = [
@@ -24,4 +26,5 @@ export const appControllers = [
   ApprovalRequestController,
   ApprovalTaskController,
   ApprovalDelegationController,
+  EmailTemplateController,
 ];
