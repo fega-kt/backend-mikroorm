@@ -106,6 +106,14 @@ export enum PermissionType {
   /** xóa quy trình phê duyệt */
   DeleteApprovalWorkflow = "permission:approval-workflow:delete",
 
+  /** ===== EMAIL TEMPLATE ===== */
+
+  /** vào menu mẫu email */
+  MenuEmailTemplate = "permission:menu:email-template",
+
+  /** tạo / sửa / xoá mẫu email, khôi phục mẫu hệ thống */
+  UpdateEmailTemplate = "permission:email-template:update",
+
   /** ===== APPROVAL REQUEST (quản trị) ===== */
 
   /** vào menu tất cả đơn + xem chi tiết mọi đơn */

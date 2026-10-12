@@ -17,6 +17,7 @@ import { resolveAttachmentConfig, validateFileBlock } from "./attachment-config"
 import {
   NodeType,
   NotifyChannel,
+  notifiesRequester,
   OverdueAction,
   ParallelMode,
   workflowDefinitionSchema,
@@ -361,13 +362,16 @@ export class ApprovalEngineService {
     const resolver = new ApproverResolver(tx.em);
     const ctx = { requesterId: request.requester.id, departmentId: request.department.id };
     let from = fromNodeId;
+    // Bước thông báo chờ tới khi biết người duyệt bước kế tiếp (hoặc tới kết thúc) mới gửi
+    const pendingNotifies: NotifyNode[] = [];
 
     for (let guard = 0; guard <= definition.nodes.length; guard++) {
       const result = walkFrom(definition, from, request.payload);
       request.visitedNodeIds = [...request.visitedNodeIds, ...result.path];
-      for (const notifyNode of result.notifies) await this.handleNotifyNode(tx, request, notifyNode, resolver, ctx);
+      pendingNotifies.push(...result.notifies);
 
       if (result.type === "end") {
+        await this.flushNotifies(tx, request, pendingNotifies, resolver, ctx, []);
         this.finish(request, ApprovalRequestStatus.Approved);
         this.history(tx, request, ApprovalHistoryAction.Complete);
         await this.notify(tx, request, [request.requester.id], NotificationType.APPROVAL_APPROVED, ApprovalEventType.Approved, {});
@@ -431,27 +435,40 @@ export class ApprovalEngineService {
       }
 
       request.currentNodeIds = [node.id];
+      await this.flushNotifies(tx, request, pendingNotifies, resolver, ctx, assignees);
       await this.notify(tx, request, assignees, NotificationType.APPROVAL_PENDING, ApprovalEventType.StepPending, { node });
       return;
     }
     throw new BadRequestException("Workflow contains a loop");
   }
 
-  private async handleNotifyNode(
+  /**
+   * Gửi các bước thông báo đang chờ. Người nhận = người trình (nếu tích) + người duyệt bước kế tiếp
+   * (nếu tích; `nextApprovers` rỗng khi sau đó là kết thúc) + người nhận cố định (người dùng / nhóm).
+   */
+  private async flushNotifies(
     tx: Tx,
     request: ApprovalRequestEntity,
-    node: NotifyNode,
+    nodes: NotifyNode[],
     resolver: ApproverResolver,
     ctx: { requesterId: string; departmentId: string },
+    nextApprovers: string[],
   ) {
-    const recipients = node.recipients.length ? await resolver.resolveMany(node.recipients, ctx) : [request.requester.id];
-    this.history(tx, request, ApprovalHistoryAction.Notify, { node, data: { recipients } });
-    await this.notify(tx, request, recipients, NotificationType.APPROVAL_NOTIFY, ApprovalEventType.Notify, {
-      node,
-      message: node.message,
-      inApp: node.channels.includes(NotifyChannel.InApp),
-      email: node.channels.includes(NotifyChannel.Email),
-    });
+    for (const node of nodes.splice(0)) {
+      const recipients = new Set<string>();
+      if (notifiesRequester(node)) recipients.add(request.requester.id);
+      if (node.notifyNextApprovers) nextApprovers.forEach((id) => recipients.add(id));
+      (await resolver.resolveMany(node.recipients, ctx)).forEach((id) => recipients.add(id));
+
+      this.history(tx, request, ApprovalHistoryAction.Notify, { node, data: { recipients: [...recipients] } });
+      await this.notify(tx, request, [...recipients], NotificationType.APPROVAL_NOTIFY, ApprovalEventType.Notify, {
+        node,
+        message: node.message,
+        templateCode: node.emailTemplate,
+        inApp: node.channels.includes(NotifyChannel.InApp),
+        email: node.channels.includes(NotifyChannel.Email),
+      });
+    }
   }
 
   private nodeApprovers(node: WaitNode) {
@@ -602,7 +619,7 @@ export class ApprovalEngineService {
     request: ApprovalRequestEntity,
     type: ApprovalEventType,
     recipientIds: string[],
-    extra: { nodeName?: string; comment?: string; message?: string },
+    extra: { nodeName?: string; comment?: string; message?: string; templateCode?: string },
   ) {
     tx.events.push({
       type,
@@ -625,7 +642,15 @@ export class ApprovalEngineService {
     userIds: string[],
     type: NotificationType,
     eventType: ApprovalEventType,
-    extra: { node?: WaitNode | NotifyNode; nodeName?: string; comment?: string; message?: string; inApp?: boolean; email?: boolean },
+    extra: {
+      node?: WaitNode | NotifyNode;
+      nodeName?: string;
+      comment?: string;
+      message?: string;
+      templateCode?: string;
+      inApp?: boolean;
+      email?: boolean;
+    },
   ) {
     const recipients = [...new Set(userIds)].filter((id) => id && id !== tx.actorId);
     const nodeName = extra.node?.name ?? extra.nodeName;
@@ -635,7 +660,12 @@ export class ApprovalEngineService {
           user: tx.em.getReference(UserEntity, userId),
           actor: tx.actorId ? tx.em.getReference(UserEntity, tx.actorId) : undefined,
           type,
-          data: { code: request.code ?? "", title: request.title, step: nodeName ?? "" },
+          data: {
+            code: request.code ?? "",
+            title: request.title,
+            step: nodeName ?? "",
+            ...(extra.message ? { message: extra.message } : {}),
+          },
           refId: request.id,
           refType: REF_TYPE,
           isRead: false,
@@ -644,7 +674,12 @@ export class ApprovalEngineService {
       }
     }
     if (extra.email !== false) {
-      this.event(tx, request, eventType, recipients, { nodeName, comment: extra.comment, message: extra.message });
+      this.event(tx, request, eventType, recipients, {
+        nodeName,
+        comment: extra.comment,
+        message: extra.message,
+        templateCode: extra.templateCode,
+      });
     }
   }
 }

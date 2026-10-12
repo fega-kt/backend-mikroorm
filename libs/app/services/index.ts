@@ -6,6 +6,7 @@ import { ApprovalWorkflowService } from "./approval-workflow";
 import { ApprovalRequestService } from "./approval-request";
 import { ApprovalTaskService } from "./approval-task";
 import { ApprovalDelegationService } from "./approval-delegation";
+import { EmailTemplateService } from "./email-template";
 
 export {
   CategoryService,
@@ -17,6 +18,7 @@ export {
   ApprovalRequestService,
   ApprovalTaskService,
   ApprovalDelegationService,
+  EmailTemplateService,
 };
 
 export const appServices = [
@@ -29,4 +31,5 @@ export const appServices = [
   ApprovalRequestService,
   ApprovalTaskService,
   ApprovalDelegationService,
+  EmailTemplateService,
 ];

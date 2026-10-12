@@ -94,8 +94,14 @@ export const notifyNodeSchema = z.object({
   ...nodeBase,
   type: z.literal(NodeType.Notify),
   channels: z.array(z.enum(NotifyChannel)).min(1).default([NotifyChannel.InApp]),
-  /** Rỗng → chỉ báo cho người tạo đơn */
+  /** Gửi cho người trình. Bỏ trống (định nghĩa cũ) → gửi khi không có người nhận nào khác */
+  notifyRequester: z.boolean().optional(),
+  /** Gửi cho người được giao duyệt ở bước duyệt kế tiếp (không có nếu sau đó là kết thúc) */
+  notifyNextApprovers: z.boolean().default(false),
+  /** Người nhận cố định (người dùng / nhóm) */
   recipients: z.array(approverSchema).default([]),
+  /** Mã mẫu email (bỏ trống → mẫu mặc định approval.notify) */
+  emailTemplate: z.string().max(100).optional(),
   message: z.string().max(1000).optional(),
 });
 
@@ -139,5 +145,8 @@ export type WorkflowEdge = z.infer<typeof edgeSchema>;
 export type WorkflowDefinition = z.infer<typeof workflowDefinitionSchema>;
 /** Node mà engine dừng lại chờ người duyệt */
 export type WaitNode = ApprovalNode | ParallelNode;
+
+/** Bước thông báo có gửi cho người trình không (tương thích định nghĩa cũ chưa có cờ) */
+export const notifiesRequester = (node: NotifyNode) => node.notifyRequester ?? (node.recipients.length === 0 && !node.notifyNextApprovers);
 
 export const isWaitNode = (node: WorkflowNode): node is WaitNode => node.type === NodeType.Approval || node.type === NodeType.Parallel;
