@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { RequestTypeStatus } from "../../entities/request-type";
+import { attachmentConfigSchema } from "../../services/approval-engine/attachment-config";
 import { formSchemaSchema } from "../../services/approval-engine/form-schema";
 
 export const createRequestTypeValidation = z.object({
@@ -16,6 +17,7 @@ export const createRequestTypeValidation = z.object({
   description: z.string().trim().max(1000).optional().nullable(),
   status: z.nativeEnum(RequestTypeStatus),
   formSchema: formSchemaSchema.optional().nullable(),
+  attachmentConfig: attachmentConfigSchema.optional().nullable(),
 });
 
 export const updateRequestTypeValidation = z.object({
@@ -25,6 +27,7 @@ export const updateRequestTypeValidation = z.object({
   description: z.string().trim().max(1000).optional().nullable(),
   status: z.nativeEnum(RequestTypeStatus),
   formSchema: formSchemaSchema.optional().nullable(),
+  attachmentConfig: attachmentConfigSchema.optional().nullable(),
 });
 
 export const requestTypeFilterValidation = z.object({

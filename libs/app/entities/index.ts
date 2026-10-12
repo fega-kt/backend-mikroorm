@@ -2,7 +2,7 @@ export { CategoryEntity } from "./category";
 export { RequestTypeEntity, RequestTypeStatus } from "./request-type";
 export { ApprovalWorkflowEntity } from "./approval-workflow";
 export { ApprovalWorkflowVersionEntity, ApprovalWorkflowVersionStatus } from "./approval-workflow-version";
-export { ApprovalRequestEntity, ApprovalRequestStatus } from "./approval-request";
+export { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "./approval-request";
 export { ApprovalTaskEntity, ApprovalTaskStatus } from "./approval-task";
 export { ApprovalHistoryEntity, ApprovalHistoryAction } from "./approval-history";
 export { ApprovalDelegationEntity } from "./approval-delegation";

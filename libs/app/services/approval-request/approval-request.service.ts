@@ -9,6 +9,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import type {
   ApprovalRequestFilterDto,
   CreateApprovalRequestDto,
+  PreviewFlowDto,
   UpdateApprovalRequestDto,
 } from "../../controllers/approval-request/approval-request.validation";
 import { ApprovalHistoryEntity } from "../../entities/approval-history";
@@ -18,15 +19,19 @@ import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-version";
 import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
 import { ApprovalEngineService } from "../approval-engine/approval-engine.service";
+import { ApproverResolver } from "../approval-engine/approver-resolver";
+import { resolveAttachmentConfig } from "../approval-engine/attachment-config";
 import { NodeType, workflowDefinitionSchema, type WaitNode } from "../approval-engine/definition.schema";
 
 const userBrief = (u?: UserEntity | null) => (u ? { id: u.id, fullName: u.fullName, avatar: u.avatar } : null);
+const fileBrief = (a: AttachmentEntity) => ({ id: a.id, filename: a.filename, url: a.url, size: a.size, mimetype: a.mimetype });
 
 const LIST_FIELDS = [
   "id",
   "code",
   "title",
   "status",
+  "priority",
   "submittedAt",
   "closedAt",
   "createdAt",
@@ -77,8 +82,27 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       description: t.description,
       category: t.category ? { id: t.category.id, name: t.category.name } : null,
       formSchema: t.formSchema ?? [],
+      attachmentConfig: resolveAttachmentConfig(t.attachmentConfig),
       hasWorkflow: withWorkflow.has(t.id),
     }));
+  }
+
+  /** Đơn vị trình chọn được: phòng của người dùng và các phòng cấp trên (gần nhất trước) */
+  async getSubmitUnits() {
+    const ownId = await this.userDepartmentId();
+    const chain = await new ApproverResolver(this.em).departmentChain(ownId);
+    const departments = await this.em.find(DepartmentEntity, { id: { $in: chain } }, { fields: ["id", "name", "code"] });
+    const byId = new Map(departments.map((d) => [d.id, d]));
+    return chain
+      .map((id, level) => ({ id, name: byId.get(id)?.name, code: byId.get(id)?.code, level, isOwn: level === 0 }))
+      .filter((d) => d.name);
+  }
+
+  /** Xem trước luồng phê duyệt (quy trình + người duyệt từng bước) cho màn tạo tờ trình */
+  async previewFlow(data: PreviewFlowDto) {
+    const user = this.getCurrentUser();
+    const departmentId = await this.resolveSubmitUnit(data.department);
+    return this.engine.previewForRequest({ requestTypeId: data.requestType, departmentId, payload: data.payload, requesterId: user.id });
   }
 
   async createRequest(data: CreateApprovalRequestDto) {
@@ -89,9 +113,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       deleted: { $ne: true },
     });
     if (!requestType) throw new BadRequestException("Request type is not available");
-    const departmentId =
-      user.department?.id ?? (await this.em.findOne(UserEntity, { id: user.id }, { fields: ["department"] }))?.department?.id;
-    if (!departmentId) throw new BadRequestException("User has no department");
+    const departmentId = await this.resolveSubmitUnit(data.department);
 
     const request = this.em.create(ApprovalRequestEntity, {
       title: data.title,
@@ -99,10 +121,12 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       requester: this.em.getReference(UserEntity, user.id),
       department: this.em.getReference(DepartmentEntity, departmentId),
       payload: data.payload,
+      priority: data.priority,
       status: ApprovalRequestStatus.Draft,
       ...this.getDefaultValuesForCreate(),
     });
-    await this.setAttachments(request, data.attachments);
+    await this.setFiles(request, "documents", data.documents);
+    await this.setFiles(request, "attachments", data.attachments);
     await this.em.flush();
 
     if (data.submit) await this.engine.submit(request.id, user.id);
@@ -113,7 +137,10 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const request = await this.getOwnEditable(id);
     if (data.title !== undefined) request.title = data.title;
     if (data.payload !== undefined) request.payload = data.payload;
-    if (data.attachments) await this.setAttachments(request, data.attachments);
+    if (data.priority !== undefined) request.priority = data.priority;
+    if (data.department) request.department = this.em.getReference(DepartmentEntity, await this.resolveSubmitUnit(data.department));
+    if (data.documents) await this.setFiles(request, "documents", data.documents);
+    if (data.attachments) await this.setFiles(request, "attachments", data.attachments);
     this.em.assign(request, this.getDefaultValuesForUpdate());
     await this.em.flush();
     return { id };
@@ -148,7 +175,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const user = this.getCurrentUser();
     const request = await this.repo.findOne(
       { id, deleted: { $ne: true } },
-      { populate: ["requestType", "requester", "department", "attachments", "workflowVersion", "workflowVersion.workflow"] },
+      { populate: ["requestType", "requester", "department", "documents", "attachments", "workflowVersion", "workflowVersion.workflow"] },
     );
     if (!request) throw new NotFoundException("Request not found");
 
@@ -186,6 +213,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       code: request.code,
       title: request.title,
       status: request.status,
+      priority: request.priority,
       payload: request.payload,
       round: request.round,
       currentNodeIds: request.currentNodeIds,
@@ -199,12 +227,12 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         code: request.requestType.code,
         name: request.requestType.name,
         formSchema: request.requestType.formSchema ?? [],
+        attachmentConfig: resolveAttachmentConfig(request.requestType.attachmentConfig),
       },
       requester: userBrief(request.requester),
       department: { id: request.department.id, name: request.department.name },
-      attachments: request.attachments
-        .getItems()
-        .map((a) => ({ id: a.id, filename: a.filename, url: a.url, size: a.size, mimetype: a.mimetype })),
+      documents: request.documents.getItems().map(fileBrief),
+      attachments: request.attachments.getItems().map(fileBrief),
       workflow: version ? { id: version.workflow.id, name: version.workflow.name, versionId: version.id, version: version.version } : null,
       definition,
       tasks: tasks.map((t) => ({
@@ -269,7 +297,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
   }
 
   private async getOwnEditable(id: string) {
-    const request = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["attachments"] });
+    const request = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["documents", "attachments"] });
     if (!request) throw new NotFoundException("Request not found");
     if (request.requester.id !== this.getCurrentUser().id) throw new ForbiddenException("Only the requester can edit this request");
     if (![ApprovalRequestStatus.Draft, ApprovalRequestStatus.Returned].includes(request.status)) {
@@ -278,8 +306,25 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     return request;
   }
 
-  private async setAttachments(request: ApprovalRequestEntity, ids: string[]) {
-    const attachments = ids.length ? await this.em.find(AttachmentEntity, { id: { $in: ids }, deleted: { $ne: true } }) : [];
-    request.attachments.set(attachments);
+  private async setFiles(request: ApprovalRequestEntity, field: "documents" | "attachments", ids: string[]) {
+    const files = ids.length ? await this.em.find(AttachmentEntity, { id: { $in: ids }, deleted: { $ne: true } }) : [];
+    request[field].set(files);
+  }
+
+  private async userDepartmentId() {
+    const user = this.getCurrentUser();
+    const departmentId =
+      user.department?.id ?? (await this.em.findOne(UserEntity, { id: user.id }, { fields: ["department"] }))?.department?.id;
+    if (!departmentId) throw new BadRequestException("User has no department");
+    return departmentId;
+  }
+
+  /** Đơn vị trình hợp lệ: phòng của người dùng hoặc phòng cấp trên; bỏ trống → phòng của người dùng */
+  private async resolveSubmitUnit(requested?: string) {
+    const ownId = await this.userDepartmentId();
+    if (!requested || requested === ownId) return ownId;
+    const chain = await new ApproverResolver(this.em).departmentChain(ownId);
+    if (!chain.includes(requested)) throw new BadRequestException("Submitting unit must be your department or a parent department");
+    return requested;
   }
 }

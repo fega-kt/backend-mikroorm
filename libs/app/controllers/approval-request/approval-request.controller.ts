@@ -8,6 +8,7 @@ import {
   approvalRequestFilterValidation,
   cancelApprovalRequestValidation,
   createApprovalRequestValidation,
+  previewFlowValidation,
   updateApprovalRequestValidation,
 } from "./approval-request.validation";
 
@@ -19,6 +20,16 @@ export class ApprovalRequestController {
   @Get("request-types")
   requestTypes() {
     return this.requestService.getCreatableRequestTypes();
+  }
+
+  @Get("submit-units")
+  submitUnits() {
+    return this.requestService.getSubmitUnits();
+  }
+
+  @Post("preview")
+  preview(@Body(new ZodValidationPipe(previewFlowValidation)) data: z.infer<typeof previewFlowValidation>) {
+    return this.requestService.previewFlow(data);
   }
 
   @Get("mine")

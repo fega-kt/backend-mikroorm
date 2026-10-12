@@ -4,13 +4,13 @@
  */
 import "reflect-metadata";
 import { SYSTEM_USER_ID } from "@common/constants/system.constant";
-import { coreEntities, DepartmentEntity, NotificationEntity, UserEntity } from "@core-service/entities";
+import { AttachmentEntity, coreEntities, DepartmentEntity, NotificationEntity, UserEntity } from "@core-service/entities";
 import { MikroORM } from "@mikro-orm/postgresql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appEntities } from "../../entities";
 import { ApprovalDelegationEntity } from "../../entities/approval-delegation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
-import { ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
+import { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity, ApprovalWorkflowVersionStatus } from "../../entities/approval-workflow-version";
@@ -519,6 +519,74 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
 
     await approve(id, U.staff2);
     expect((await load(id)).status).toBe(ApprovalRequestStatus.Approved);
+  });
+
+  it("halves the SLA of urgent requests", async () => {
+    const id = await createRequest(U.staff, D.it, { days: 1 });
+    await em().nativeUpdate(ApprovalRequestEntity, { id }, { priority: ApprovalPriority.Urgent });
+    const before = Date.now();
+    await engine.submit(id, U.staff);
+    const [task] = await pendingTasks(id);
+    const hours = (task.dueAt.getTime() - before) / 3_600_000;
+    expect(hours).toBeGreaterThan(11.9);
+    expect(hours).toBeLessThan(12.1);
+  });
+
+  it("sorts pending tasks by request priority first (inbox query)", async () => {
+    const [tasks] = await em().findAndCount(
+      ApprovalTaskEntity,
+      { status: ApprovalTaskStatus.Pending, request: { deleted: { $ne: true } } },
+      { populate: ["request"], orderBy: { request: { priority: "DESC" }, dueAt: "ASC NULLS LAST", createdAt: "ASC" } },
+    );
+    const priorities = tasks.map((t) => t.request.priority);
+    expect(priorities[0]).toBe(ApprovalPriority.Urgent);
+    expect([...priorities].sort((a, b) => b - a)).toEqual(priorities);
+  });
+
+  it("routes to the parent department head when submitting for a parent unit", async () => {
+    const id = await createRequest(U.staff, D.root, { days: 1 });
+    await engine.submit(id, U.staff);
+    expect((await pendingTasks(id)).map((t) => t.approver.id)).toEqual([U.director]);
+
+    const preview = await engine.previewForRequest({ requestTypeId, departmentId: D.root, payload: { days: 1 }, requesterId: U.staff });
+    expect(preview.workflow?.version).toBe(1);
+    expect(preview.steps[0].approvers.map((a) => a.id)).toEqual([U.director]);
+  });
+
+  it("checks documents and attachments against the request type config", async () => {
+    await em().nativeUpdate(
+      RequestTypeEntity,
+      { id: requestTypeId },
+      { attachmentConfig: { documents: { required: true, minFiles: 1, fileTypes: ["pdf"] } } as never },
+    );
+    try {
+      const id = await createRequest(U.staff, D.it, { days: 1 });
+      await expect(engine.submit(id, U.staff)).rejects.toThrow("documents.MIN_FILES");
+
+      const e = em();
+      const file = (filename: string) =>
+        e.create(AttachmentEntity, {
+          filename,
+          mimetype: "application/octet-stream",
+          size: 1024,
+          key: filename,
+          url: `https://files.local/${filename}`,
+          storagePath: "Attachments",
+          createdBy: e.getReference(UserEntity, U.staff),
+          updatedBy: e.getReference(UserEntity, U.staff),
+        });
+      const request = await e.findOneOrFail(ApprovalRequestEntity, id, { populate: ["documents"] });
+      request.documents.set([file("to-trinh.png")]);
+      await e.flush();
+      await expect(engine.submit(id, U.staff)).rejects.toThrow("documents.FILE_TYPE(to-trinh.png)");
+
+      request.documents.set([file("to-trinh.pdf")]);
+      await e.flush();
+      await engine.submit(id, U.staff);
+      expect((await load(id)).status).toBe(ApprovalRequestStatus.Pending);
+    } finally {
+      await em().nativeUpdate(RequestTypeEntity, { id: requestTypeId }, { attachmentConfig: null });
+    }
   });
 
   it("simulates without writing", async () => {

@@ -53,6 +53,7 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
         code: t.request.code,
         title: t.request.title,
         status: t.request.status,
+        priority: t.request.priority,
         payload: t.request.payload,
         submittedAt: t.request.submittedAt,
         requestType: { id: t.request.requestType.id, name: t.request.requestType.name, formSchema: t.request.requestType.formSchema ?? [] },

@@ -15,7 +15,15 @@ export enum ApprovalRequestStatus {
   Cancelled = "cancelled",
 }
 
-/** Đơn đề nghị phê duyệt */
+/** Độ ưu tiên — số để sắp xếp được (lớn hơn = gấp hơn) */
+export enum ApprovalPriority {
+  Low = 0,
+  Normal = 1,
+  High = 2,
+  Urgent = 3,
+}
+
+/** Tờ trình đề nghị phê duyệt */
 @Entity({ tableName: "approval_requests" })
 @Index({ properties: ["requester", "status"] })
 export class ApprovalRequestEntity extends BaseEntity {
@@ -33,7 +41,7 @@ export class ApprovalRequestEntity extends BaseEntity {
   @ManyToOne({ cascade: [], entity: () => UserEntity })
   requester!: UserEntity;
 
-  /** Phòng ban của người tạo tại thời điểm gửi — dùng để chọn quy trình và tìm trưởng/phó phòng */
+  /** Đơn vị trình (phòng của người tạo hoặc phòng cấp trên) — dùng để chọn quy trình và tìm trưởng/phó phòng */
   @ManyToOne({ cascade: [], entity: () => DepartmentEntity })
   department!: DepartmentEntity;
 
@@ -47,6 +55,10 @@ export class ApprovalRequestEntity extends BaseEntity {
   @Enum({ items: () => ApprovalRequestStatus, default: ApprovalRequestStatus.Draft })
   status: ApprovalRequestStatus = ApprovalRequestStatus.Draft;
 
+  @Index()
+  @Enum({ items: () => ApprovalPriority, default: ApprovalPriority.Normal })
+  priority: ApprovalPriority = ApprovalPriority.Normal;
+
   /** Node đang chờ duyệt (mảng để mở rộng sau; hiện tại tối đa 1 phần tử) */
   @Property({ type: types.array, columnType: "text[]", default: "{}" })
   currentNodeIds: string[] = [];
@@ -59,6 +71,11 @@ export class ApprovalRequestEntity extends BaseEntity {
   @Property({ type: types.integer, default: 0 })
   round: number = 0;
 
+  /** Văn bản tờ trình (file chính) */
+  @ManyToMany({ cascade: [], entity: () => AttachmentEntity, pivotTable: "approval_requests_documents" })
+  documents = new Collection<AttachmentEntity>(this);
+
+  /** Tài liệu đính kèm bổ sung */
   @ManyToMany({ cascade: [], entity: () => AttachmentEntity })
   attachments = new Collection<AttachmentEntity>(this);
 
