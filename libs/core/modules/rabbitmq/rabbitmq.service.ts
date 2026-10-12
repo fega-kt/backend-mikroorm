@@ -10,7 +10,8 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMQService.name);
   private model: amqp.RecoveringChannelModel | null = null;
   private currentChannelModel: amqp.ChannelModel | null = null;
-  private publishChannel: amqp.Channel | null = null;
+  /** Confirm channel: publishConfirmed chờ broker xác nhận đã nhận message */
+  private publishChannel: amqp.ConfirmChannel | null = null;
   private readonly registeredConsumers: Array<{ queue: string; handler: ConsumerHandler }> = [];
   private _isConnected = false;
 
@@ -38,7 +39,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
         setup: async (channelModel: amqp.ChannelModel) => {
           try {
             this.currentChannelModel = channelModel;
-            this.publishChannel = await channelModel.createChannel();
+            this.publishChannel = await channelModel.createConfirmChannel();
             this.publishChannel.on("error", (err: Error) => {
               this.logger.warn(`RabbitMQ publish channel error: ${err.message}`);
             });
@@ -119,6 +120,9 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       },
     });
     await ch.bindQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL, RABBITMQ_EXCHANGE.APPROVAL, "approval.#");
+    // Gửi lại một email từ hàng đợi gửi mail (activity-log-queue retry)
+    await ch.assertExchange(RABBITMQ_EXCHANGE.NOTIFICATION, "direct", { durable: true });
+    await ch.bindQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL, RABBITMQ_EXCHANGE.NOTIFICATION, RABBITMQ_QUEUES.APPROVAL_EMAIL);
     await ch.assertQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ, { durable: true });
     await ch.bindQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ, RABBITMQ_EXCHANGE.NOTIFICATION_DLX, RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ);
   }
@@ -133,6 +137,31 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       contentType: "application/json",
       timestamp: Date.now(),
     });
+  }
+
+  /** Publish và chờ broker xác nhận (dùng cho outbox — chỉ đánh "đã đẩy" khi chắc chắn broker đã nhận) */
+  async publishConfirmed(exchange: string, routingKey: string, message: unknown, messageId?: string, timeoutMs = 10_000): Promise<void> {
+    const ch = this.publishChannel;
+    if (!ch) throw new Error("RabbitMQ not connected");
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        new Promise<void>((resolve, reject) => {
+          ch.publish(
+            exchange,
+            routingKey,
+            Buffer.from(JSON.stringify(message)),
+            { persistent: true, contentType: "application/json", timestamp: Date.now(), messageId },
+            (err) => (err ? reject(err instanceof Error ? err : new Error(String(err))) : resolve()),
+          );
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`RabbitMQ confirm timeout after ${timeoutMs}ms`)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async registerConsumer(queue: string, handler: ConsumerHandler): Promise<void> {

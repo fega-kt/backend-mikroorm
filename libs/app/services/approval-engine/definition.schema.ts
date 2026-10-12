@@ -55,6 +55,31 @@ export const stepOptionsSchema = z.object({
   allowReturn: z.boolean().default(true),
 });
 
+/**
+ * Thông báo khi một bước duyệt xong / bị từ chối / bị trả lại.
+ * Từ chối, trả lại chưa cấu hình → gửi người trình như cũ; duyệt xong chưa cấu hình → không gửi.
+ */
+export const stepNotifyRuleSchema = z.object({
+  enabled: z.boolean().default(true),
+  channels: z.array(z.enum(NotifyChannel)).min(1).default([NotifyChannel.InApp, NotifyChannel.Email]),
+  notifyRequester: z.boolean().default(true),
+  /** Duyệt xong: người được giao duyệt ở bước kế tiếp */
+  notifyNextApprovers: z.boolean().default(false),
+  /** Từ chối / trả lại: những người đã duyệt trước đó trong lượt trình này */
+  notifyPreviousApprovers: z.boolean().default(false),
+  /** Người nhận cố định (người dùng / nhóm) */
+  recipients: z.array(approverSchema).default([]),
+  /** Mã mẫu email (bỏ trống → mẫu hệ thống của sự kiện) */
+  emailTemplate: z.string().max(100).optional(),
+  message: z.string().max(1000).optional(),
+});
+
+export const stepNotificationsSchema = z.object({
+  approved: stepNotifyRuleSchema.optional(),
+  rejected: stepNotifyRuleSchema.optional(),
+  returned: stepNotifyRuleSchema.optional(),
+});
+
 const nodeBase = {
   id: z.string().min(1).max(64),
   name: z.string().trim().max(255).optional(),
@@ -68,6 +93,7 @@ const slaFields = {
     .optional(),
   onOverdue: z.enum(OverdueAction).default(OverdueAction.Remind),
   options: stepOptionsSchema.default(stepOptionsSchema.parse({})),
+  notifications: stepNotificationsSchema.default({}),
 };
 
 export const startNodeSchema = z.object({ ...nodeBase, type: z.literal(NodeType.Start) });
@@ -137,6 +163,7 @@ export const workflowDefinitionSchema = z.object({
 
 export type Approver = z.infer<typeof approverSchema>;
 export type StepOptions = z.infer<typeof stepOptionsSchema>;
+export type StepNotifyRule = z.infer<typeof stepNotifyRuleSchema>;
 export type WorkflowNode = z.infer<typeof nodeSchema>;
 export type ApprovalNode = z.infer<typeof approvalNodeSchema>;
 export type ParallelNode = z.infer<typeof parallelNodeSchema>;
@@ -148,5 +175,11 @@ export type WaitNode = ApprovalNode | ParallelNode;
 
 /** Bước thông báo có gửi cho người trình không (tương thích định nghĩa cũ chưa có cờ) */
 export const notifiesRequester = (node: NotifyNode) => node.notifyRequester ?? (node.recipients.length === 0 && !node.notifyNextApprovers);
+
+export type StepEvent = keyof z.infer<typeof stepNotificationsSchema>;
+
+/** Quy tắc thông báo của bước có ít nhất một người nhận (cờ không áp dụng cho sự kiện thì bỏ qua) */
+export const hasStepNotifyRecipient = (rule: StepNotifyRule, event: StepEvent) =>
+  rule.notifyRequester || rule.recipients.length > 0 || (event === "approved" ? rule.notifyNextApprovers : rule.notifyPreviousApprovers);
 
 export const isWaitNode = (node: WorkflowNode): node is WaitNode => node.type === NodeType.Approval || node.type === NodeType.Parallel;
