@@ -1,8 +1,9 @@
 import { BaseService } from "@common/base/base.service";
 import { PermissionType } from "@common/base/permission-type.enum";
-import { AttachmentEntity } from "@core-service/entities/attachment";
+import { AttachmentEntity, AttachmentStatus, AttachmentVisibility } from "@core-service/entities/attachment";
 import { DepartmentEntity } from "@core-service/entities/department";
 import { UserEntity } from "@core-service/entities/user";
+import { UploadService } from "@core-service/services/upload/upload.service";
 import { EntityRepository, FilterQuery, serialize } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Scope } from "@nestjs/common";
@@ -24,7 +25,15 @@ import { resolveAttachmentConfig } from "../approval-engine/attachment-config";
 import { NodeType, workflowDefinitionSchema, type WaitNode } from "../approval-engine/definition.schema";
 
 const userBrief = (u?: UserEntity | null) => (u ? { id: u.id, fullName: u.fullName, avatar: u.avatar } : null);
-const fileBrief = (a: AttachmentEntity) => ({ id: a.id, filename: a.filename, url: a.url, size: a.size, mimetype: a.mimetype });
+// File private không lộ URL: FE xin link ký qua getRequestFileUrl khi cần xem/tải
+const fileBrief = (a: AttachmentEntity) => ({
+  id: a.id,
+  filename: a.filename,
+  url: a.visibility === AttachmentVisibility.Private ? "" : a.url,
+  visibility: a.visibility,
+  size: a.size,
+  mimetype: a.mimetype,
+});
 
 const LIST_FIELDS = [
   "id",
@@ -53,6 +62,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     @InjectRepository(ApprovalRequestEntity)
     protected readonly repo: EntityRepository<ApprovalRequestEntity>,
     private readonly engine: ApprovalEngineService,
+    private readonly uploadService: UploadService,
   ) {
     super();
   }
@@ -170,6 +180,43 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     return this.list(filter, filter.requesterId ? { requester: filter.requesterId } : {});
   }
 
+  /** Người xem hợp lệ: người tạo, người tham gia duyệt, hoặc có quyền xem mọi tờ trình */
+  private assertCanView(
+    request: ApprovalRequestEntity,
+    tasks: ApprovalTaskEntity[],
+    user: ReturnType<ApprovalRequestService["getCurrentUser"]>,
+  ) {
+    const isRequester = request.requester.id === user.id;
+    const isParticipant = tasks.some((t) => [t.approver?.id, t.originalApprover?.id, t.actedBy?.id].includes(user.id));
+    if (!isRequester && !isParticipant && !user.canAccess([PermissionType.MenuAllApprovalRequest])) {
+      throw new ForbiddenException("You cannot view this request");
+    }
+  }
+
+  /**
+   * Link xem/tải tạm thời của một tệp thuộc tờ trình. Kiểm quyền như khi xem chi tiết tờ trình,
+   * và tệp phải thuộc đúng tờ trình này (không cho xin link file của tờ trình khác).
+   */
+  async getRequestFileUrl(requestId: string, fileId: string, disposition: "inline" | "attachment") {
+    const user = this.getCurrentUser();
+    const request = await this.repo.findOne(
+      { id: requestId, deleted: { $ne: true } },
+      { populate: ["requester", "documents", "attachments"] },
+    );
+    if (!request) throw new NotFoundException("Request not found");
+
+    const tasks = await this.em.find(ApprovalTaskEntity, { request: requestId }, { populate: ["approver", "originalApprover", "actedBy"] });
+    this.assertCanView(request, tasks, user);
+
+    const file = [...request.documents.getItems(), ...request.attachments.getItems()].find((f) => f.id === fileId && !f.deleted);
+    if (!file) throw new NotFoundException("File not found");
+
+    if (file.visibility !== AttachmentVisibility.Private) {
+      return { url: file.url, expiresAt: null };
+    }
+    return this.uploadService.createDownloadUrl({ key: file.key, filename: file.filename, disposition });
+  }
+
   /** Chi tiết đơn: dữ liệu + định nghĩa quy trình (vẽ sơ đồ) + task + timeline + quyền của người xem */
   async getRequestDetail(id: string) {
     const user = this.getCurrentUser();
@@ -185,10 +232,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       { populate: ["approver", "originalApprover", "actedBy"], orderBy: { round: "ASC", createdAt: "ASC" } },
     );
     const isRequester = request.requester.id === user.id;
-    const isParticipant = tasks.some((t) => [t.approver?.id, t.originalApprover?.id, t.actedBy?.id].includes(user.id));
-    if (!isRequester && !isParticipant && !user.canAccess([PermissionType.MenuAllApprovalRequest])) {
-      throw new ForbiddenException("You cannot view this request");
-    }
+    this.assertCanView(request, tasks, user);
 
     const histories = await this.em.find(ApprovalHistoryEntity, { request: id }, { populate: ["actor"], orderBy: { createdAt: "ASC" } });
     const version = request.workflowVersion as ApprovalWorkflowVersionEntity | undefined;
@@ -307,7 +351,9 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
   }
 
   private async setFiles(request: ApprovalRequestEntity, field: "documents" | "attachments", ids: string[]) {
-    const files = ids.length ? await this.em.find(AttachmentEntity, { id: { $in: ids }, deleted: { $ne: true } }) : [];
+    const files = ids.length
+      ? await this.em.find(AttachmentEntity, { id: { $in: ids }, deleted: { $ne: true }, status: AttachmentStatus.Ready })
+      : [];
     request[field].set(files);
   }
 
