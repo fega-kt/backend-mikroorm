@@ -10,6 +10,7 @@ import { randomUUID } from "crypto";
 import type { Readable } from "stream";
 import { fromBuffer } from "file-type";
 import * as path from "path";
+import { type ByteRange, orderedParallelStream, parseContentRangeTotal, splitByteRanges } from "./parallel-range-stream";
 import {
   ALLOWED_MIME_TYPES,
   EXT_MIME_MAP,
@@ -211,15 +212,42 @@ export class UploadService {
   /**
    * Đọc object ở bucket private dạng stream (hỗ trợ Range để tua video).
    * Backend là bên duy nhất chạm vào bucket khi xem file: người xem không bao giờ nhận link tải tới R2.
+   *
+   * Đọc cả object (không có Range, vd Document Server tải file) thì chia thành nhiều đoạn tải song song
+   * (R2_PARALLEL_DOWNLOADS kết nối, mỗi đoạn R2_PARALLEL_CHUNK_SIZE_MB) rồi ghép đúng thứ tự;
+   * người nhận vẫn thấy một response 200 bình thường.
    */
   async getObject(key: string, range?: string) {
+    const concurrency = ENV.R2_PARALLEL_DOWNLOADS;
+    const chunkSize = ENV.R2_PARALLEL_CHUNK_SIZE_MB * 1024 * 1024;
+    const parallel = !range && concurrency > 1 && chunkSize > 0;
+
     const startedAt = performance.now();
-    const result = await this.s3.send(new GetObjectCommand({ Bucket: this.privateBucket, Key: key, Range: range }));
+    // Tải song song: mở đoạn đầu trước để biết tổng dung lượng (Content-Range) và loại nội dung
+    const firstRange = parallel ? `bytes=0-${chunkSize - 1}` : range;
+    const result = await this.s3.send(new GetObjectCommand({ Bucket: this.privateBucket, Key: key, Range: firstRange }));
     // Đo hiệu năng xem file: thời gian R2 trả header (chưa gồm tải body) và metadata object
     this.logger.log(
-      `getObject key=${key} range=${range ?? "-"} headersMs=${Math.round(performance.now() - startedAt)} ` +
-        `contentLength=${result.ContentLength ?? "-"} contentRange=${result.ContentRange ?? "-"} contentType=${result.ContentType ?? "-"}`,
+      `getObject key=${key} range=${range ?? "-"} parallel=${parallel ? `${concurrency}x${ENV.R2_PARALLEL_CHUNK_SIZE_MB}MB` : "off"} ` +
+        `headersMs=${Math.round(performance.now() - startedAt)} contentLength=${result.ContentLength ?? "-"} ` +
+        `contentRange=${result.ContentRange ?? "-"} contentType=${result.ContentType ?? "-"}`,
     );
+
+    if (parallel) {
+      const total = parseContentRangeTotal(result.ContentRange) ?? result.ContentLength;
+      const rest = total === undefined ? [] : splitByteRanges(chunkSize, total, chunkSize);
+      return {
+        // Object không lớn hơn một đoạn: đoạn đầu đã là cả object
+        body: rest.length
+          ? orderedParallelStream(rest, concurrency, (r, signal) => this.fetchRange(key, r, signal), result.Body as Readable)
+          : (result.Body as Readable),
+        contentType: result.ContentType,
+        contentLength: total,
+        contentRange: undefined,
+        partial: false,
+      };
+    }
+
     return {
       body: result.Body as Readable,
       contentType: result.ContentType,
@@ -227,5 +255,22 @@ export class UploadService {
       contentRange: result.ContentRange,
       partial: !!result.ContentRange,
     };
+  }
+
+  /** Tải trọn một đoạn của object vào bộ nhớ (thử lại tối đa 3 lần nếu đứt giữa chừng, trừ khi đã bị hủy) */
+  private async fetchRange(key: string, range: ByteRange, signal: AbortSignal): Promise<Uint8Array> {
+    const attempts = 3;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const result = await this.s3.send(
+          new GetObjectCommand({ Bucket: this.privateBucket, Key: key, Range: `bytes=${range.start}-${range.end}` }),
+          { abortSignal: signal },
+        );
+        return await result.Body.transformToByteArray();
+      } catch (error) {
+        if (signal.aborted || attempt >= attempts) throw error;
+        this.logger.warn(`getObject key=${key} range=${range.start}-${range.end} attempt=${attempt} failed: ${String(error)}`);
+      }
+    }
   }
 }

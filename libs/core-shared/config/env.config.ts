@@ -25,6 +25,10 @@ export const ENV = {
   /** Bucket riêng tư (tắt public access) cho tài liệu — truy cập qua link ký tạm */
   R2_PRIVATE_BUCKET: process.env.R2_PRIVATE_BUCKET,
   R2_PUBLIC_URL: process.env.R2_PUBLIC_URL,
+  /** Số kết nối song song khi đọc cả object từ R2 (vd Document Server tải file); 1 hoặc 0 = tắt, đọc một luồng */
+  R2_PARALLEL_DOWNLOADS: Number(process.env.R2_PARALLEL_DOWNLOADS ?? 6),
+  /** Kích thước mỗi đoạn tải song song (MB) */
+  R2_PARALLEL_CHUNK_SIZE_MB: Number(process.env.R2_PARALLEL_CHUNK_SIZE_MB) || 4,
   /** Địa chỉ Document Server để trình duyệt tải api.js (vd: https://docs.example.com) */
   ONLYOFFICE_URL: process.env.ONLYOFFICE_URL,
   /** Secret JWT của Document Server (cùng giá trị với JWT_SECRET của container) */
