@@ -1,5 +1,5 @@
 import { Public } from "@common/decorators/public.decorator";
-import { Controller, Get, Headers, Param, ParseUUIDPipe, Res } from "@nestjs/common";
+import { Controller, Get, Headers, Logger, Param, ParseUUIDPipe, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { FileViewService } from "../../services/file-view/file-view.service";
 
@@ -9,6 +9,8 @@ import { FileViewService } from "../../services/file-view/file-view.service";
  */
 @Controller("file-view")
 export class FileViewController {
+  private readonly logger = new Logger(FileViewController.name);
+
   constructor(private readonly fileViewService: FileViewService) {}
 
   /** Cách xem tệp: kind = office | image | video | audio | unsupported kèm dữ liệu cần để hiển thị */
@@ -26,7 +28,25 @@ export class FileViewController {
     @Headers("range") range: string | undefined,
     @Res() res: Response,
   ) {
+    const startedAt = performance.now();
     const { file, object } = await this.fileViewService.openStream(token, authorization, range);
+    // Đo hiệu năng xem file: openMs = kiểm token + DB + R2 trả header; firstByteMs = byte đầu tiên từ R2; totalMs = gửi xong
+    const openMs = Math.round(performance.now() - startedAt);
+    const tag = `stream file=${file.id} size=${file.size} range=${range ?? "-"}`;
+    let firstByteMs: number | undefined;
+    let sentBytes = 0;
+    object.body.on("data", (chunk: Buffer) => {
+      firstByteMs ??= Math.round(performance.now() - startedAt);
+      sentBytes += chunk.length;
+    });
+    res.on("close", () => {
+      const totalMs = Math.round(performance.now() - startedAt);
+      const mbps = totalMs > 0 ? ((sentBytes * 8) / 1e6 / (totalMs / 1000)).toFixed(2) : "-";
+      const status = res.writableFinished ? "done" : "aborted";
+      this.logger.log(
+        `${tag} ${status} openMs=${openMs} firstByteMs=${firstByteMs ?? "-"} totalMs=${totalMs} bytes=${sentBytes} mbps=${mbps}`,
+      );
+    });
 
     res.status(object.partial ? 206 : 200);
     res.setHeader("Content-Type", file.mimetype);

@@ -5,7 +5,7 @@ import { slugifyFilename } from "@common/utils/file-slug.util";
 import { urlJoin } from "@common/utils/url-join";
 import { ENV } from "@config/env.config";
 import { AttachmentVisibility } from "../../entities/attachment";
-import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common";
+import { BadRequestException, Injectable, InternalServerErrorException, Logger } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import type { Readable } from "stream";
 import { fromBuffer } from "file-type";
@@ -22,6 +22,7 @@ import {
 
 @Injectable()
 export class UploadService {
+  private readonly logger = new Logger(UploadService.name);
   private s3 = new S3Client({
     region: "auto",
     endpoint: `https://${ENV.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -212,7 +213,13 @@ export class UploadService {
    * Backend là bên duy nhất chạm vào bucket khi xem file: người xem không bao giờ nhận link tải tới R2.
    */
   async getObject(key: string, range?: string) {
+    const startedAt = performance.now();
     const result = await this.s3.send(new GetObjectCommand({ Bucket: this.privateBucket, Key: key, Range: range }));
+    // Đo hiệu năng xem file: thời gian R2 trả header (chưa gồm tải body) và metadata object
+    this.logger.log(
+      `getObject key=${key} range=${range ?? "-"} headersMs=${Math.round(performance.now() - startedAt)} ` +
+        `contentLength=${result.ContentLength ?? "-"} contentRange=${result.ContentRange ?? "-"} contentType=${result.ContentType ?? "-"}`,
+    );
     return {
       body: result.Body as Readable,
       contentType: result.ContentType,
