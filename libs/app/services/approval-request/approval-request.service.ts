@@ -10,6 +10,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import type {
   ApprovalRequestFilterDto,
   CreateApprovalRequestDto,
+  PresignRequestFileDto,
   PreviewFlowDto,
   UpdateApprovalRequestDto,
 } from "../../controllers/approval-request/approval-request.validation";
@@ -19,6 +20,7 @@ import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-version";
 import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
+import { buildRequestFileFolder, RequestFileCategory } from "./request-file.constants";
 import { ApprovalEngineService } from "../approval-engine/approval-engine.service";
 import { ApproverResolver } from "../approval-engine/approver-resolver";
 import { resolveAttachmentConfig } from "../approval-engine/attachment-config";
@@ -125,7 +127,13 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     if (!requestType) throw new BadRequestException("Request type is not available");
     const departmentId = await this.resolveSubmitUnit(data.department);
 
+    // Id do client sinh sẵn (để tệp đã upload nằm đúng thư mục của phiếu): không được trùng phiếu có sẵn
+    if (data.id && (await this.em.count(ApprovalRequestEntity, { id: data.id })) > 0) {
+      throw new ConflictException("Request id already exists");
+    }
+
     const request = this.em.create(ApprovalRequestEntity, {
+      ...(data.id ? { id: data.id } : {}),
       title: data.title,
       requestType,
       requester: this.em.getReference(UserEntity, user.id),
@@ -135,8 +143,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       status: ApprovalRequestStatus.Draft,
       ...this.getDefaultValuesForCreate(),
     });
-    await this.setFiles(request, "documents", data.documents);
-    await this.setFiles(request, "attachments", data.attachments);
+    await this.setFiles(request, RequestFileCategory.Documents, data.documents);
+    await this.setFiles(request, RequestFileCategory.Attachments, data.attachments);
     await this.em.flush();
 
     if (data.submit) await this.engine.submit(request.id, user.id);
@@ -149,8 +157,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     if (data.payload !== undefined) request.payload = data.payload;
     if (data.priority !== undefined) request.priority = data.priority;
     if (data.department) request.department = this.em.getReference(DepartmentEntity, await this.resolveSubmitUnit(data.department));
-    if (data.documents) await this.setFiles(request, "documents", data.documents);
-    if (data.attachments) await this.setFiles(request, "attachments", data.attachments);
+    if (data.documents) await this.setFiles(request, RequestFileCategory.Documents, data.documents);
+    if (data.attachments) await this.setFiles(request, RequestFileCategory.Attachments, data.attachments);
     this.em.assign(request, this.getDefaultValuesForUpdate());
     await this.em.flush();
     return { id };
@@ -350,11 +358,54 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     return request;
   }
 
-  private async setFiles(request: ApprovalRequestEntity, field: "documents" | "attachments", ids: string[]) {
+  private async setFiles(request: ApprovalRequestEntity, field: RequestFileCategory, ids: string[]) {
     const files = ids.length
       ? await this.em.find(AttachmentEntity, { id: { $in: ids }, deleted: { $ne: true }, status: AttachmentStatus.Ready })
       : [];
+    const userId = this.getCurrentUser().id;
+    const folder = `${buildRequestFileFolder(request.id, field)}/`;
+    // Chỉ gắn tệp do chính người dùng upload và nằm đúng thư mục của phiếu + loại tệp:
+    // chặn việc gắn tệp (private) của người khác hoặc của phiếu khác để xin link tải
+    if (files.length !== ids.length || files.some((f) => f.createdBy.id !== userId || !f.key.startsWith(folder))) {
+      throw new BadRequestException("Some files are invalid");
+    }
     request[field].set(files);
+  }
+
+  /**
+   * Link upload thẳng lên R2 cho một tệp của tờ trình, vào Attachments/{requestId}/{loại}/{tên file}.
+   * Phiếu đã tồn tại thì chỉ người tạo (khi đang soạn / bị trả lại) được upload; chưa tồn tại thì id đang được client giữ chỗ.
+   */
+  async presignFileUpload(requestId: string, data: PresignRequestFileDto) {
+    const user = this.getCurrentUser();
+    const existing = await this.repo.findOne({ id: requestId, deleted: { $ne: true } }, { populate: ["requester"] });
+    if (existing) {
+      if (existing.requester.id !== user.id) throw new ForbiddenException("You cannot upload files to this request");
+      if (![ApprovalRequestStatus.Draft, ApprovalRequestStatus.Returned].includes(existing.status)) {
+        throw new ConflictException("Files can only be changed while the request is a draft or returned");
+      }
+    }
+
+    const folder = buildRequestFileFolder(requestId, data.category);
+    const { key, uploadUrl, headers, expiresAt } = await this.uploadService.createUploadUrl({
+      folder,
+      filename: data.filename,
+      mimetype: data.mimetype,
+      size: data.size,
+    });
+    const attachment = this.em.create(AttachmentEntity, {
+      filename: data.filename.trim(),
+      mimetype: data.mimetype,
+      size: data.size,
+      key,
+      url: "",
+      visibility: AttachmentVisibility.Private,
+      status: AttachmentStatus.Pending,
+      storagePath: folder,
+      ...this.getDefaultValuesForCreate(),
+    });
+    await this.em.flush();
+    return { attachmentId: attachment.id, uploadUrl, headers, expiresAt };
   }
 
   private async userDepartmentId() {

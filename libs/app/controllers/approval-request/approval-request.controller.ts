@@ -1,7 +1,7 @@
 import { PermissionType } from "@common/base/permission-type.enum";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import { ZodValidationPipe } from "@common/pipes";
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from "@nestjs/common";
 import { z } from "zod";
 import { ApprovalRequestService } from "../../services/approval-request/approval-request.service";
 import {
@@ -9,6 +9,7 @@ import {
   cancelApprovalRequestValidation,
   createApprovalRequestValidation,
   fileUrlQueryValidation,
+  presignRequestFileValidation,
   previewFlowValidation,
   updateApprovalRequestValidation,
 } from "./approval-request.validation";
@@ -52,6 +53,15 @@ export class ApprovalRequestController {
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.requestService.getRequestDetail(id);
+  }
+
+  /** Xin link upload thẳng lên R2 cho tệp của tờ trình (id có thể chưa tồn tại: tờ trình đang soạn ở client) */
+  @Post(":id/files/presign-upload")
+  presignFileUpload(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(presignRequestFileValidation)) data: z.infer<typeof presignRequestFileValidation>,
+  ) {
+    return this.requestService.presignFileUpload(id, data);
   }
 
   /** Link xem/tải tạm thời của tệp (tài liệu private) thuộc tờ trình */

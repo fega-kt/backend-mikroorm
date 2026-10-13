@@ -5,10 +5,10 @@ import { UploadService } from "./upload.service";
 
 describe("UploadService.createUploadUrl (kiểm khai báo trước khi ký link)", () => {
   const service = new UploadService();
-  const base = { path: "Attachments", filename: "hop-dong.pdf", mimetype: "application/pdf", size: 1024 };
+  const base = { folder: "Attachments/req-1/documents", filename: "hop-dong.pdf", mimetype: "application/pdf", size: 1024 };
 
   it("từ chối thư mục không phải private", async () => {
-    await expect(service.createUploadUrl({ ...base, path: "UserAvatars" })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.createUploadUrl({ ...base, folder: "UserAvatars" })).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it("từ chối đuôi file không được phép", async () => {
