@@ -1,11 +1,23 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { isPrivateStoragePath } from "@common/constants/storage.constant";
 import { urlJoin } from "@common/utils/url-join";
 import { ENV } from "@config/env.config";
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { AttachmentVisibility } from "../../entities/attachment";
+import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import { fromBuffer } from "file-type";
 import * as path from "path";
-import { ALLOWED_MIME_TYPES, EXT_MIME_MAP, INVALID_FILENAME_CHARS, MAX_FILENAME_LENGTH } from "./upload.constants";
+import {
+  ALLOWED_MIME_TYPES,
+  EXT_MIME_MAP,
+  INVALID_FILENAME_CHARS,
+  MAX_FILENAME_LENGTH,
+  MAX_PRIVATE_UPLOAD_SIZE,
+  SIGNED_URL_TTL_SECONDS,
+  SNIFF_BYTES,
+  UPLOAD_URL_TTL_SECONDS,
+} from "./upload.constants";
 
 @Injectable()
 export class UploadService {
@@ -19,8 +31,9 @@ export class UploadService {
     forcePathStyle: true,
   });
 
-  private async validateFile(file: Express.Multer.File): Promise<void> {
-    const filename = file.originalname.trim();
+  /** Kiểm tên file (rỗng, độ dài, ký tự cấm, đuôi được phép); trả về đuôi file (có dấu chấm, chữ thường) */
+  private assertFilenameAllowed(rawName: string): string {
+    const filename = rawName.trim();
 
     if (!filename || filename.trim().length === 0) {
       throw new BadRequestException("Filename cannot be empty");
@@ -39,34 +52,55 @@ export class UploadService {
       throw new BadRequestException("Filename must have an extension");
     }
 
-    const allowedMimesForExt = EXT_MIME_MAP[ext];
-    if (!allowedMimesForExt) {
+    if (!EXT_MIME_MAP[ext]) {
       throw new BadRequestException(`Extension "${ext}" is not allowed`);
     }
+    return ext;
+  }
 
-    const detected = await fromBuffer(file.buffer);
-    const actualMime = detected?.mime || file.mimetype;
-
+  /** Loại nội dung thật (hoặc khai báo) phải nằm trong danh sách cho phép và khớp với đuôi file */
+  private assertMimeAllowed(ext: string, actualMime: string | undefined): void {
     if (!actualMime || !ALLOWED_MIME_TYPES.includes(actualMime)) {
       throw new BadRequestException(`Actual file content type "${actualMime ?? "unknown"}" is not allowed`);
     }
 
-    if (!allowedMimesForExt.includes(actualMime)) {
+    if (!EXT_MIME_MAP[ext].includes(actualMime)) {
       throw new BadRequestException(`File content type "${actualMime}" does not match extension "${ext}"`);
     }
+  }
+
+  private async validateFile(file: Express.Multer.File): Promise<void> {
+    const ext = this.assertFilenameAllowed(file.originalname);
+    const detected = await fromBuffer(file.buffer);
+    this.assertMimeAllowed(ext, detected?.mime || file.mimetype);
+  }
+
+  /** Bucket private; thiếu cấu hình thì báo lỗi, tuyệt đối không rơi về bucket public */
+  private get privateBucket(): string {
+    if (!ENV.R2_PRIVATE_BUCKET) {
+      throw new InternalServerErrorException("R2_PRIVATE_BUCKET is not configured");
+    }
+    return ENV.R2_PRIVATE_BUCKET;
+  }
+
+  private buildKey(filePath: string, filename: string): string {
+    return urlJoin([filePath, `${randomUUID()}-${filename}`], {
+      removeLeadingSlash: true,
+      removeTrailingSlash: true,
+    });
   }
 
   async upload(file: Express.Multer.File, filePath: string = "uploads") {
     await this.validateFile(file);
 
-    const key = urlJoin([filePath, `${randomUUID()}-${file.originalname}`], {
-      removeLeadingSlash: true,
-      removeTrailingSlash: true,
-    });
+    const isPrivate = isPrivateStoragePath(filePath);
+    const bucket = isPrivate ? this.privateBucket : ENV.R2_BUCKET;
+
+    const key = this.buildKey(filePath, file.originalname);
 
     await this.s3.send(
       new PutObjectCommand({
-        Bucket: ENV.R2_BUCKET,
+        Bucket: bucket,
         Key: key,
         Body: file.buffer,
         ContentType: file.mimetype,
@@ -75,7 +109,96 @@ export class UploadService {
 
     return {
       key,
-      url: `${ENV.R2_PUBLIC_URL}/${key}`,
+      // File private không có URL công khai: phải xin link ký qua createDownloadUrl
+      url: isPrivate ? "" : `${ENV.R2_PUBLIC_URL}/${key}`,
+      visibility: isPrivate ? AttachmentVisibility.Private : AttachmentVisibility.Public,
     };
+  }
+
+  /**
+   * Link upload thẳng lên bucket private (presigned PUT) cho file lớn — dữ liệu không đi qua backend.
+   * Kiểm trước những gì kiểm được từ khai báo (đuôi, loại, dung lượng); nội dung thật được xác minh ở inspectObject
+   * sau khi upload xong. Link chỉ ghi được đúng một key, đúng loại và đúng dung lượng đã khai.
+   */
+  async createUploadUrl(params: { path: string; filename: string; mimetype: string; size: number }) {
+    const { path: filePath, filename, mimetype, size } = params;
+
+    if (!isPrivateStoragePath(filePath)) {
+      throw new BadRequestException("Presigned upload is only available for private storage paths");
+    }
+    const ext = this.assertFilenameAllowed(filename);
+    this.assertMimeAllowed(ext, mimetype);
+    if (!Number.isInteger(size) || size <= 0 || size > MAX_PRIVATE_UPLOAD_SIZE) {
+      throw new BadRequestException(`File size must be between 1 byte and ${MAX_PRIVATE_UPLOAD_SIZE} bytes`);
+    }
+
+    const key = this.buildKey(filePath, filename.trim());
+    const uploadUrl = await getSignedUrl(
+      this.s3,
+      new PutObjectCommand({ Bucket: this.privateBucket, Key: key, ContentType: mimetype, ContentLength: size }),
+      // Ký cả loại và dung lượng: upload lệch khai báo sẽ bị R2 từ chối
+      { expiresIn: UPLOAD_URL_TTL_SECONDS, signableHeaders: new Set(["content-type", "content-length"]) },
+    );
+
+    return {
+      key,
+      uploadUrl,
+      headers: { "Content-Type": mimetype },
+      expiresAt: new Date(Date.now() + UPLOAD_URL_TTL_SECONDS * 1000).toISOString(),
+    };
+  }
+
+  /**
+   * Xác minh file vừa upload thẳng lên bucket private: tồn tại, đúng dung lượng đã khai,
+   * và nội dung thật (đọc vài KB đầu) khớp với đuôi file. Sai thì xóa object và báo lỗi.
+   */
+  async verifyUploadedObject(params: { key: string; filename: string; expectedSize: number }) {
+    const { key, filename, expectedSize } = params;
+    const ext = this.assertFilenameAllowed(filename);
+
+    let head;
+    try {
+      head = await this.s3.send(new HeadObjectCommand({ Bucket: this.privateBucket, Key: key }));
+    } catch {
+      throw new BadRequestException("File has not been uploaded");
+    }
+
+    try {
+      if (head.ContentLength !== expectedSize) {
+        throw new BadRequestException("Uploaded file size does not match the declared size");
+      }
+      const part = await this.s3.send(new GetObjectCommand({ Bucket: this.privateBucket, Key: key, Range: `bytes=0-${SNIFF_BYTES - 1}` }));
+      const bytes = Buffer.from((await part.Body?.transformToByteArray()) ?? []);
+      const detected = await fromBuffer(bytes);
+      this.assertMimeAllowed(ext, detected?.mime || head.ContentType);
+    } catch (error) {
+      await this.deleteObject(key).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /** Xóa object ở bucket private (file lỗi hoặc upload dở) */
+  async deleteObject(key: string) {
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.privateBucket, Key: key }));
+  }
+
+  /**
+   * Link tải/xem tạm thời (presigned GET) cho file ở bucket private.
+   * Gọi sau khi đã kiểm quyền; link hết hạn sau SIGNED_URL_TTL_SECONDS.
+   */
+  async createDownloadUrl(params: { key: string; filename: string; disposition?: "inline" | "attachment" }) {
+    const { key, filename, disposition = "attachment" } = params;
+    // Tên file có thể chứa ký tự ngoài ASCII: gửi cả bản ASCII dự phòng và bản UTF-8 (RFC 5987)
+    const asciiName = filename.replace(/[^\x20-\x7E"\\]/g, "_");
+    const url = await getSignedUrl(
+      this.s3,
+      new GetObjectCommand({
+        Bucket: this.privateBucket,
+        Key: key,
+        ResponseContentDisposition: `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      }),
+      { expiresIn: SIGNED_URL_TTL_SECONDS },
+    );
+    return { url, expiresAt: new Date(Date.now() + SIGNED_URL_TTL_SECONDS * 1000).toISOString() };
   }
 }

@@ -22,6 +22,8 @@ export const ENV = {
   R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY,
   R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_KEY,
   R2_BUCKET: process.env.R2_BUCKET,
+  /** Bucket riêng tư (tắt public access) cho tài liệu — truy cập qua link ký tạm */
+  R2_PRIVATE_BUCKET: process.env.R2_PRIVATE_BUCKET,
   R2_PUBLIC_URL: process.env.R2_PUBLIC_URL,
   FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:3333",
 

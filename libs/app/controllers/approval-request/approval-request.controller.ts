@@ -8,6 +8,7 @@ import {
   approvalRequestFilterValidation,
   cancelApprovalRequestValidation,
   createApprovalRequestValidation,
+  fileUrlQueryValidation,
   previewFlowValidation,
   updateApprovalRequestValidation,
 } from "./approval-request.validation";
@@ -51,6 +52,16 @@ export class ApprovalRequestController {
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.requestService.getRequestDetail(id);
+  }
+
+  /** Link xem/tải tạm thời của tệp (tài liệu private) thuộc tờ trình */
+  @Get(":id/files/:fileId/download-url")
+  fileDownloadUrl(
+    @Param("id") id: string,
+    @Param("fileId") fileId: string,
+    @Query(new ZodValidationPipe(fileUrlQueryValidation)) query: z.infer<typeof fileUrlQueryValidation>,
+  ) {
+    return this.requestService.getRequestFileUrl(id, fileId, query.disposition);
   }
 
   @Patch(":id")

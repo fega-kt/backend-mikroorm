@@ -9,6 +9,7 @@ import { CacheModule } from "@modules/cache/cache.module";
 import { CloudflareKvModule } from "@modules/cloudflare-kv/cloudflare-kv.module";
 import { HealthModule } from "@modules/health/health.module";
 import { CoreServiceJobModule } from "@core-service/core-service-job.module";
+import { AttachmentCleanupModule } from "./modules/attachment-cleanup/attachment-cleanup.module";
 import { InactiveReminderModule } from "./modules/inactive-reminder/inactive-reminder.module";
 
 @Module({
@@ -23,6 +24,7 @@ import { InactiveReminderModule } from "./modules/inactive-reminder/inactive-rem
     LoggerModule.forRoot("be-core-job"),
     CoreServiceJobModule,
     InactiveReminderModule,
+    AttachmentCleanupModule,
   ],
 })
 export class CoreJobAppModule {}

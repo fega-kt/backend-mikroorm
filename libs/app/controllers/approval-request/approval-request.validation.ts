@@ -64,3 +64,7 @@ export type CreateApprovalRequestDto = z.infer<typeof createApprovalRequestValid
 export type UpdateApprovalRequestDto = z.infer<typeof updateApprovalRequestValidation>;
 export type PreviewFlowDto = z.infer<typeof previewFlowValidation>;
 export type ApprovalRequestFilterDto = z.infer<typeof approvalRequestFilterValidation>;
+
+export const fileUrlQueryValidation = z.object({
+  disposition: z.enum(["inline", "attachment"]).default("attachment"),
+});
