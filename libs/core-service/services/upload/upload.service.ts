@@ -1,6 +1,7 @@
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { isPrivateStoragePath } from "@common/constants/storage.constant";
+import { slugifyFilename } from "@common/utils/file-slug.util";
 import { urlJoin } from "@common/utils/url-join";
 import { ENV } from "@config/env.config";
 import { AttachmentVisibility } from "../../entities/attachment";
@@ -90,6 +91,29 @@ export class UploadService {
     });
   }
 
+  /** Key `{folder}/{ten-file}.{ext}`; trùng tên trong cùng thư mục thì thêm hậu tố -2, -3… để không ghi đè file có sẵn */
+  private async buildUniqueKey(folder: string, filename: string, ext: string): Promise<string> {
+    const base = slugifyFilename(path.basename(filename, path.extname(filename)));
+    const MAX_TRIES = 20;
+    for (let i = 1; i <= MAX_TRIES; i++) {
+      const key = urlJoin([folder, `${base}${i === 1 ? "" : `-${i}`}${ext}`], { removeLeadingSlash: true, removeTrailingSlash: true });
+      if (!(await this.objectExists(key))) return key;
+    }
+    // Quá nhiều file trùng tên: dùng mã ngẫu nhiên để chắc chắn không đè
+    return urlJoin([folder, `${base}-${randomUUID().slice(0, 8)}${ext}`], { removeLeadingSlash: true, removeTrailingSlash: true });
+  }
+
+  private async objectExists(key: string): Promise<boolean> {
+    try {
+      await this.s3.send(new HeadObjectCommand({ Bucket: this.privateBucket, Key: key }));
+      return true;
+    } catch (error) {
+      const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+      if (status === 404) return false;
+      throw error;
+    }
+  }
+
   async upload(file: Express.Multer.File, filePath: string = "uploads") {
     await this.validateFile(file);
 
@@ -119,11 +143,12 @@ export class UploadService {
    * Link upload thẳng lên bucket private (presigned PUT) cho file lớn — dữ liệu không đi qua backend.
    * Kiểm trước những gì kiểm được từ khai báo (đuôi, loại, dung lượng); nội dung thật được xác minh ở inspectObject
    * sau khi upload xong. Link chỉ ghi được đúng một key, đúng loại và đúng dung lượng đã khai.
+   * `folder` là thư mục đích (vd: Attachments/{requestId}/documents), tên file trong key được làm sạch và chống trùng.
    */
-  async createUploadUrl(params: { path: string; filename: string; mimetype: string; size: number }) {
-    const { path: filePath, filename, mimetype, size } = params;
+  async createUploadUrl(params: { folder: string; filename: string; mimetype: string; size: number }) {
+    const { folder, filename, mimetype, size } = params;
 
-    if (!isPrivateStoragePath(filePath)) {
+    if (!isPrivateStoragePath(folder)) {
       throw new BadRequestException("Presigned upload is only available for private storage paths");
     }
     const ext = this.assertFilenameAllowed(filename);
@@ -132,7 +157,7 @@ export class UploadService {
       throw new BadRequestException(`File size must be between 1 byte and ${MAX_PRIVATE_UPLOAD_SIZE} bytes`);
     }
 
-    const key = this.buildKey(filePath, filename.trim());
+    const key = await this.buildUniqueKey(folder, filename.trim(), ext);
     const uploadUrl = await getSignedUrl(
       this.s3,
       new PutObjectCommand({ Bucket: this.privateBucket, Key: key, ContentType: mimetype, ContentLength: size }),

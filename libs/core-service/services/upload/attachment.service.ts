@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { isPrivateStoragePath } from "@common/constants/storage.constant";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ForbiddenException, Injectable, Scope } from "@nestjs/common";
@@ -18,6 +19,13 @@ export class AttachmentService extends BaseService<AttachmentEntity> {
   }
 
   async uploadAndCreate(file: Express.Multer.File, path: string): Promise<AttachmentEntity> {
+    // File private phải upload thẳng lên R2 bằng link ký (API của nghiệp vụ sở hữu file), không đi qua backend
+    if (isPrivateStoragePath(path)) {
+      throw new BadRequestException("Private files must be uploaded with a presigned URL");
+    }
+    // multer đọc tên file theo latin1: giải mã lại để giữ đúng tiếng Việt
+    file.originalname = Buffer.from(file.originalname, "latin1").toString("utf8");
+
     const { key, url, visibility } = await this.uploadService.upload(file, path);
 
     return this.addOne({
@@ -29,24 +37,6 @@ export class AttachmentService extends BaseService<AttachmentEntity> {
       visibility,
       storagePath: path,
     });
-  }
-
-  /** Tạo bản ghi `pending` và link upload thẳng lên R2; chỉ dùng được sau khi xác nhận bằng completeUpload */
-  async createPresignedUpload(data: { path: string; filename: string; mimetype: string; size: number }) {
-    const { key, uploadUrl, headers, expiresAt } = await this.uploadService.createUploadUrl(data);
-
-    const attachment = await this.addOne({
-      filename: data.filename.trim(),
-      mimetype: data.mimetype,
-      size: data.size,
-      key,
-      url: "",
-      visibility: AttachmentVisibility.Private,
-      status: AttachmentStatus.Pending,
-      storagePath: data.path,
-    });
-
-    return { attachmentId: attachment.id, uploadUrl, headers, expiresAt };
   }
 
   /** Xác minh file đã upload (tồn tại, đúng dung lượng, nội dung khớp đuôi) rồi chuyển sang `ready` */

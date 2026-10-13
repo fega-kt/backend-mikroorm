@@ -3,7 +3,7 @@ import { Body, Controller, Get, Param, Post, Query, UploadedFile, UseInterceptor
 import { FileInterceptor } from "@nestjs/platform-express";
 import { z } from "zod";
 import { AttachmentService } from "../../services/upload/attachment.service";
-import { downloadUrlQueryValidation, presignUploadValidation, uploadAttachmentValidation } from "./attachment.validation";
+import { downloadUrlQueryValidation, uploadAttachmentValidation } from "./attachment.validation";
 
 @Controller("attachment")
 export class AttachmentController {
@@ -16,12 +16,6 @@ export class AttachmentController {
     @Body(new ZodValidationPipe(uploadAttachmentValidation)) body: z.infer<typeof uploadAttachmentValidation>,
   ) {
     return this.attachmentService.uploadAndCreate(file, body.path);
-  }
-
-  /** Xin link upload thẳng lên R2 (file private, kể cả file lớn); upload xong gọi :id/complete */
-  @Post("presign-upload")
-  presignUpload(@Body(new ZodValidationPipe(presignUploadValidation)) body: z.infer<typeof presignUploadValidation>) {
-    return this.attachmentService.createPresignedUpload(body);
   }
 
   /** Xác nhận đã upload xong: backend kiểm file thật trên R2 rồi mới cho dùng */
