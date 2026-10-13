@@ -7,6 +7,7 @@ import { ENV } from "@config/env.config";
 import { AttachmentVisibility } from "../../entities/attachment";
 import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common";
 import { randomUUID } from "crypto";
+import type { Readable } from "stream";
 import { fromBuffer } from "file-type";
 import * as path from "path";
 import {
@@ -15,7 +16,6 @@ import {
   INVALID_FILENAME_CHARS,
   MAX_FILENAME_LENGTH,
   MAX_PRIVATE_UPLOAD_SIZE,
-  SIGNED_URL_TTL_SECONDS,
   SNIFF_BYTES,
   UPLOAD_URL_TTL_SECONDS,
 } from "./upload.constants";
@@ -208,22 +208,17 @@ export class UploadService {
   }
 
   /**
-   * Link tải/xem tạm thời (presigned GET) cho file ở bucket private.
-   * Gọi sau khi đã kiểm quyền; link hết hạn sau SIGNED_URL_TTL_SECONDS.
+   * Đọc object ở bucket private dạng stream (hỗ trợ Range để tua video).
+   * Backend là bên duy nhất chạm vào bucket khi xem file: người xem không bao giờ nhận link tải tới R2.
    */
-  async createDownloadUrl(params: { key: string; filename: string; disposition?: "inline" | "attachment" }) {
-    const { key, filename, disposition = "attachment" } = params;
-    // Tên file có thể chứa ký tự ngoài ASCII: gửi cả bản ASCII dự phòng và bản UTF-8 (RFC 5987)
-    const asciiName = filename.replace(/[^\x20-\x7E"\\]/g, "_");
-    const url = await getSignedUrl(
-      this.s3,
-      new GetObjectCommand({
-        Bucket: this.privateBucket,
-        Key: key,
-        ResponseContentDisposition: `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      }),
-      { expiresIn: SIGNED_URL_TTL_SECONDS },
-    );
-    return { url, expiresAt: new Date(Date.now() + SIGNED_URL_TTL_SECONDS * 1000).toISOString() };
+  async getObject(key: string, range?: string) {
+    const result = await this.s3.send(new GetObjectCommand({ Bucket: this.privateBucket, Key: key, Range: range }));
+    return {
+      body: result.Body as Readable,
+      contentType: result.ContentType,
+      contentLength: result.ContentLength,
+      contentRange: result.ContentRange,
+      partial: !!result.ContentRange,
+    };
   }
 }

@@ -1,8 +1,10 @@
 import { BaseService } from "@common/base/base.service";
 import { PermissionType } from "@common/base/permission-type.enum";
+import { STORAGE_PATH } from "@common/constants/storage.constant";
 import { AttachmentEntity, AttachmentStatus, AttachmentVisibility } from "@core-service/entities/attachment";
 import { DepartmentEntity } from "@core-service/entities/department";
 import { UserEntity } from "@core-service/entities/user";
+import { FileContextType } from "@core-service/services/file-view/file-access-policy";
 import { UploadService } from "@core-service/services/upload/upload.service";
 import { EntityRepository, FilterQuery, serialize } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
@@ -202,27 +204,32 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
   }
 
   /**
-   * Link xem/tải tạm thời của một tệp thuộc tờ trình. Kiểm quyền như khi xem chi tiết tờ trình,
-   * và tệp phải thuộc đúng tờ trình này (không cho xin link file của tờ trình khác).
+   * Tệp mà người dùng hiện tại được xem trong ngữ cảnh một tờ trình.
+   * - Phiếu đã có: phải xem được phiếu (người tạo, người tham gia duyệt, hoặc quyền xem mọi tờ trình), và tệp thuộc phiếu.
+   * - Tệp chưa gắn vào phiếu (đang soạn, chưa lưu): chỉ chính người đã upload, và phải nằm trong thư mục của phiếu.
    */
-  async getRequestFileUrl(requestId: string, fileId: string, disposition: "inline" | "attachment") {
+  async resolveViewableFile(requestId: string, fileId: string): Promise<AttachmentEntity> {
     const user = this.getCurrentUser();
     const request = await this.repo.findOne(
       { id: requestId, deleted: { $ne: true } },
       { populate: ["requester", "documents", "attachments"] },
     );
-    if (!request) throw new NotFoundException("Request not found");
 
-    const tasks = await this.em.find(ApprovalTaskEntity, { request: requestId }, { populate: ["approver", "originalApprover", "actedBy"] });
-    this.assertCanView(request, tasks, user);
-
-    const file = [...request.documents.getItems(), ...request.attachments.getItems()].find((f) => f.id === fileId && !f.deleted);
-    if (!file) throw new NotFoundException("File not found");
-
-    if (file.visibility !== AttachmentVisibility.Private) {
-      return { url: file.url, expiresAt: null };
+    if (request) {
+      const tasks = await this.em.find(
+        ApprovalTaskEntity,
+        { request: requestId },
+        { populate: ["approver", "originalApprover", "actedBy"] },
+      );
+      this.assertCanView(request, tasks, user);
+      const linked = [...request.documents.getItems(), ...request.attachments.getItems()].find((f) => f.id === fileId && !f.deleted);
+      if (linked) return linked;
     }
-    return this.uploadService.createDownloadUrl({ key: file.key, filename: file.filename, disposition });
+
+    const file = await this.em.findOne(AttachmentEntity, { id: fileId, deleted: { $ne: true }, status: AttachmentStatus.Ready });
+    const ownUnsaved = file?.createdBy.id === user.id && file.key.startsWith(`${STORAGE_PATH.ATTACHMENTS}/${requestId}/`);
+    if (!file || !ownUnsaved) throw new NotFoundException("File not found");
+    return file;
   }
 
   /** Chi tiết đơn: dữ liệu + định nghĩa quy trình (vẽ sơ đồ) + task + timeline + quyền của người xem */
@@ -402,6 +409,9 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       visibility: AttachmentVisibility.Private,
       status: AttachmentStatus.Pending,
       storagePath: folder,
+      // Ghi chủ sở hữu: về sau chỉ cần id tệp là biết áp quy tắc phân quyền nào khi xem
+      contextType: FileContextType.ApprovalRequest,
+      refId: requestId,
       ...this.getDefaultValuesForCreate(),
     });
     await this.em.flush();
