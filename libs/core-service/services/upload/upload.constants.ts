@@ -32,6 +32,9 @@ export const MAX_PRIVATE_UPLOAD_SIZE = 100 * 1024 * 1024;
 /** Thời hạn link upload (giây) — đủ để file lớn trên mạng chậm tải xong */
 export const UPLOAD_URL_TTL_SECONDS = 30 * 60;
 
+/** Thời hạn link tải (giây): trình duyệt mở link ngay sau khi nhận, chỉ cần đủ để bắt đầu tải */
+export const DOWNLOAD_URL_TTL_SECONDS = 60;
+
 /** Số byte đầu file đọc để nhận dạng loại nội dung thật */
 export const SNIFF_BYTES = 4100;
 

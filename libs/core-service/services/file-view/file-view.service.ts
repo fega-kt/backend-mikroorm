@@ -25,9 +25,10 @@ export type FileViewLang = "vi" | "en" | "zh";
 const trimSlash = (url: string) => url.replace(/\/+$/, "");
 
 /**
- * Xem tệp private ngay trong hệ thống, người xem KHÔNG tải được:
- * - quyền xem do FileAccessPolicy của từng ngữ cảnh quyết định (phiếu, cài đặt…);
- * - backend là bên duy nhất đọc bucket private, không phát link tới R2 cho trình duyệt;
+ * Xem và tải tệp private trong hệ thống:
+ * - quyền xem/tải do FileAccessPolicy của từng ngữ cảnh quyết định (phiếu, cài đặt…);
+ * - xem: backend stream tệp, trình xem (OnlyOffice, thẻ media) không có nút tải;
+ * - tải: chỉ qua createDownloadUrl, link ký tới R2 sống rất ngắn, cấp riêng cho từng lần bấm tải;
  * - OnlyOffice nhận URL stream có token ngắn hạn và phải mang JWT do chính Document Server ký.
  */
 @Injectable({ scope: Scope.REQUEST })
@@ -58,16 +59,8 @@ export class FileViewService {
    * Chỉ cần id tệp: ngữ cảnh chủ sở hữu đọc từ bản ghi tệp, rồi policy của ngữ cảnh đó kiểm quyền.
    */
   async describe(fileId: string) {
-    const user = this.request.user;
-    if (!user) throw new UnauthorizedException();
-
-    const owned = await this.attachments.findOne({ id: fileId, deleted: { $ne: true }, status: AttachmentStatus.Ready });
-    if (!owned?.contextType || !owned.refId) throw new NotFoundException("File not found");
-    const policy = this.policies.find((p) => p.contextType === owned.contextType);
-    if (!policy) throw new NotFoundException("Unknown file context");
-    const file = await policy.resolveFile(owned.refId, owned.id);
+    const { user, file } = await this.resolveViewableFile(fileId);
     const lang = this.lang;
-    if (file.visibility !== AttachmentVisibility.Private) throw new BadRequestException("Only private files can be viewed here");
 
     const target = resolveFileViewTarget(file.filename);
     const base = { fileId: file.id, filename: file.filename, mimetype: file.mimetype, size: file.size, kind: target.kind };
@@ -122,6 +115,29 @@ export class FileViewService {
       documentServerUrl: trimSlash(ENV.ONLYOFFICE_URL),
       config: { ...config, token: await signEditorConfig(this.secret, config) },
     };
+  }
+
+  /** Link tải tệp (ký thẳng tới R2, sống DOWNLOAD_URL_TTL_SECONDS): cùng quyền với xem tệp */
+  async createDownloadUrl(fileId: string) {
+    const { file } = await this.resolveViewableFile(fileId);
+    return this.uploadService.createDownloadUrl(file.key, file.filename);
+  }
+
+  /**
+   * Tệp private mà người dùng hiện tại được xem: ngữ cảnh chủ sở hữu đọc từ bản ghi tệp,
+   * rồi policy của ngữ cảnh đó kiểm quyền (không có policy thì từ chối).
+   */
+  private async resolveViewableFile(fileId: string) {
+    const user = this.request.user;
+    if (!user) throw new UnauthorizedException();
+
+    const owned = await this.attachments.findOne({ id: fileId, deleted: { $ne: true }, status: AttachmentStatus.Ready });
+    if (!owned?.contextType || !owned.refId) throw new NotFoundException("File not found");
+    const policy = this.policies.find((p) => p.contextType === owned.contextType);
+    if (!policy) throw new NotFoundException("Unknown file context");
+    const file = await policy.resolveFile(owned.refId, owned.id);
+    if (file.visibility !== AttachmentVisibility.Private) throw new BadRequestException("Only private files can be viewed here");
+    return { user, file };
   }
 
   /** Mở stream tệp cho URL có token (không cần đăng nhập vì Document Server / thẻ media không mang phiên) */
