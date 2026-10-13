@@ -60,6 +60,8 @@ export class FileViewController {
     res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
 
     object.body.on("error", () => res.destroy());
+    // Người nhận ngắt giữa chừng: pipe chỉ tháo ra, phải hủy nguồn để dừng đọc (và các đoạn đang tải song song) từ R2
+    res.on("close", () => object.body.destroy());
     object.body.pipe(res);
   }
 }
