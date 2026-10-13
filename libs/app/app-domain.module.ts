@@ -5,7 +5,11 @@ import { DepartmentEntity } from "@core-service/entities/department";
 import { NotificationEntity } from "@core-service/entities/notification";
 import { PrincipalEntity } from "@core-service/entities/principal";
 import { UserEntity } from "@core-service/entities/user";
+import { FileViewController } from "@core-service/controllers/file-view/file-view.controller";
+import { FILE_ACCESS_POLICIES } from "@core-service/services/file-view/file-access-policy";
+import { FileViewService } from "@core-service/services/file-view/file-view.service";
 import { UploadService } from "@core-service/services/upload/upload.service";
+import { ApprovalRequestFilePolicy } from "./services/approval-request/approval-request-file.policy";
 import { OutboxModule } from "@modules/outbox/outbox.module";
 import { appControllers } from "./controllers";
 import { appServices } from "./services";
@@ -16,9 +20,21 @@ import { appEntities } from "./entities";
     OutboxModule,
     MikroOrmModule.forFeature([...appEntities, AttachmentEntity, DepartmentEntity, NotificationEntity, PrincipalEntity, UserEntity]),
   ],
-  controllers: [...appControllers],
-  // UploadService cấp link ký cho tệp private của tờ trình
-  providers: [...appServices, UploadService],
+  controllers: [...appControllers, FileViewController],
+  providers: [
+    ...appServices,
+    // Upload thẳng lên bucket private và đọc tệp private để xem
+    UploadService,
+    // Xem tệp (không tải được) theo ngữ cảnh; quyền xem tệp của tờ trình do ApprovalRequestFilePolicy quyết định.
+    // Thêm ngữ cảnh mới: viết policy rồi liệt kê vào đây
+    FileViewService,
+    ApprovalRequestFilePolicy,
+    {
+      provide: FILE_ACCESS_POLICIES,
+      useFactory: (approvalRequest: ApprovalRequestFilePolicy) => [approvalRequest],
+      inject: [ApprovalRequestFilePolicy],
+    },
+  ],
   exports: [...appServices],
 })
 export class AppDomainModule {}

@@ -25,6 +25,14 @@ export const ENV = {
   /** Bucket riêng tư (tắt public access) cho tài liệu — truy cập qua link ký tạm */
   R2_PRIVATE_BUCKET: process.env.R2_PRIVATE_BUCKET,
   R2_PUBLIC_URL: process.env.R2_PUBLIC_URL,
+  /** Địa chỉ Document Server để trình duyệt tải api.js (vd: https://docs.example.com) */
+  ONLYOFFICE_URL: process.env.ONLYOFFICE_URL,
+  /** Secret JWT của Document Server (cùng giá trị với JWT_SECRET của container) */
+  ONLYOFFICE_JWT_SECRET: process.env.ONLYOFFICE_JWT_SECRET,
+  /** Base URL để Document Server gọi về backend tải tệp (vd: http://host.docker.internal:2001/api) */
+  ONLYOFFICE_FILE_BASE_URL: process.env.ONLYOFFICE_FILE_BASE_URL,
+  /** Bắt buộc request tải tệp của Document Server mang JWT hợp lệ; chỉ tắt (false) khi đã xác nhận bản DS không gửi kèm */
+  ONLYOFFICE_VERIFY_DS_AUTH: process.env.ONLYOFFICE_VERIFY_DS_AUTH !== "false",
   FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:3333",
 
   RESEND_API_KEY: process.env.RESEND_API_KEY,

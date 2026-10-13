@@ -3,10 +3,8 @@ import { isPrivateStoragePath } from "@common/constants/storage.constant";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ForbiddenException, Injectable, Scope } from "@nestjs/common";
-import { AttachmentEntity, AttachmentStatus, AttachmentVisibility } from "../../entities/attachment";
+import { AttachmentEntity, AttachmentStatus } from "../../entities/attachment";
 import { UploadService } from "./upload.service";
-
-export type DownloadDisposition = "inline" | "attachment";
 
 @Injectable({ scope: Scope.REQUEST })
 export class AttachmentService extends BaseService<AttachmentEntity> {
@@ -57,26 +55,5 @@ export class AttachmentService extends BaseService<AttachmentEntity> {
       throw error;
     }
     return this.updateOne(id, { status: AttachmentStatus.Ready });
-  }
-
-  /**
-   * Link xem/tải cho người đã upload file (vd: xem lại tệp vừa tải lên khi chưa lưu vào tờ trình).
-   * Người khác xem tệp của tờ trình phải đi qua API của tờ trình, nơi kiểm quyền theo tờ trình.
-   */
-  async getOwnDownloadUrl(id: string, disposition: DownloadDisposition) {
-    const attachment = await this.findById(id);
-    if (attachment.createdBy.id !== this.getCurrentUser().id) {
-      throw new ForbiddenException("You cannot access this file");
-    }
-    return this.createDownloadUrl(attachment, disposition);
-  }
-
-  /** Không kiểm quyền — chỉ gọi sau khi caller đã xác nhận người dùng được phép xem file */
-  async createDownloadUrl(attachment: AttachmentEntity, disposition: DownloadDisposition) {
-    // File public đã có URL công khai, không cần ký
-    if (attachment.visibility !== AttachmentVisibility.Private) {
-      return { url: attachment.url, expiresAt: null };
-    }
-    return this.uploadService.createDownloadUrl({ key: attachment.key, filename: attachment.filename, disposition });
   }
 }

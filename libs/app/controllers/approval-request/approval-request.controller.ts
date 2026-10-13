@@ -8,7 +8,6 @@ import {
   approvalRequestFilterValidation,
   cancelApprovalRequestValidation,
   createApprovalRequestValidation,
-  fileUrlQueryValidation,
   presignRequestFileValidation,
   previewFlowValidation,
   updateApprovalRequestValidation,
@@ -62,16 +61,6 @@ export class ApprovalRequestController {
     @Body(new ZodValidationPipe(presignRequestFileValidation)) data: z.infer<typeof presignRequestFileValidation>,
   ) {
     return this.requestService.presignFileUpload(id, data);
-  }
-
-  /** Link xem/tải tạm thời của tệp (tài liệu private) thuộc tờ trình */
-  @Get(":id/files/:fileId/download-url")
-  fileDownloadUrl(
-    @Param("id") id: string,
-    @Param("fileId") fileId: string,
-    @Query(new ZodValidationPipe(fileUrlQueryValidation)) query: z.infer<typeof fileUrlQueryValidation>,
-  ) {
-    return this.requestService.getRequestFileUrl(id, fileId, query.disposition);
   }
 
   @Patch(":id")

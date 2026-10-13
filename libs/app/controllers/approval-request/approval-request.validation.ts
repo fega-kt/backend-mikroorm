@@ -75,7 +75,3 @@ export const presignRequestFileValidation = z.object({
   size: z.number().int().positive(),
 });
 export type PresignRequestFileDto = z.infer<typeof presignRequestFileValidation>;
-
-export const fileUrlQueryValidation = z.object({
-  disposition: z.enum(["inline", "attachment"]).default("attachment"),
-});

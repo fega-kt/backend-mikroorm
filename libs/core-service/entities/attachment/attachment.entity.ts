@@ -42,6 +42,14 @@ export class AttachmentEntity extends BaseEntity {
   @Property({ type: types.string, default: AttachmentStatus.Ready })
   status: AttachmentStatus = AttachmentStatus.Ready;
 
+  /** Ngữ cảnh chủ sở hữu của tệp (FileContextType) — quyết định quy tắc phân quyền khi xem; rỗng với tệp chưa gắn ngữ cảnh */
+  @Property({ type: types.string, nullable: true })
+  contextType?: string | null;
+
+  /** Id bản ghi chủ trong ngữ cảnh đó (vd: id phiếu — có thể là id đang giữ chỗ khi phiếu chưa lưu) */
+  @Property({ type: types.string, nullable: true })
+  refId?: string | null;
+
   /** Thư mục lưu trữ trên R2 (phải thuộc STORAGE_PATH) */
   @Property({ type: types.string })
   storagePath!: string;
