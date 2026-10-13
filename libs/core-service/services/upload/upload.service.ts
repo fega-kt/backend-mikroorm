@@ -13,6 +13,7 @@ import * as path from "path";
 import { type ByteRange, orderedParallelStream, parseContentRangeTotal, splitByteRanges } from "./parallel-range-stream";
 import {
   ALLOWED_MIME_TYPES,
+  DOWNLOAD_URL_TTL_SECONDS,
   EXT_MIME_MAP,
   INVALID_FILENAME_CHARS,
   MAX_FILENAME_LENGTH,
@@ -173,6 +174,26 @@ export class UploadService {
       headers: { "Content-Type": mimetype },
       expiresAt: new Date(Date.now() + UPLOAD_URL_TTL_SECONDS * 1000).toISOString(),
     };
+  }
+
+  /**
+   * Link tải object ở bucket private: ký thẳng tới R2 nên trình duyệt tải bằng mạng của chính người dùng, không qua backend.
+   * R2 trả kèm Content-Disposition attachment với tên gốc (filename* UTF-8 cho tiếng Việt, filename ASCII dự phòng).
+   */
+  async createDownloadUrl(key: string, filename: string) {
+    // Đuôi file đã được kiểm lúc upload (chỉ chữ và số); phần tên bỏ dấu cho trình duyệt không hiểu filename*
+    const ext = path.extname(filename);
+    const asciiName = `${slugifyFilename(path.basename(filename, ext))}${ext.toLowerCase()}`;
+    const url = await getSignedUrl(
+      this.s3,
+      new GetObjectCommand({
+        Bucket: this.privateBucket,
+        Key: key,
+        ResponseContentDisposition: `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      }),
+      { expiresIn: DOWNLOAD_URL_TTL_SECONDS },
+    );
+    return { url, expiresAt: new Date(Date.now() + DOWNLOAD_URL_TTL_SECONDS * 1000).toISOString() };
   }
 
   /**

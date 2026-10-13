@@ -70,3 +70,36 @@ describe("FileViewService.describe — chỉ cần id tệp, phân quyền theo 
     expect(resolveFile).not.toHaveBeenCalled();
   });
 });
+
+describe("FileViewService.createDownloadUrl — cùng quyền với xem tệp", () => {
+  const buildWithUpload = (options: BuildOptions, createDownloadUrl = vi.fn().mockResolvedValue({ url: "signed", expiresAt: "x" })) => ({
+    createDownloadUrl,
+    service: new FileViewService(
+      { findOne: vi.fn().mockResolvedValue(options.stored === undefined ? file() : options.stored) } as never,
+      { createDownloadUrl } as never,
+      { user: options.user === null ? undefined : (options.user ?? { id: "u1", fullName: "User" }), headers: {} } as never,
+      options.policies ?? [],
+    ),
+  });
+
+  it("policy cho xem thì cấp link tải theo key và tên gốc của tệp do policy trả về", async () => {
+    const resolved = file({ key: "Attachments/req-1/documents/hop-dong.pdf", filename: "Hợp đồng.pdf" });
+    const { service, createDownloadUrl } = buildWithUpload({
+      policies: [{ contextType: FileContextType.ApprovalRequest, resolveFile: vi.fn().mockResolvedValue(resolved) }],
+    });
+    await expect(service.createDownloadUrl("file-1")).resolves.toEqual({ url: "signed", expiresAt: "x" });
+    expect(createDownloadUrl).toHaveBeenCalledWith("Attachments/req-1/documents/hop-dong.pdf", "Hợp đồng.pdf");
+  });
+
+  it("policy không cho xem hoặc chưa đăng nhập thì không cấp link", async () => {
+    const denied = buildWithUpload({
+      policies: [{ contextType: FileContextType.ApprovalRequest, resolveFile: vi.fn().mockRejectedValue(new ForbiddenException()) }],
+    });
+    await expect(denied.service.createDownloadUrl("file-1")).rejects.toBeInstanceOf(ForbiddenException);
+    expect(denied.createDownloadUrl).not.toHaveBeenCalled();
+
+    const anonymous = buildWithUpload({ user: null });
+    await expect(anonymous.service.createDownloadUrl("file-1")).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(anonymous.createDownloadUrl).not.toHaveBeenCalled();
+  });
+});

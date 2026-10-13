@@ -4,8 +4,8 @@ import type { Response } from "express";
 import { FileViewService } from "../../services/file-view/file-view.service";
 
 /**
- * Xem tệp (không tải được) chỉ cần id tệp. Ngữ cảnh chủ sở hữu (contextType + refId) lưu trên bản ghi tệp,
- * quyền xem do policy của ngữ cảnh đó quyết định: phiếu → quyền xem phiếu, cài đặt → quyền cài đặt… (xem FileAccessPolicy).
+ * Xem và tải tệp chỉ cần id tệp. Ngữ cảnh chủ sở hữu (contextType + refId) lưu trên bản ghi tệp,
+ * quyền xem/tải do policy của ngữ cảnh đó quyết định: phiếu → quyền xem phiếu, cài đặt → quyền cài đặt… (xem FileAccessPolicy).
  */
 @Controller("file-view")
 export class FileViewController {
@@ -17,6 +17,12 @@ export class FileViewController {
   @Get(":fileId")
   describe(@Param("fileId", ParseUUIDPipe) fileId: string) {
     return this.fileViewService.describe(fileId);
+  }
+
+  /** Link tải tệp: ký thẳng tới R2, sống rất ngắn, client mở ngay sau khi nhận */
+  @Get(":fileId/download")
+  download(@Param("fileId", ParseUUIDPipe) fileId: string) {
+    return this.fileViewService.createDownloadUrl(fileId);
   }
 
   /** Stream nội dung tệp cho URL có token ngắn hạn (Document Server, thẻ img/video/audio) */
