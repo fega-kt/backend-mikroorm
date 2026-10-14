@@ -19,6 +19,7 @@ export class SettingManagementRouteService {
 
     const canViewCategoryList = currentUser.canAccess([PermissionType.MenuCategory]);
     const canViewRequestList = currentUser.canAccess([PermissionType.MenuRequestType]);
+    const canManageForms = currentUser.canAccess([PermissionType.MenuForm]);
     const canManageApprovalWorkflows = currentUser.canAccess([PermissionType.MenuApprovalWorkflow]);
     const canViewAllApprovalRequests = currentUser.canAccess([PermissionType.MenuAllApprovalRequest]);
     const canManageEmailTemplates = currentUser.canAccess([PermissionType.MenuEmailTemplate]);
@@ -45,6 +46,19 @@ export class SettingManagementRouteService {
         handle: {
           icon: "FileTextOutlined",
           title: "common.menu.requestType",
+          permissions: [],
+        },
+      });
+    }
+    if (canManageForms) {
+      children.push({
+        path: "/setting/form",
+        component: "/setting/form/index.tsx",
+        handle: {
+          keepAlive: false,
+          icon: "FormOutlined",
+          title: "common.menu.form",
+          roles: [PermissionType.MenuForm],
           permissions: [],
         },
       });

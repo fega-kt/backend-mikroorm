@@ -17,6 +17,14 @@ export enum ApprovalHistoryAction {
   Remind = "remind",
   Notify = "notify",
   Complete = "complete",
+  /** Tạo phiếu */
+  Create = "create",
+  /** Sửa thông tin phiếu — data.changes: { field, from, to }[] (field là khóa kỹ thuật, FE tra nhãn theo formSchema) */
+  Update = "update",
+  /** Thêm tệp — data.files: { id, filename, block }[] */
+  FileAdd = "file_add",
+  /** Gỡ tệp — data.files: { id, filename, block }[] */
+  FileRemove = "file_remove",
 }
 
 /** Nhật ký thao tác của đơn — nguồn dữ liệu cho timeline ở màn chi tiết đơn (append-only) */

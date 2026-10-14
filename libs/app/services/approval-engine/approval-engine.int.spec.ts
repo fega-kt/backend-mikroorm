@@ -18,7 +18,10 @@ import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity, ApprovalWorkflowVersionStatus } from "../../entities/approval-workflow-version";
 import { CategoryEntity } from "../../entities/category";
+import { FormEntity } from "../../entities/form";
 import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
+import { ensureLatestFormVersion } from "../form/form-version";
+import { ensureLatestTypeVersion, recordTypeVersionIfChanged } from "../request-type/request-type-version";
 import { ApprovalAction, ApprovalEngineService } from "./approval-engine.service";
 import { workflowDefinitionSchema } from "./definition.schema";
 import { formSchemaSchema } from "./form-schema";
@@ -274,16 +277,24 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
         department: tx.getReference(DepartmentEntity, D.root),
         ...audit,
       });
+      const leaveForm = tx.create(FormEntity, {
+        code: "LEAVE_FORM",
+        name: "Nghỉ phép",
+        formSchema: formSchemaSchema.parse([
+          { key: "days", label: "Số ngày", type: "number", required: true, min: 0.5 },
+          { key: "reason", label: "Lý do", type: "textarea" },
+        ]),
+        ...audit,
+      });
+      // Các loại còn lại không có trường nhập liệu: dùng chung một form rỗng
+      const emptyForm = tx.create(FormEntity, { code: "EMPTY_FORM", name: "Không có trường", ...audit });
       const requestType = tx.create(RequestTypeEntity, {
         code: "LEAVE",
         name: "Nghỉ phép",
         prefix: "NP",
         category,
         status: RequestTypeStatus.Published,
-        formSchema: formSchemaSchema.parse([
-          { key: "days", label: "Số ngày", type: "number", required: true, min: 0.5 },
-          { key: "reason", label: "Lý do", type: "textarea" },
-        ]),
+        form: leaveForm,
         ...audit,
       });
       const workflow = tx.create(ApprovalWorkflowEntity, { name: "Nghỉ phép", requestType, priority: 0, isActive: true, ...audit });
@@ -303,6 +314,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
         prefix: "GR",
         category,
         status: RequestTypeStatus.Published,
+        form: emptyForm,
         ...audit,
       });
       const groupWorkflow = tx.create(ApprovalWorkflowEntity, {
@@ -326,6 +338,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
         prefix: "EM",
         category,
         status: RequestTypeStatus.Published,
+        form: emptyForm,
         ...audit,
       });
       const emptyWorkflow = tx.create(ApprovalWorkflowEntity, {
@@ -351,6 +364,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
         prefix: "TB",
         category,
         status: RequestTypeStatus.Published,
+        form: emptyForm,
         ...audit,
       });
       const notifyWorkflow = tx.create(ApprovalWorkflowEntity, {
@@ -376,6 +390,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
         prefix: "TBB",
         category,
         status: RequestTypeStatus.Published,
+        form: emptyForm,
         ...audit,
       });
       const stepNotifyWorkflow = tx.create(ApprovalWorkflowEntity, {
@@ -407,9 +422,16 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
 
   async function createRequest(requester: string, department: string, payload: Record<string, unknown>, typeId = requestTypeId) {
     const e = em();
+    // Phiếu gắn phiên bản form và chụp cấu hình tệp của loại lúc tạo (refresh: test đổi cấu hình bằng nativeUpdate)
+    const type = await e.findOneOrFail(RequestTypeEntity, typeId, { refresh: true, populate: ["form"] });
+    const audit = { createdBy: e.getReference(UserEntity, requester), updatedBy: e.getReference(UserEntity, requester) };
+    const requestTypeVersion = (await recordTypeVersionIfChanged(e, type, audit)) ?? (await ensureLatestTypeVersion(e, type, audit));
+    const formVersion = await ensureLatestFormVersion(e, type.form, audit);
     const request = e.create(ApprovalRequestEntity, {
       title: `Nghỉ ${String(payload.days)} ngày`,
-      requestType: e.getReference(RequestTypeEntity, typeId),
+      requestType: type,
+      requestTypeVersion,
+      formVersion,
       requester: e.getReference(UserEntity, requester),
       department: e.getReference(DepartmentEntity, department),
       payload,

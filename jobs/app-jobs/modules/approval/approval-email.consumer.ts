@@ -134,7 +134,7 @@ export class ApprovalEmailConsumer implements OnModuleInit {
     const request = await em.findOne(
       ApprovalRequestEntity,
       { id: event.requestId },
-      { populate: ["requestType", "requester", "department"] },
+      { populate: ["requestTypeVersion", "formVersion", "requester", "department"] },
     );
     const [users, actor] = await Promise.all([
       em.find(UserEntity, { id: { $in: userIds }, deleted: { $ne: true } }, { fields: ["id", "fullName", "workEmail", "loginName"] }),
@@ -145,8 +145,8 @@ export class ApprovalEmailConsumer implements OnModuleInit {
     const vars = buildRequestVariables({
       code: request?.code ?? event.code,
       title: request?.title ?? event.title,
-      typeName: request?.requestType?.name ?? event.requestTypeName,
-      formSchema: request?.requestType?.formSchema,
+      typeName: request?.requestTypeVersion?.name ?? event.requestTypeName,
+      formSchema: request?.formVersion?.formSchema,
       payload: request?.payload,
       requesterName: request?.requester?.fullName,
       departmentName: request?.department?.name,

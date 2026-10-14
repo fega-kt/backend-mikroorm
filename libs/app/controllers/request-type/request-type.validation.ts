@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { RequestTypeStatus } from "../../entities/request-type";
 import { attachmentConfigSchema } from "../../services/approval-engine/attachment-config";
-import { formSchemaSchema } from "../../services/approval-engine/form-schema";
 
 export const createRequestTypeValidation = z.object({
   code: z
@@ -16,7 +15,8 @@ export const createRequestTypeValidation = z.object({
   prefix: z.string().trim().min(1, "Prefix is required").max(20),
   description: z.string().trim().max(1000).optional().nullable(),
   status: z.nativeEnum(RequestTypeStatus),
-  formSchema: formSchemaSchema.optional().nullable(),
+  /** Form dùng cho loại tờ trình (nhiều loại có thể dùng chung một form) */
+  form: z.string().trim().min(1, "Form is required"),
   attachmentConfig: attachmentConfigSchema.optional().nullable(),
 });
 
@@ -26,7 +26,7 @@ export const updateRequestTypeValidation = z.object({
   prefix: z.string().trim().min(1).max(20),
   description: z.string().trim().max(1000).optional().nullable(),
   status: z.nativeEnum(RequestTypeStatus),
-  formSchema: formSchemaSchema.optional().nullable(),
+  form: z.string().trim().min(1, "Form is required"),
   attachmentConfig: attachmentConfigSchema.optional().nullable(),
 });
 

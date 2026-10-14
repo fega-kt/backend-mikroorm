@@ -138,7 +138,7 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
   async getWorkflowDetail(id: string) {
     const workflow = await this.repo.findOne(
       { id, deleted: { $ne: true } },
-      { populate: ["requestType", "department", "publishedVersion", "publishedVersion.publishedBy"] },
+      { populate: ["requestType", "requestType.form", "department", "publishedVersion", "publishedVersion.publishedBy"] },
     );
     if (!workflow) throw new NotFoundException("Workflow not found");
     const draft = await this.findDraft(id);
@@ -155,7 +155,7 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
         id: workflow.requestType.id,
         code: workflow.requestType.code,
         name: workflow.requestType.name,
-        formSchema: workflow.requestType.formSchema ?? [],
+        formSchema: workflow.requestType.form.formSchema ?? [],
       },
       department: workflow.department ? { id: workflow.department.id, name: workflow.department.name } : null,
       publishedVersion: published
@@ -246,7 +246,7 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
     return this.em.transactional(async (em) => {
       const workflow = await em.findOne(ApprovalWorkflowEntity, { id, deleted: { $ne: true } }, { lockMode: LockMode.PESSIMISTIC_WRITE });
       if (!workflow) throw new NotFoundException("Workflow not found");
-      await em.populate(workflow, ["requestType"]);
+      await em.populate(workflow, ["requestType", "requestType.form"]);
       const draft = await em.findOne(ApprovalWorkflowVersionEntity, {
         workflow: id,
         status: ApprovalWorkflowVersionStatus.Draft,
@@ -280,7 +280,7 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
   /* ================= HELPERS ================= */
 
   private async collectErrors(workflow: ApprovalWorkflowEntity, definition: WorkflowDefinition): Promise<GraphError[]> {
-    const formFields = (workflow.requestType.formSchema ?? []).map((f) => f.key);
+    const formFields = (workflow.requestType.form.formSchema ?? []).map((f) => f.key);
     const errors = validateGraph(definition, formFields);
 
     // Người cụ thể / nhóm phải còn ít nhất một người dùng đang hoạt động
@@ -315,7 +315,10 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
   }
 
   private async getWorkflowOrFail(id: string, withRequestType = false) {
-    const workflow = await this.repo.findOne({ id, deleted: { $ne: true } }, withRequestType ? { populate: ["requestType"] } : {});
+    const workflow = await this.repo.findOne(
+      { id, deleted: { $ne: true } },
+      withRequestType ? { populate: ["requestType", "requestType.form"] } : {},
+    );
     if (!workflow) throw new NotFoundException("Workflow not found");
     return workflow;
   }
