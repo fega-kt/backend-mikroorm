@@ -1,9 +1,13 @@
 import { z } from "zod";
+import { ApprovalDelegationMode } from "../../entities/approval-delegation";
 
 const delegationShape = z.object({
+  /** Người ủy quyền — bỏ trống = chính mình; người khác chỉ khi có quyền quản lý ủy quyền */
+  fromUser: z.string().trim().min(1).optional().nullable(),
   toUser: z.string().trim().min(1, "Delegate is required"),
   startAt: z.coerce.date(),
   endAt: z.coerce.date(),
+  mode: z.enum(ApprovalDelegationMode).default(ApprovalDelegationMode.Window),
   requestType: z.string().trim().min(1).optional().nullable(),
   reason: z.string().trim().max(1000).optional().nullable(),
 });
@@ -15,16 +19,21 @@ export const createApprovalDelegationValidation = delegationShape.refine(endAfte
   path: ["endAt"],
 });
 
-export const updateApprovalDelegationValidation = delegationShape.partial().refine(endAfterStart, {
-  message: "End time must be after start time",
-  path: ["endAt"],
-});
+// Không đổi người ủy quyền sau khi tạo; mode không có default khi sửa (giữ nguyên nếu không gửi)
+export const updateApprovalDelegationValidation = delegationShape
+  .omit({ fromUser: true })
+  .extend({ mode: z.enum(ApprovalDelegationMode).optional() })
+  .partial()
+  .refine(endAfterStart, {
+    message: "End time must be after start time",
+    path: ["endAt"],
+  });
 
 export const approvalDelegationFilterValidation = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  /** mine: tôi ủy quyền cho người khác; toMe: người khác ủy quyền cho tôi */
-  tab: z.enum(["mine", "toMe"]).default("mine"),
+  /** mine: tôi ủy quyền cho người khác; toMe: người khác ủy quyền cho tôi; all: mọi ủy quyền (cần quyền quản lý) */
+  tab: z.enum(["mine", "toMe", "all"]).default("mine"),
   activeOnly: z
     .enum(["true", "false"])
     .transform((v) => v === "true")

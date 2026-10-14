@@ -6,7 +6,7 @@ import { OutboxService } from "@modules/outbox/outbox.service";
 import { RABBITMQ_EXCHANGE } from "@modules/rabbitmq/rabbitmq.constants";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ApprovalCounterEntity } from "../../entities/approval-counter";
-import { ApprovalDelegationEntity } from "../../entities/approval-delegation";
+import { ApprovalDelegationMode } from "../../entities/approval-delegation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
@@ -28,6 +28,7 @@ import {
   type WorkflowDefinition,
 } from "./definition.schema";
 import { buildPayloadValidator, type FormSchema } from "./form-schema";
+import { activeDelegationsFrom, canActOnTask, resolveTaskDelegates } from "./delegation-access";
 import { findStartNode, walkFrom } from "./graph-walker";
 
 export enum ApprovalAction {
@@ -140,16 +141,32 @@ export class ApprovalEngineService {
       if (request.status !== ApprovalRequestStatus.Pending) throw new ConflictException("Request is not waiting for approval");
 
       const definition = await this.loadDefinition(tx.em, request);
-      const pending = await tx.em.find(ApprovalTaskEntity, {
-        request: request.id,
-        round: request.round,
-        nodeId: { $in: request.currentNodeIds },
-        status: ApprovalTaskStatus.Pending,
-      });
-      const mine = opts.taskId ? pending.filter((t) => t.id === opts.taskId) : pending.filter((t) => t.approver.id === opts.actorId);
-      if (!mine.length) throw new ForbiddenException("You are not an approver of the current step");
+      const pending = await tx.em.find(
+        ApprovalTaskEntity,
+        {
+          request: request.id,
+          round: request.round,
+          nodeId: { $in: request.currentNodeIds },
+          status: ApprovalTaskStatus.Pending,
+        },
+        { populate: ["handoverDelegations"] },
+      );
+      const delegates = opts.taskId ? new Map<string, string[]>() : await resolveTaskDelegates(tx.em, pending, this.requestScope(request));
+      const eligible = opts.taskId
+        ? pending.filter((t) => t.id === opts.taskId)
+        : pending.filter((t) => canActOnTask(t, opts.actorId ?? "", delegates));
+      if (!eligible.length) throw new ForbiddenException("You are not an approver of the current step");
 
-      const node = definition.nodes.find((n) => n.id === mine[0].nodeId) as WaitNode;
+      const node = definition.nodes.find((n) => n.id === eligible[0].nodeId) as WaitNode;
+      // Song song "tất cả": một lần bấm chỉ tính cho MỘT suất (người vừa có suất riêng vừa được ủy quyền suất khác
+      // không được một mình đủ hai suất). Ưu tiên suất của chính mình. Bước khác: xử lý xong là xong cả bước.
+      const isAllParallel = node.type === NodeType.Parallel && node.mode === ParallelMode.All;
+      const own = eligible.filter((t) => t.approver.id === opts.actorId);
+      const pick = own[0] ?? eligible[0];
+      const mine = isAllParallel ? eligible.filter((t) => t === pick || (pick.slot != null && t.slot === pick.slot)) : eligible;
+      // Xử lý thay: ghi người được thay để lịch sử hiện "B duyệt thay A"
+      const onBehalfOf = opts.actorId && pick.approver.id !== opts.actorId ? pick.approver.id : undefined;
+      const actData = onBehalfOf ? { onBehalfOf } : undefined;
       const comment = opts.comment?.trim() || undefined;
       const now = new Date();
       const actedBy = opts.actorId ? tx.em.getReference(UserEntity, opts.actorId) : undefined;
@@ -165,8 +182,12 @@ export class ApprovalEngineService {
 
       if (action === ApprovalAction.Approve) {
         close(ApprovalTaskStatus.Approved);
-        this.history(tx, request, opts.taskId ? ApprovalHistoryAction.AutoApprove : ApprovalHistoryAction.Approve, { node, comment });
-        if (node.type === NodeType.Parallel && node.mode === ParallelMode.All) {
+        this.history(tx, request, opts.taskId ? ApprovalHistoryAction.AutoApprove : ApprovalHistoryAction.Approve, {
+          node,
+          comment,
+          data: actData,
+        });
+        if (isAllParallel) {
           // Suất vừa được duyệt (vd: một thành viên của nhóm) → các task còn lại cùng suất không cần duyệt nữa
           const doneSlots = new Set(mine.map((t) => t.slot).filter((slot) => slot != null));
           for (const task of others) if (task.slot != null && doneSlots.has(task.slot)) skip(task);
@@ -186,7 +207,7 @@ export class ApprovalEngineService {
         close(ApprovalTaskStatus.Rejected);
         skipOthers();
         this.finish(request, ApprovalRequestStatus.Rejected);
-        this.history(tx, request, ApprovalHistoryAction.Reject, { node, comment });
+        this.history(tx, request, ApprovalHistoryAction.Reject, { node, comment, data: actData });
         await this.stepEventNotify(tx, request, node, "rejected", comment);
         return request;
       }
@@ -197,7 +218,7 @@ export class ApprovalEngineService {
       skipOthers();
       request.status = ApprovalRequestStatus.Returned;
       request.currentNodeIds = [];
-      this.history(tx, request, ApprovalHistoryAction.Return, { node, comment });
+      this.history(tx, request, ApprovalHistoryAction.Return, { node, comment, data: actData });
       await this.stepEventNotify(tx, request, node, "returned", comment);
       return request;
     });
@@ -247,6 +268,9 @@ export class ApprovalEngineService {
 
       const fromId = task.approver.id;
       task.originalApprover ??= task.approver;
+      // Task chuyển hẳn sang người khác → ủy quyền "giao phiếu" của người cũ không còn áp dụng
+      await tx.em.populate(task, ["handoverDelegations"]);
+      task.handoverDelegations.removeAll();
       task.approver = tx.em.getReference(UserEntity, toUserId);
       this.history(tx, request, ApprovalHistoryAction.Delegate, {
         nodeId: task.nodeId,
@@ -284,6 +308,9 @@ export class ApprovalEngineService {
         if (managerId && managerId !== task.approver.id) {
           const fromId = task.approver.id;
           task.originalApprover ??= task.approver;
+          // Task chuyển hẳn sang người khác → ủy quyền "giao phiếu" của người cũ không còn áp dụng
+          await tx.em.populate(task, ["handoverDelegations"]);
+          task.handoverDelegations.removeAll();
           task.approver = tx.em.getReference(UserEntity, managerId);
           task.escalatedAt = new Date(now);
           task.dueAt = new Date(now + slaMs);
@@ -298,7 +325,11 @@ export class ApprovalEngineService {
       if (!task.remindedAt || now - task.remindedAt.getTime() >= slaMs) {
         task.remindedAt = new Date(now);
         this.history(tx, request, ApprovalHistoryAction.Remind, { node, data: { to: task.approver.id } });
-        await this.notify(tx, request, [task.approver.id], NotificationType.APPROVAL_REMINDER, ApprovalEventType.Reminder, { node });
+        // Nhắc cả những người đang được xử lý thay task này
+        await tx.em.populate(task, ["handoverDelegations"]);
+        const delegates = await resolveTaskDelegates(tx.em, [task], this.requestScope(request));
+        const recipients = [task.approver.id, ...(delegates.get(task.id) ?? [])];
+        await this.notify(tx, request, recipients, NotificationType.APPROVAL_REMINDER, ApprovalEventType.Reminder, { node });
         return "reminded" as const;
       }
       return "none" as const;
@@ -440,33 +471,37 @@ export class ApprovalEngineService {
       }
 
       const approverIds = [...new Set(openSlots.flatMap((item) => item.users))];
-      const delegations = node.options.allowDelegation
-        ? await this.activeDelegations(tx.em, approverIds, request)
-        : new Map<string, string>();
+      // Ủy quyền không chuyển task: task luôn thuộc người duyệt gốc, người được ủy quyền chỉ xử lý thay.
+      // "Trong thời gian" xét lúc xử lý; "giao phiếu" chốt ngay lúc tạo task (gắn vào task, hết hạn vẫn xử lý được).
+      const delegable = node.options.allowDelegation;
+      const scope = this.requestScope(request);
+      const [windows, handovers] = delegable
+        ? await Promise.all([
+            activeDelegationsFrom(tx.em, approverIds, ApprovalDelegationMode.Window, scope, now),
+            activeDelegationsFrom(tx.em, approverIds, ApprovalDelegationMode.Handover, scope, now),
+          ])
+        : [[], []];
       const dueAt = node.slaHours ? new Date(now.getTime() + this.effectiveSlaHours(request, node.slaHours) * HOUR_MS) : undefined;
-      const assignees: string[] = [];
       for (const { slot, users } of openSlots) {
         for (const approverId of users) {
-          const delegateId = delegations.get(approverId);
-          const assignee = delegateId && delegateId !== requesterId ? delegateId : approverId;
-          this.createTask(tx, request, node, assignee, {
-            slot,
-            dueAt,
-            originalApprover: assignee !== approverId ? tx.em.getReference(UserEntity, approverId) : undefined,
-          });
-          if (assignee !== approverId) {
-            this.history(tx, request, ApprovalHistoryAction.Delegate, {
-              node,
-              data: { from: approverId, to: assignee, reason: "delegation" },
-            });
-          }
-          if (!assignees.includes(assignee)) assignees.push(assignee);
+          const task = this.createTask(tx, request, node, approverId, { slot, dueAt, delegable });
+          task.handoverDelegations.set(handovers.filter((d) => d.fromUser.id === approverId));
         }
       }
+      const delegateIds = [...windows, ...handovers].map((d) => d.toUser.id).filter((id) => !approverIds.includes(id));
 
       request.currentNodeIds = [node.id];
-      await this.flushNotifies(tx, request, pendingNotifies, resolver, ctx, assignees);
-      await this.notify(tx, request, assignees, NotificationType.APPROVAL_PENDING, ApprovalEventType.StepPending, { node });
+      await this.flushNotifies(tx, request, pendingNotifies, resolver, ctx, approverIds);
+      await this.notify(
+        tx,
+        request,
+        [...new Set([...approverIds, ...delegateIds])],
+        NotificationType.APPROVAL_PENDING,
+        ApprovalEventType.StepPending,
+        {
+          node,
+        },
+      );
       return;
     }
     throw new BadRequestException("Workflow contains a loop");
@@ -629,22 +664,9 @@ export class ApprovalEngineService {
   }
 
   /** Map approverId → người được ủy quyền đang hiệu lực */
-  private async activeDelegations(em: EntityManager, approverIds: string[], request: ApprovalRequestEntity) {
-    const now = new Date();
-    const rows = await em.find(
-      ApprovalDelegationEntity,
-      {
-        fromUser: { $in: approverIds },
-        startAt: { $lte: now },
-        endAt: { $gte: now },
-        deleted: { $ne: true },
-        $or: [{ requestType: null }, { requestType: request.requestType.id }],
-      },
-      { orderBy: { createdAt: "DESC" } },
-    );
-    const map = new Map<string, string>();
-    for (const row of rows) if (!map.has(row.fromUser.id)) map.set(row.fromUser.id, row.toUser.id);
-    return map;
+  /** Phạm vi áp dụng ủy quyền của một đơn: loại tờ trình + người trình (không được xử lý thay đơn của chính mình) */
+  private requestScope(request: ApprovalRequestEntity) {
+    return { requesterId: request.requester.id, requestTypeId: request.requestType.id };
   }
 
   private audit(tx: Tx) {

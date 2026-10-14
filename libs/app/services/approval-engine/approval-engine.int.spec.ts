@@ -9,9 +9,9 @@ import { MikroORM } from "@mikro-orm/postgresql";
 import { OutboxEventEntity, OutboxEventStatus } from "@modules/outbox/outbox-event.entity";
 import { OutboxService } from "@modules/outbox/outbox.service";
 import type { RabbitMQService } from "@modules/rabbitmq/rabbitmq.service";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { appEntities } from "../../entities";
-import { ApprovalDelegationEntity } from "../../entities/approval-delegation";
+import { ApprovalDelegationEntity, ApprovalDelegationMode } from "../../entities/approval-delegation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
@@ -522,27 +522,103 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     expect((await pendingTasks(id)).map((t) => t.approver.id)).toEqual([U.director]);
   });
 
-  it("assigns tasks to an active delegate", async () => {
+  /** Tạo ủy quyền; mặc định đang hiệu lực 1 giờ */
+  async function delegate(fromUser: string, toUser: string, mode: ApprovalDelegationMode, range?: { startAt: Date; endAt: Date }) {
     const e = em();
-    e.create(ApprovalDelegationEntity, {
-      fromUser: e.getReference(UserEntity, U.hr),
-      toUser: e.getReference(UserEntity, U.staff2),
-      startAt: new Date(Date.now() - 60_000),
-      endAt: new Date(Date.now() + 3_600_000),
-      createdBy: e.getReference(UserEntity, U.hr),
-      updatedBy: e.getReference(UserEntity, U.hr),
+    const delegation = e.create(ApprovalDelegationEntity, {
+      fromUser: e.getReference(UserEntity, fromUser),
+      toUser: e.getReference(UserEntity, toUser),
+      mode,
+      startAt: range?.startAt ?? new Date(Date.now() - 60_000),
+      endAt: range?.endAt ?? new Date(Date.now() + 3_600_000),
+      createdBy: e.getReference(UserEntity, fromUser),
+      updatedBy: e.getReference(UserEntity, fromUser),
     });
     await e.flush();
-
+    return delegation.id;
+  }
+  const expire = (delegationId: string) =>
+    em().nativeUpdate(ApprovalDelegationEntity, { id: delegationId }, { endAt: new Date(Date.now() - 1_000) });
+  /** Đơn ngắn ngày dừng ở bước song song p1 (hr + admin) */
+  async function atParallelStep() {
     const id = await createRequest(U.staff, D.it, { days: 1 });
     await engine.submit(id, U.staff);
     await approve(id, U.itHead);
-    const tasks = await pendingTasks(id);
-    const delegated = tasks.find((t) => t.originalApprover?.id === U.hr);
-    expect(delegated?.approver.id).toBe(U.staff2);
-    await expect(approve(id, U.hr)).rejects.toThrow(/not an approver/);
-    await approve(id, U.staff2);
-    await e.nativeDelete(ApprovalDelegationEntity, {});
+    return id;
+  }
+
+  describe("delegation", () => {
+    afterEach(() => em().nativeDelete(ApprovalDelegationEntity, {}));
+
+    it("lets a window delegate act on behalf without moving the task, and the delegator can still act", async () => {
+      await delegate(U.hr, U.staff2, ApprovalDelegationMode.Window);
+      const id = await atParallelStep();
+      const hrTask = (await pendingTasks(id)).find((t) => t.approver.id === U.hr);
+      expect(hrTask?.originalApprover).toBeFalsy();
+      expect(hrTask?.delegable).toBe(true);
+
+      await approve(id, U.staff2);
+      const acted = await em().findOneOrFail(ApprovalTaskEntity, hrTask.id);
+      expect(acted.status).toBe(ApprovalTaskStatus.Approved);
+      expect(acted.actedBy?.id).toBe(U.staff2);
+      const history = await em().findOneOrFail(ApprovalHistoryEntity, {
+        request: id,
+        action: ApprovalHistoryAction.Approve,
+        actor: U.staff2,
+      });
+      expect(history.data).toEqual({ onBehalfOf: U.hr });
+
+      // Người ủy quyền vẫn tự duyệt được (đơn khác)
+      const other = await atParallelStep();
+      await approve(other, U.hr);
+      expect((await pendingTasks(other)).map((t) => t.approver.id)).toEqual([U.admin]);
+    });
+
+    it("window delegation covers tasks that arrived before it and stops on expiry", async () => {
+      const id = await atParallelStep();
+      await expect(approve(id, U.staff2)).rejects.toThrow(/not an approver/);
+      const delegationId = await delegate(U.hr, U.staff2, ApprovalDelegationMode.Window);
+      await approve(id, U.staff2);
+
+      const later = await atParallelStep();
+      await expire(delegationId);
+      await expect(approve(later, U.staff2)).rejects.toThrow(/not an approver/);
+    });
+
+    it("handover delegation keeps tasks that arrived in the window after expiry, but not earlier ones", async () => {
+      const before = await atParallelStep();
+      const delegationId = await delegate(U.hr, U.staff2, ApprovalDelegationMode.Handover);
+      await expect(approve(before, U.staff2)).rejects.toThrow(/not an approver/);
+
+      const during = await atParallelStep();
+      await expire(delegationId);
+      await approve(during, U.staff2);
+      expect((await pendingTasks(during)).map((t) => t.approver.id)).toEqual([U.admin]);
+
+      // Xóa ủy quyền → mất quyền ngay
+      const another = await atParallelStep();
+      await em().nativeUpdate(ApprovalDelegationEntity, { id: delegationId }, { deleted: true });
+      await expect(approve(another, U.staff2)).rejects.toThrow(/not an approver/);
+    });
+
+    it("does not let one click fill two slots of an all-parallel step", async () => {
+      // hr có suất riêng và được admin ủy quyền suất còn lại
+      await delegate(U.admin, U.hr, ApprovalDelegationMode.Window);
+      const id = await atParallelStep();
+      await approve(id, U.hr);
+      expect((await load(id)).status).toBe(ApprovalRequestStatus.Pending);
+      expect((await pendingTasks(id)).map((t) => t.approver.id)).toEqual([U.admin]);
+
+      // Lần bấm thứ hai: xử lý thay suất của admin → đủ cả bước
+      await approve(id, U.hr);
+      expect((await load(id)).status).toBe(ApprovalRequestStatus.Approved);
+    });
+
+    it("ignores delegations whose delegate is the requester", async () => {
+      await delegate(U.hr, U.staff, ApprovalDelegationMode.Window);
+      const id = await atParallelStep();
+      await expect(approve(id, U.staff)).rejects.toThrow(/not an approver/);
+    });
   });
 
   it("returns to the requester and starts a new round on resubmit", async () => {

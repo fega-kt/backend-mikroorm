@@ -30,6 +30,7 @@ import { ApprovalEngineService } from "../approval-engine/approval-engine.servic
 import { ApproverResolver } from "../approval-engine/approver-resolver";
 import { resolveAttachmentConfig } from "../approval-engine/attachment-config";
 import { NodeType, workflowDefinitionSchema, type WaitNode } from "../approval-engine/definition.schema";
+import { canActOnTask, resolveTaskDelegates } from "../approval-engine/delegation-access";
 
 const userBrief = (u?: UserEntity | null) => (u ? { id: u.id, fullName: u.fullName, avatar: u.avatar } : null);
 // File private không lộ URL: FE xin link ký qua getRequestFileUrl khi cần xem/tải
@@ -254,9 +255,13 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     request: ApprovalRequestEntity,
     tasks: ApprovalTaskEntity[],
     user: ReturnType<ApprovalRequestService["getCurrentUser"]>,
+    delegates: Map<string, string[]>,
   ) {
     const isRequester = request.requester.id === user.id;
-    const isParticipant = tasks.some((t) => [t.approver?.id, t.originalApprover?.id, t.actedBy?.id].includes(user.id));
+    // Người tham gia: người duyệt, người đã xử lý, hoặc đang được ủy quyền xử lý thay một task
+    const isParticipant = tasks.some(
+      (t) => [t.approver?.id, t.originalApprover?.id, t.actedBy?.id].includes(user.id) || canActOnTask(t, user.id, delegates),
+    );
     if (!isRequester && !isParticipant && !user.canAccess([PermissionType.MenuAllApprovalRequest])) {
       throw new ForbiddenException("You cannot view this request");
     }
@@ -278,9 +283,10 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       const tasks = await this.em.find(
         ApprovalTaskEntity,
         { request: requestId },
-        { populate: ["approver", "originalApprover", "actedBy"] },
+        { populate: ["approver", "originalApprover", "actedBy", "handoverDelegations"] },
       );
-      this.assertCanView(request, tasks, user);
+      const delegates = await resolveTaskDelegates(this.em, tasks, this.delegationScope(request));
+      this.assertCanView(request, tasks, user, delegates);
       const linked = [...request.documents.getItems(), ...request.attachments.getItems()].find((f) => f.id === fileId && !f.deleted);
       if (linked) return linked;
     }
@@ -314,25 +320,34 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const tasks = await this.em.find(
       ApprovalTaskEntity,
       { request: id },
-      { populate: ["approver", "originalApprover", "actedBy"], orderBy: { round: "ASC", createdAt: "ASC" } },
+      { populate: ["approver", "originalApprover", "actedBy", "handoverDelegations"], orderBy: { round: "ASC", createdAt: "ASC" } },
     );
     const isRequester = request.requester.id === user.id;
-    this.assertCanView(request, tasks, user);
+    // Người đang được xử lý thay từng task chờ duyệt (ủy quyền) — vừa để phân quyền vừa để hiển thị
+    const delegates = await resolveTaskDelegates(this.em, tasks, this.delegationScope(request));
+    this.assertCanView(request, tasks, user, delegates);
+    const delegateIds = [...new Set([...delegates.values()].flat())];
+    const delegateUsers = delegateIds.length
+      ? await this.em.find(UserEntity, { id: { $in: delegateIds } }, { fields: ["id", "fullName", "avatar"] })
+      : [];
+    const delegateBriefs = new Map(delegateUsers.map((u) => [u.id, { id: u.id, fullName: u.fullName, avatar: u.avatar }]));
 
     const histories = await this.em.find(ApprovalHistoryEntity, { request: id }, { populate: ["actor"], orderBy: { createdAt: "ASC" } });
     const version = request.workflowVersion as ApprovalWorkflowVersionEntity | undefined;
     const definition = version ? workflowDefinitionSchema.parse(version.definition) : null;
 
     const isPending = request.status === ApprovalRequestStatus.Pending;
-    const myTask = isPending
-      ? tasks.find(
+    // Task tôi được xử lý: của chính tôi (ưu tiên) hoặc được ủy quyền xử lý thay
+    const actionable = isPending
+      ? tasks.filter(
           (t) =>
             t.status === ApprovalTaskStatus.Pending &&
             t.round === request.round &&
             request.currentNodeIds.includes(t.nodeId) &&
-            t.approver.id === user.id,
+            canActOnTask(t, user.id, delegates),
         )
-      : undefined;
+      : [];
+    const myTask = actionable.find((t) => t.approver.id === user.id) ?? actionable[0];
     const currentNode = myTask ? (definition?.nodes.find((n) => n.id === myTask.nodeId) as WaitNode | undefined) : undefined;
     const editable = isRequester && [ApprovalRequestStatus.Draft, ApprovalRequestStatus.Returned].includes(request.status);
     const approvedThisRound = tasks.some((t) => t.round === request.round && t.status === ApprovalTaskStatus.Approved);
@@ -374,6 +389,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         approver: userBrief(t.approver),
         originalApprover: userBrief(t.originalApprover),
         actedBy: userBrief(t.actedBy),
+        /** Người đang được ủy quyền xử lý thay (chỉ task đang chờ) */
+        delegates: (delegates.get(t.id) ?? []).map((id) => delegateBriefs.get(id)).filter(Boolean),
         comment: t.comment,
         dueAt: t.dueAt,
         remindedAt: t.remindedAt,
@@ -433,6 +450,11 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const id = requestType && typeof requestType === "object" ? (requestType as { id: string }).id : requestType;
     const version = requestTypeVersion as { code?: string; name?: string } | undefined;
     return { ...rest, requestType: { id, code: version?.code, name: version?.name } };
+  }
+
+  /** Phạm vi áp dụng ủy quyền của đơn: loại tờ trình + người trình (không xử lý thay đơn của chính mình) */
+  private delegationScope(request: ApprovalRequestEntity) {
+    return { requesterId: request.requester.id, requestTypeId: request.requestType.id };
   }
 
   private async getOwnEditable(id: string) {

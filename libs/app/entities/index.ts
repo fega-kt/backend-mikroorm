@@ -8,7 +8,7 @@ export { ApprovalWorkflowVersionEntity, ApprovalWorkflowVersionStatus } from "./
 export { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "./approval-request";
 export { ApprovalTaskEntity, ApprovalTaskStatus } from "./approval-task";
 export { ApprovalHistoryEntity, ApprovalHistoryAction } from "./approval-history";
-export { ApprovalDelegationEntity } from "./approval-delegation";
+export { ApprovalDelegationEntity, ApprovalDelegationMode } from "./approval-delegation";
 export { ApprovalCounterEntity } from "./approval-counter";
 export { EmailTemplateEntity } from "./email-template";
 

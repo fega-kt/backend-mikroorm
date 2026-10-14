@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { PermissionType } from "@common/base/permission-type.enum";
 import { UserEntity } from "@core-service/entities/user";
 import { EntityRepository, FilterQuery, serialize } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
@@ -11,7 +12,7 @@ import type {
 import { ApprovalDelegationEntity } from "../../entities/approval-delegation";
 import { RequestTypeEntity } from "../../entities/request-type";
 
-const POPULATE = ["fromUser", "toUser", "requestType"] as const;
+const POPULATE = ["fromUser", "toUser", "createdBy", "requestType"] as const;
 
 @Injectable({ scope: Scope.REQUEST })
 export class ApprovalDelegationService extends BaseService<ApprovalDelegationEntity> {
@@ -30,7 +31,9 @@ export class ApprovalDelegationService extends BaseService<ApprovalDelegationEnt
     const userId = this.getCurrentUser().id;
     const { page, limit, tab, activeOnly } = filter;
     const where: FilterQuery<ApprovalDelegationEntity> = { deleted: { $ne: true } };
-    if (tab === "mine") where.fromUser = userId;
+    if (tab === "all") {
+      if (!this.canManage()) throw new ForbiddenException("You cannot view all delegations");
+    } else if (tab === "mine") where.fromUser = userId;
     else where.toUser = userId;
     if (activeOnly) where.endAt = { $gte: new Date() };
 
@@ -41,6 +44,7 @@ export class ApprovalDelegationService extends BaseService<ApprovalDelegationEnt
         "id",
         "startAt",
         "endAt",
+        "mode",
         "reason",
         "createdAt",
         "fromUser.id",
@@ -49,6 +53,9 @@ export class ApprovalDelegationService extends BaseService<ApprovalDelegationEnt
         "toUser.id",
         "toUser.fullName",
         "toUser.avatar",
+        "createdBy.id",
+        "createdBy.fullName",
+        "createdBy.avatar",
         "requestType.id",
         "requestType.name",
       ],
@@ -66,12 +73,19 @@ export class ApprovalDelegationService extends BaseService<ApprovalDelegationEnt
 
   async createDelegation(data: CreateApprovalDelegationDto) {
     const userId = this.getCurrentUser().id;
-    await this.ensureDelegate(data.toUser, userId);
+    // Tạo hộ người khác (vd: HR cho giám đốc) cần quyền quản lý ủy quyền
+    const fromUserId = data.fromUser || userId;
+    if (fromUserId !== userId) {
+      if (!this.canManage()) throw new ForbiddenException("You cannot create delegations for other users");
+      await this.ensureActiveUser(fromUserId, "Delegator is not an active user");
+    }
+    await this.ensureDelegate(data.toUser, fromUserId);
     const delegation = await this.addOne({
-      fromUser: this.em.getReference(UserEntity, userId),
+      fromUser: this.em.getReference(UserEntity, fromUserId),
       toUser: this.em.getReference(UserEntity, data.toUser),
       startAt: data.startAt,
       endAt: data.endAt,
+      mode: data.mode,
       requestType: data.requestType ? this.em.getReference(RequestTypeEntity, data.requestType) : undefined,
       reason: data.reason ?? undefined,
     });
@@ -87,6 +101,7 @@ export class ApprovalDelegationService extends BaseService<ApprovalDelegationEnt
     this.em.assign(delegation, {
       startAt,
       endAt,
+      ...(data.mode && { mode: data.mode }),
       ...(data.toUser && { toUser: this.em.getReference(UserEntity, data.toUser) }),
       ...(data.requestType !== undefined && {
         requestType: data.requestType ? this.em.getReference(RequestTypeEntity, data.requestType) : null,
@@ -103,16 +118,27 @@ export class ApprovalDelegationService extends BaseService<ApprovalDelegationEnt
     return this.remove(id);
   }
 
+  /** Ủy quyền mà người dùng được sửa / xóa: của chính mình, hoặc mọi ủy quyền nếu có quyền quản lý */
   private async getOwn(id: string) {
     const delegation = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!delegation) throw new NotFoundException("Delegation not found");
-    if (delegation.fromUser.id !== this.getCurrentUser().id) throw new ForbiddenException("You cannot change this delegation");
+    if (delegation.fromUser.id !== this.getCurrentUser().id && !this.canManage()) {
+      throw new ForbiddenException("You cannot change this delegation");
+    }
     return delegation;
+  }
+
+  private canManage() {
+    return this.getCurrentUser().canAccess([PermissionType.ManageApprovalDelegation]);
   }
 
   private async ensureDelegate(toUserId: string, fromUserId: string) {
     if (toUserId === fromUserId) throw new BadRequestException("Cannot delegate to yourself");
-    const active = await this.em.count(UserEntity, { id: toUserId, isActive: true, deleted: { $ne: true } });
-    if (!active) throw new BadRequestException("Delegate is not an active user");
+    await this.ensureActiveUser(toUserId, "Delegate is not an active user");
+  }
+
+  private async ensureActiveUser(id: string, message: string) {
+    const active = await this.em.count(UserEntity, { id, isActive: true, deleted: { $ne: true } });
+    if (!active) throw new BadRequestException(message);
   }
 }
