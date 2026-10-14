@@ -160,7 +160,20 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     });
     await this.setFiles(request, RequestFileCategory.Documents, data.documents);
     await this.setFiles(request, RequestFileCategory.Attachments, data.attachments);
-    this.recordHistory(request, ApprovalHistoryAction.Create);
+    // Dòng "tạo" ghi luôn thông tin ban đầu (giá trị đầu tiên của từng trường + tệp) để lịch sử cho thấy phiếu tạo với nội dung gì
+    const departments = await this.departmentBriefs([departmentId]);
+    const initialFiles = [RequestFileCategory.Documents, RequestFileCategory.Attachments].flatMap((category) =>
+      this.fileChangeItems(request, category),
+    );
+    this.recordHistory(request, ApprovalHistoryAction.Create, {
+      changes: [
+        buildChange("title", null, data.title),
+        buildChange("priority", null, data.priority),
+        { field: "department", from: null, to: departments.get(departmentId) ?? null },
+        ...diffPayload({}, data.payload),
+      ],
+      ...(initialFiles.length ? { files: initialFiles } : {}),
+    });
     await this.em.flush();
 
     if (data.submit) await this.engine.submit(request.id, user.id);
