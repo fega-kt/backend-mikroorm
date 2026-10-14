@@ -94,15 +94,12 @@ export class ApprovalDelegationService extends BaseService<ApprovalDelegationEnt
 
   async updateDelegation(id: string, data: UpdateApprovalDelegationDto) {
     const delegation = await this.getOwn(id);
-    if (data.toUser) await this.ensureDelegate(data.toUser, delegation.fromUser.id);
     const startAt = data.startAt ?? delegation.startAt;
     const endAt = data.endAt ?? delegation.endAt;
     if (endAt <= startAt) throw new BadRequestException("End time must be after start time");
     this.em.assign(delegation, {
       startAt,
       endAt,
-      ...(data.mode && { mode: data.mode }),
-      ...(data.toUser && { toUser: this.em.getReference(UserEntity, data.toUser) }),
       ...(data.requestType !== undefined && {
         requestType: data.requestType ? this.em.getReference(RequestTypeEntity, data.requestType) : null,
       }),

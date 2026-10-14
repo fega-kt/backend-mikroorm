@@ -18,6 +18,14 @@ export enum OverdueAction {
   AutoApprove = "AUTO_APPROVE",
 }
 
+/** Người duyệt là nhóm: cả nhóm cùng xử lý, hay hệ thống chia cho một thành viên */
+export enum GroupMode {
+  /** Task giao cho cả nhóm — thành viên hiện tại nào cũng xử lý được, ai trước xong trước */
+  Shared = "shared",
+  /** Hệ thống chọn ngẫu nhiên một thành viên — chỉ người đó (và người họ ủy quyền) xử lý */
+  Assign = "assign",
+}
+
 export enum ParallelMode {
   /** Tất cả cùng duyệt */
   All = "ALL",
@@ -53,6 +61,10 @@ export const stepOptionsSchema = z.object({
   skipIfNoApprover: z.boolean().default(false),
   requireRejectReason: z.boolean().default(true),
   allowReturn: z.boolean().default(true),
+  /** Người duyệt là nhóm: cùng xử lý / chia cho một người */
+  groupMode: z.enum(GroupMode).default(GroupMode.Shared),
+  /** Nhóm "cùng xử lý": gửi email cho cả nhóm khi task tới (mặc định chỉ thông báo trong ứng dụng) */
+  emailGroup: z.boolean().default(false),
 });
 
 /**

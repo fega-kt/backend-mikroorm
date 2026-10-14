@@ -1,11 +1,22 @@
 import { BaseService } from "@common/base/base.service";
+import { PrincipalEntity } from "@core-service/entities/principal";
 import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { HttpException, Injectable, Scope } from "@nestjs/common";
 import type { InboxFilterDto } from "../../controllers/approval-task/approval-task.validation";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalAction, ApprovalEngineService } from "../approval-engine/approval-engine.service";
-import { delegatedTaskFilter } from "../approval-engine/delegation-access";
+import { actionableTaskFilter } from "../approval-engine/task-access";
+
+/** Người hoặc nhóm (principal) — cần populate user / group */
+const principalBrief = (p?: PrincipalEntity | null) =>
+  p
+    ? {
+        id: p.id,
+        type: p.user ? ("user" as const) : ("group" as const),
+        name: p.user?.fullName || p.name || p.group?.name || "",
+      }
+    : null;
 
 @Injectable({ scope: Scope.REQUEST })
 export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
@@ -25,7 +36,7 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
     const byTab: Record<typeof tab, FilterQuery<ApprovalTaskEntity>> = {
       pending: pendingMine,
       done: { actedBy: userId, status: { $ne: ApprovalTaskStatus.Pending } },
-      all: { $or: [pendingMine, { approver: userId }, { actedBy: userId }] },
+      all: { $or: [pendingMine, { approver: { user: userId } }, { actedBy: userId }] },
     };
     const requestWhere: Record<string, unknown> = { deleted: { $ne: true } };
     if (requestTypeId) requestWhere.requestType = requestTypeId;
@@ -40,7 +51,11 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
         "request.requester",
         "request.department",
         "approver",
-        "originalApprover",
+        "approver.user",
+        "approver.group",
+        "originApprover",
+        "originApprover.user",
+        "originApprover.group",
       ],
       orderBy:
         tab === "pending" ? { dueAt: "ASC NULLS LAST", createdAt: "ASC" } : tab === "done" ? { actedAt: "DESC" } : { createdAt: "DESC" },
@@ -57,9 +72,12 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
       actedAt: t.actedAt,
       comment: t.comment,
       createdAt: t.createdAt,
-      originalApprover: t.originalApprover ? { id: t.originalApprover.id, fullName: t.originalApprover.fullName } : null,
-      /** Task của người khác mà tôi xử lý / được xử lý thay theo ủy quyền */
-      onBehalfOf: t.approver.id !== userId ? { id: t.approver.id, fullName: t.approver.fullName } : null,
+      /** Người / nhóm duyệt theo quy trình */
+      originApprover: principalBrief(t.originApprover),
+      /** Người / nhóm đang giữ task */
+      approver: principalBrief(t.approver),
+      /** Task người khác giữ mà tôi xử lý / được xử lý thay theo ủy quyền */
+      onBehalfOf: t.approver?.user && t.approver.user.id !== userId ? { id: t.approver.user.id, fullName: t.approver.user.fullName } : null,
       request: {
         id: t.request.id,
         code: t.request.code,
@@ -86,10 +104,10 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
     return { total };
   }
 
-  /** Task đang chờ tôi xử lý: của chính tôi, hoặc tôi được ủy quyền xử lý thay */
+  /** Task đang chờ tôi xử lý: tôi giữ, của nhóm tôi đang ở, hoặc tôi được ủy quyền xử lý thay */
   private async pendingFilter(userId: string): Promise<FilterQuery<ApprovalTaskEntity>> {
-    const delegated = await delegatedTaskFilter(this.repo.getEntityManager(), userId);
-    return { status: ApprovalTaskStatus.Pending, $or: [{ approver: userId }, ...delegated] };
+    const conditions = await actionableTaskFilter(this.repo.getEntityManager(), userId);
+    return { status: ApprovalTaskStatus.Pending, $or: conditions };
   }
 
   async act(requestId: string, action: ApprovalAction, comment?: string) {
