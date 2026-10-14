@@ -9,6 +9,13 @@ export interface ResolveContext {
   departmentId: string;
 }
 
+/** Một suất duyệt sau khi giải cấu hình: principal theo quy trình + người dùng tương ứng */
+export interface SlotTarget {
+  principalId: string | null;
+  group: boolean;
+  users: string[];
+}
+
 /** Số cấp phòng ban tối đa khi leo lên tìm trưởng phòng — chặn dữ liệu cây bị vòng */
 const MAX_DEPTH = 20;
 
@@ -45,6 +52,43 @@ export class ApproverResolver {
     const slots: string[][] = [];
     for (const approver of approvers) slots.push(await this.resolve(approver, ctx));
     return slots;
+  }
+
+  /**
+   * Mỗi cấu hình người duyệt → một suất, kèm principal theo quy trình:
+   * - Người (trưởng / phó phòng, người cụ thể, principal người): principal của người đó, `users` = [người đó].
+   * - Nhóm: principal nhóm, `group` = true, `users` = thành viên đang hoạt động.
+   * Không tìm được ai → `principalId` null, `users` rỗng.
+   */
+  async resolveSlotTargets(approvers: Approver[], ctx: ResolveContext): Promise<SlotTarget[]> {
+    const slots: SlotTarget[] = [];
+    for (const approver of approvers) {
+      if (approver.type === ApproverType.Principal) {
+        const principal = await this.em.findOne(
+          PrincipalEntity,
+          { id: approver.principalId, deleted: { $ne: true } },
+          { fields: ["id", "user", "group"] },
+        );
+        if (principal && !principal.user && principal.group) {
+          slots.push({ principalId: principal.id, group: true, users: await this.resolvePrincipal(principal.id) });
+          continue;
+        }
+      }
+      const [userId] = await this.resolve(approver, ctx);
+      slots.push({ principalId: userId ? await this.principalOfUser(userId) : null, group: false, users: userId ? [userId] : [] });
+    }
+    return slots;
+  }
+
+  /** Principal của một người dùng */
+  async principalOfUser(userId: string): Promise<string | null> {
+    const principal = await this.em.findOne(PrincipalEntity, { user: userId, deleted: { $ne: true } }, { fields: ["id"] });
+    return principal?.id ?? null;
+  }
+
+  /** Thành viên đang hoạt động của principal nhóm (rỗng nếu không phải nhóm) */
+  async groupMembers(principalId: string): Promise<string[]> {
+    return this.resolvePrincipal(principalId);
   }
 
   /** Giải nhiều cấu hình, gộp và bỏ trùng; trả về danh sách user id */

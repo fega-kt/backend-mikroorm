@@ -3,6 +3,7 @@ import { PermissionType } from "@common/base/permission-type.enum";
 import { STORAGE_PATH } from "@common/constants/storage.constant";
 import { AttachmentEntity, AttachmentStatus, AttachmentVisibility } from "@core-service/entities/attachment";
 import { DepartmentEntity } from "@core-service/entities/department";
+import { PrincipalEntity } from "@core-service/entities/principal";
 import { UserEntity } from "@core-service/entities/user";
 import { FileContextType } from "@core-service/services/file-view/file-access-policy";
 import { UploadService } from "@core-service/services/upload/upload.service";
@@ -30,9 +31,19 @@ import { ApprovalEngineService } from "../approval-engine/approval-engine.servic
 import { ApproverResolver } from "../approval-engine/approver-resolver";
 import { resolveAttachmentConfig } from "../approval-engine/attachment-config";
 import { NodeType, workflowDefinitionSchema, type WaitNode } from "../approval-engine/definition.schema";
-import { canActOnTask, resolveTaskDelegates } from "../approval-engine/delegation-access";
+import { buildTaskAccess, canActOnTask, holderUserId, isGroupTask, type TaskAccess } from "../approval-engine/task-access";
 
 const userBrief = (u?: UserEntity | null) => (u ? { id: u.id, fullName: u.fullName, avatar: u.avatar } : null);
+/** Người hoặc nhóm (principal) — cần populate user / group */
+const principalBrief = (p?: PrincipalEntity | null) =>
+  p
+    ? {
+        id: p.id,
+        type: p.user ? ("user" as const) : ("group" as const),
+        name: p.user?.fullName || p.name || p.group?.name || "",
+        user: userBrief(p.user),
+      }
+    : null;
 // File private không lộ URL: FE xin link ký qua getRequestFileUrl khi cần xem/tải
 const fileBrief = (a: AttachmentEntity) => ({
   id: a.id,
@@ -255,12 +266,12 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     request: ApprovalRequestEntity,
     tasks: ApprovalTaskEntity[],
     user: ReturnType<ApprovalRequestService["getCurrentUser"]>,
-    delegates: Map<string, string[]>,
+    access: TaskAccess,
   ) {
     const isRequester = request.requester.id === user.id;
-    // Người tham gia: người duyệt, người đã xử lý, hoặc đang được ủy quyền xử lý thay một task
+    // Người tham gia: người giữ / người duyệt theo quy trình / người đã xử lý, hoặc đang xử lý được (ủy quyền, thành viên nhóm)
     const isParticipant = tasks.some(
-      (t) => [t.approver?.id, t.originalApprover?.id, t.actedBy?.id].includes(user.id) || canActOnTask(t, user.id, delegates),
+      (t) => [holderUserId(t), t.originApprover?.user?.id, t.actedBy?.id].includes(user.id) || canActOnTask(t, user.id, access),
     );
     if (!isRequester && !isParticipant && !user.canAccess([PermissionType.MenuAllApprovalRequest])) {
       throw new ForbiddenException("You cannot view this request");
@@ -283,10 +294,9 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       const tasks = await this.em.find(
         ApprovalTaskEntity,
         { request: requestId },
-        { populate: ["approver", "originalApprover", "actedBy", "handoverDelegations"] },
+        { populate: ["approver", "originApprover", "actedBy", "handoverDelegations"] },
       );
-      const delegates = await resolveTaskDelegates(this.em, tasks, this.delegationScope(request));
-      this.assertCanView(request, tasks, user, delegates);
+      this.assertCanView(request, tasks, user, await buildTaskAccess(this.em, tasks, this.delegationScope(request), user.id));
       const linked = [...request.documents.getItems(), ...request.attachments.getItems()].find((f) => f.id === fileId && !f.deleted);
       if (linked) return linked;
     }
@@ -320,12 +330,25 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const tasks = await this.em.find(
       ApprovalTaskEntity,
       { request: id },
-      { populate: ["approver", "originalApprover", "actedBy", "handoverDelegations"], orderBy: { round: "ASC", createdAt: "ASC" } },
+      {
+        populate: [
+          "approver",
+          "approver.user",
+          "approver.group",
+          "originApprover",
+          "originApprover.user",
+          "originApprover.group",
+          "actedBy",
+          "handoverDelegations",
+        ],
+        orderBy: { round: "ASC", createdAt: "ASC" },
+      },
     );
     const isRequester = request.requester.id === user.id;
-    // Người đang được xử lý thay từng task chờ duyệt (ủy quyền) — vừa để phân quyền vừa để hiển thị
-    const delegates = await resolveTaskDelegates(this.em, tasks, this.delegationScope(request));
-    this.assertCanView(request, tasks, user, delegates);
+    // Quyền xử lý của tôi (ủy quyền + nhóm) — vừa để phân quyền vừa để hiển thị người được xử lý thay
+    const access = await buildTaskAccess(this.em, tasks, this.delegationScope(request), user.id);
+    const { delegates } = access;
+    this.assertCanView(request, tasks, user, access);
     const delegateIds = [...new Set([...delegates.values()].flat())];
     const delegateUsers = delegateIds.length
       ? await this.em.find(UserEntity, { id: { $in: delegateIds } }, { fields: ["id", "fullName", "avatar"] })
@@ -344,10 +367,11 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
             t.status === ApprovalTaskStatus.Pending &&
             t.round === request.round &&
             request.currentNodeIds.includes(t.nodeId) &&
-            canActOnTask(t, user.id, delegates),
+            canActOnTask(t, user.id, access),
         )
       : [];
-    const myTask = actionable.find((t) => t.approver.id === user.id) ?? actionable[0];
+    // Ưu tiên task tôi giữ, rồi task của nhóm, cuối cùng task xử lý thay
+    const myTask = actionable.find((t) => holderUserId(t) === user.id) ?? actionable.find((t) => isGroupTask(t)) ?? actionable[0];
     const currentNode = myTask ? (definition?.nodes.find((n) => n.id === myTask.nodeId) as WaitNode | undefined) : undefined;
     const editable = isRequester && [ApprovalRequestStatus.Draft, ApprovalRequestStatus.Returned].includes(request.status);
     const approvedThisRound = tasks.some((t) => t.round === request.round && t.status === ApprovalTaskStatus.Approved);
@@ -386,8 +410,12 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         nodeId: t.nodeId,
         nodeName: t.nodeName,
         status: t.status,
-        approver: userBrief(t.approver),
-        originalApprover: userBrief(t.originalApprover),
+        /** Người / nhóm đang giữ task */
+        approver: principalBrief(t.approver),
+        /** Người / nhóm duyệt theo quy trình (khác `approver` khi được chia từ nhóm, gán lại, chuyển cấp) */
+        originApprover: principalBrief(t.originApprover),
+        /** Hệ thống chia ngẫu nhiên từ nhóm */
+        assignedFromGroup: t.assignedFromGroup,
         actedBy: userBrief(t.actedBy),
         /** Người đang được ủy quyền xử lý thay (chỉ task đang chờ) */
         delegates: (delegates.get(t.id) ?? []).map((id) => delegateBriefs.get(id)).filter(Boolean),

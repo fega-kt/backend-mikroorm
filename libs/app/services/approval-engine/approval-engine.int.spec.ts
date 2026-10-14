@@ -51,7 +51,39 @@ const G = {
   principalStaff2: "01900000-0000-7000-8000-0000000000b2",
   empty: "01900000-0000-7000-8000-0000000000a2",
   principalEmpty: "01900000-0000-7000-8000-0000000000b3",
+  /** Nhóm chỉ có hr */
+  solo: "01900000-0000-7000-8000-0000000000a3",
+  principalSolo: "01900000-0000-7000-8000-0000000000b4",
 };
+/** Principal của từng người dùng (như khi tạo user thật); staff2 dùng G.principalStaff2 */
+const P = {
+  ...(Object.fromEntries(
+    Object.keys(U).map((key, i) => [key, `01900000-0000-7000-8000-0000000002${String(i).padStart(2, "0")}`]),
+  ) as Record<keyof typeof U, string>),
+  staff2: G.principalStaff2,
+};
+
+/** Song song ALL: suất hr + suất nhóm chỉ có hr → hr duyệt một lần là đủ cả hai */
+const soloDefinition = () =>
+  workflowDefinitionSchema.parse({
+    nodes: [
+      { id: "start", type: "start" },
+      {
+        id: "p1",
+        type: "parallel",
+        mode: "ALL",
+        approvers: [
+          { type: "PRINCIPAL", principalId: P.hr },
+          { type: "PRINCIPAL", principalId: G.principalSolo },
+        ],
+      },
+      { id: "end", type: "end" },
+    ],
+    edges: [
+      { from: "start", to: "p1" },
+      { from: "p1", to: "end" },
+    ],
+  });
 
 /** Nhóm trống + skipIfNoApprover: bước thường bị bỏ qua, bước song song bỏ suất trống */
 /** Thông báo: người duyệt bước sau + người cố định (staff2); sau bước duyệt: chỉ người trình */
@@ -136,15 +168,16 @@ const emptyGroupDefinition = () =>
   });
 
 /** Quy trình dùng principal: nhóm HR duyệt → song song ALL [nhóm HR, staff2] */
-const groupDefinition = () =>
+const groupDefinition = (groupMode: "shared" | "assign" = "shared") =>
   workflowDefinitionSchema.parse({
     nodes: [
       { id: "start", type: "start" },
-      { id: "g1", type: "approval", name: "Nhóm HR", approver: { type: "PRINCIPAL", principalId: G.principalHr } },
+      { id: "g1", type: "approval", name: "Nhóm HR", approver: { type: "PRINCIPAL", principalId: G.principalHr }, options: { groupMode } },
       {
         id: "p1",
         type: "parallel",
         mode: "ALL",
+        options: { groupMode },
         approvers: [
           { type: "PRINCIPAL", principalId: G.principalHr },
           { type: "PRINCIPAL", principalId: G.principalStaff2 },
@@ -209,6 +242,8 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
   let requestTypeId: string;
   let versionId: string;
   let groupRequestTypeId: string;
+  let assignRequestTypeId: string;
+  let soloRequestTypeId: string;
   let emptyRequestTypeId: string;
   let notifyRequestTypeId: string;
   let stepNotifyRequestTypeId: string;
@@ -249,6 +284,14 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       await user(U.hr, "hr", D.root);
       await user(U.admin, "admin", D.root);
       await user(U.salesHead, "salesHead", D.sales);
+      for (const [key, id] of Object.entries(U)) {
+        if (id === U.staff2) continue;
+        await tx.execute(
+          `insert into principals (id, created_at, updated_at, deleted, created_by_id, updated_by_id, name, type, user_id)
+           values (?, now(), now(), false, ?, ?, ?, 'user', ?)`,
+          [P[key as keyof typeof U], sys, sys, key, id],
+        );
+      }
       await tx.execute(
         "insert into groups (id, created_at, updated_at, deleted, created_by_id, updated_by_id, name) values (?, now(), now(), false, ?, ?, ?)",
         [G.hr, sys, sys, "HR"],
@@ -268,6 +311,15 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       await tx.execute(
         "insert into principals (id, created_at, updated_at, deleted, created_by_id, updated_by_id, name, type, group_id) values (?, now(), now(), false, ?, ?, ?, ?, ?)",
         [G.principalEmpty, sys, sys, "Trống", "group", G.empty],
+      );
+      await tx.execute(
+        "insert into groups (id, created_at, updated_at, deleted, created_by_id, updated_by_id, name) values (?, now(), now(), false, ?, ?, ?)",
+        [G.solo, sys, sys, "Solo"],
+      );
+      await tx.execute("insert into users_groups (user_entity_id, group_entity_id) values (?, ?)", [U.hr, G.solo]);
+      await tx.execute(
+        "insert into principals (id, created_at, updated_at, deleted, created_by_id, updated_by_id, name, type, group_id) values (?, now(), now(), false, ?, ?, ?, ?, ?)",
+        [G.principalSolo, sys, sys, "Solo", "group", G.solo],
       );
       const audit = { createdBy: tx.getReference(UserEntity, sys), updatedBy: tx.getReference(UserEntity, sys) };
 
@@ -413,6 +465,32 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       requestTypeId = requestType.id;
       versionId = version.id;
       groupRequestTypeId = groupType.id;
+
+      // Loại tờ trình chỉ để test: tạo loại + quy trình xuất bản với định nghĩa cho trước
+      const publish = async (code: string, prefix: string, def: ReturnType<typeof workflowDefinitionSchema.parse>) => {
+        const type = tx.create(RequestTypeEntity, {
+          code,
+          name: code,
+          prefix,
+          category,
+          status: RequestTypeStatus.Published,
+          form: emptyForm,
+          ...audit,
+        });
+        const wf = tx.create(ApprovalWorkflowEntity, { name: code, requestType: type, priority: 0, isActive: true, ...audit });
+        wf.publishedVersion = tx.create(ApprovalWorkflowVersionEntity, {
+          workflow: wf,
+          version: 1,
+          definition: def,
+          status: ApprovalWorkflowVersionStatus.Published,
+          publishedAt: new Date(),
+          ...audit,
+        });
+        await tx.flush();
+        return type.id;
+      };
+      assignRequestTypeId = await publish("GROUP_ASSIGN", "GA", groupDefinition("assign"));
+      soloRequestTypeId = await publish("SOLO", "SO", soloDefinition());
     });
   });
 
@@ -444,7 +522,14 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
 
   const load = (id: string) => em().findOneOrFail(ApprovalRequestEntity, id);
   const pendingTasks = (id: string) =>
-    em().find(ApprovalTaskEntity, { request: id, status: ApprovalTaskStatus.Pending }, { orderBy: { createdAt: "ASC" } });
+    em().find(
+      ApprovalTaskEntity,
+      { request: id, status: ApprovalTaskStatus.Pending },
+      { populate: ["approver", "originApprover"], orderBy: { createdAt: "ASC" } },
+    );
+  /** Người đang giữ task (user id), hoặc principal nhóm nếu task giao cho cả nhóm */
+  const who = (t: ApprovalTaskEntity) => t.approver.user?.id ?? who(t);
+  const loadTask = (taskId: string) => em().findOneOrFail(ApprovalTaskEntity, taskId, { populate: ["approver", "originApprover"] });
   const approve = (id: string, actorId: string, comment?: string) => engine.act(id, ApprovalAction.Approve, { actorId, comment });
 
   it("runs a short leave through dept head and the parallel step", async () => {
@@ -455,11 +540,11 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     expect(request.status).toBe(ApprovalRequestStatus.Pending);
     expect(request.code).toMatch(/^NP-\d{4}-0001$/);
     expect(request.workflowVersion.id).toBe(versionId);
-    expect((await pendingTasks(id)).map((t) => t.approver.id)).toEqual([U.itHead]);
+    expect((await pendingTasks(id)).map((t) => who(t))).toEqual([U.itHead]);
 
     await expect(approve(id, U.staff2)).rejects.toThrow(/not an approver/);
     await approve(id, U.itHead);
-    expect((await pendingTasks(id)).map((t) => t.approver.id).sort()).toEqual([U.hr, U.admin].sort());
+    expect((await pendingTasks(id)).map((t) => who(t)).sort()).toEqual([U.hr, U.admin].sort());
 
     await approve(id, U.hr);
     request = await load(id);
@@ -480,7 +565,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     const id = await createRequest(U.staff, D.it, { days: 5 });
     await engine.submit(id, U.staff);
     await approve(id, U.itHead);
-    expect((await pendingTasks(id)).map((t) => t.approver.id)).toEqual([U.director]);
+    expect((await pendingTasks(id)).map((t) => who(t))).toEqual([U.director]);
 
     await expect(engine.act(id, ApprovalAction.Reject, { actorId: U.director })).rejects.toThrow(/reason/);
     await engine.act(id, ApprovalAction.Reject, { actorId: U.director, comment: "Không đủ phép" });
@@ -502,13 +587,13 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     const approved = await em().count(ApprovalTaskEntity, { request: id, status: ApprovalTaskStatus.Approved });
     expect(approved).toBe(1);
-    expect((await pendingTasks(id)).map((t) => t.approver.id).sort()).toEqual([U.hr, U.admin].sort());
+    expect((await pendingTasks(id)).map((t) => who(t)).sort()).toEqual([U.hr, U.admin].sort());
   });
 
   it("skips the director step when the director is the requester's approver", async () => {
     const id = await createRequest(U.director, D.sales, { days: 10 });
     await engine.submit(id, U.director);
-    expect((await pendingTasks(id)).map((t) => t.approver.id)).toEqual([U.salesHead]);
+    expect((await pendingTasks(id)).map((t) => who(t))).toEqual([U.salesHead]);
     await approve(id, U.salesHead);
 
     const skipped = await em().find(ApprovalTaskEntity, { request: id, nodeId: "n2" });
@@ -519,7 +604,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
   it("goes up to the parent dept head when the requester is the dept head", async () => {
     const id = await createRequest(U.itHead, D.it, { days: 1 });
     await engine.submit(id, U.itHead);
-    expect((await pendingTasks(id)).map((t) => t.approver.id)).toEqual([U.director]);
+    expect((await pendingTasks(id)).map((t) => who(t))).toEqual([U.director]);
   });
 
   /** Tạo ủy quyền; mặc định đang hiệu lực 1 giờ */
@@ -553,12 +638,12 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     it("lets a window delegate act on behalf without moving the task, and the delegator can still act", async () => {
       await delegate(U.hr, U.staff2, ApprovalDelegationMode.Window);
       const id = await atParallelStep();
-      const hrTask = (await pendingTasks(id)).find((t) => t.approver.id === U.hr);
-      expect(hrTask?.originalApprover).toBeFalsy();
+      const hrTask = (await pendingTasks(id)).find((t) => who(t) === U.hr);
+      expect(hrTask?.approver.id).toBe(hrTask?.originApprover.id);
       expect(hrTask?.delegable).toBe(true);
 
       await approve(id, U.staff2);
-      const acted = await em().findOneOrFail(ApprovalTaskEntity, hrTask.id);
+      const acted = await loadTask(hrTask.id);
       expect(acted.status).toBe(ApprovalTaskStatus.Approved);
       expect(acted.actedBy?.id).toBe(U.staff2);
       const history = await em().findOneOrFail(ApprovalHistoryEntity, {
@@ -571,7 +656,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       // Người ủy quyền vẫn tự duyệt được (đơn khác)
       const other = await atParallelStep();
       await approve(other, U.hr);
-      expect((await pendingTasks(other)).map((t) => t.approver.id)).toEqual([U.admin]);
+      expect((await pendingTasks(other)).map((t) => who(t))).toEqual([U.admin]);
     });
 
     it("window delegation covers tasks that arrived before it and stops on expiry", async () => {
@@ -593,7 +678,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       const during = await atParallelStep();
       await expire(delegationId);
       await approve(during, U.staff2);
-      expect((await pendingTasks(during)).map((t) => t.approver.id)).toEqual([U.admin]);
+      expect((await pendingTasks(during)).map((t) => who(t))).toEqual([U.admin]);
 
       // Xóa ủy quyền → mất quyền ngay
       const another = await atParallelStep();
@@ -607,7 +692,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       const id = await atParallelStep();
       await approve(id, U.hr);
       expect((await load(id)).status).toBe(ApprovalRequestStatus.Pending);
-      expect((await pendingTasks(id)).map((t) => t.approver.id)).toEqual([U.admin]);
+      expect((await pendingTasks(id)).map((t) => who(t))).toEqual([U.admin]);
 
       // Lần bấm thứ hai: xử lý thay suất của admin → đủ cả bước
       await approve(id, U.hr);
@@ -637,7 +722,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     expect(request.round).toBe(2);
     expect(request.code).toBe(code);
     const tasks = await pendingTasks(id);
-    expect(tasks.map((t) => [t.round, t.approver.id])).toEqual([[2, U.itHead]]);
+    expect(tasks.map((t) => [t.round, who(t)])).toEqual([[2, U.itHead]]);
 
     const actions = (await em().find(ApprovalHistoryEntity, { request: id }, { orderBy: { createdAt: "ASC" } })).map((h) => h.action);
     expect(actions).toEqual([ApprovalHistoryAction.Submit, ApprovalHistoryAction.Return, ApprovalHistoryAction.Resubmit]);
@@ -668,9 +753,9 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
 
     await em().nativeUpdate(ApprovalTaskEntity, { id: task.id }, { dueAt: new Date(Date.now() - 25 * 3_600_000) });
     expect(await engine.handleOverdue(task.id)).toBe("escalated");
-    const escalated = await em().findOneOrFail(ApprovalTaskEntity, task.id);
-    expect(escalated.approver.id).toBe(U.director);
-    expect(escalated.originalApprover.id).toBe(U.itHead);
+    const escalated = await loadTask(task.id);
+    expect(who(escalated)).toBe(U.director);
+    expect(escalated.originApprover.user?.id).toBe(U.itHead);
     await approve(id, U.director);
   });
 
@@ -682,48 +767,102 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     expect(Math.abs(codes[0] - codes[1])).toBe(1);
   });
 
-  it("lets any group member approve a single step", async () => {
-    const id = await createRequest(U.staff, D.it, {}, groupRequestTypeId);
-    await engine.submit(id, U.staff);
-    expect((await pendingTasks(id)).map((t) => t.approver.id).sort()).toEqual([U.hr, U.admin].sort());
+  describe("group approvers", () => {
+    it("shared: one task for the whole group, any member approves", async () => {
+      const id = await createRequest(U.staff, D.it, {}, groupRequestTypeId);
+      await engine.submit(id, U.staff);
+      const tasks = await pendingTasks(id);
+      expect(tasks.map((t) => [who(t), t.originApprover.id])).toEqual([[G.principalHr, G.principalHr]]);
 
-    await approve(id, U.admin);
-    const g1 = await em().find(ApprovalTaskEntity, { request: id, nodeId: "g1" });
-    expect(g1.map((t) => [t.approver.id, t.status]).sort()).toEqual(
-      [
-        [U.admin, ApprovalTaskStatus.Approved],
-        [U.hr, ApprovalTaskStatus.Skipped],
-      ].sort(),
-    );
-  });
+      await expect(approve(id, U.staff2)).rejects.toThrow(/not an approver/);
+      await approve(id, U.admin);
+      const g1 = await em().find(ApprovalTaskEntity, { request: id, nodeId: "g1" }, { populate: ["approver"] });
+      expect(g1.map((t) => [who(t), t.actedBy?.id, t.status])).toEqual([[G.principalHr, U.admin, ApprovalTaskStatus.Approved]]);
+    });
 
-  it("counts a group as one slot in an ALL parallel step", async () => {
-    const id = await createRequest(U.staff, D.it, {}, groupRequestTypeId);
-    await engine.submit(id, U.staff);
-    await approve(id, U.hr);
+    it("shared: counts the group as one slot in an ALL parallel step", async () => {
+      const id = await createRequest(U.staff, D.it, {}, groupRequestTypeId);
+      await engine.submit(id, U.staff);
+      await approve(id, U.hr);
 
-    // p1: suất 0 = nhóm HR (hr, admin), suất 1 = staff2
-    const p1 = await pendingTasks(id);
-    expect(p1.map((t) => [t.slot, t.approver.id]).sort()).toEqual(
-      [
-        [0, U.admin],
-        [0, U.hr],
-        [1, U.staff2],
-      ].sort(),
-    );
+      // p1: suất 0 = cả nhóm HR, suất 1 = staff2
+      const p1 = await pendingTasks(id);
+      expect(p1.map((t) => [t.slot, who(t)]).sort()).toEqual(
+        [
+          [0, G.principalHr],
+          [1, U.staff2],
+        ].sort(),
+      );
+      await approve(id, U.hr);
+      expect((await load(id)).status).toBe(ApprovalRequestStatus.Pending);
+      expect((await pendingTasks(id)).map((t) => who(t))).toEqual([U.staff2]);
+      await approve(id, U.staff2);
+      expect((await load(id)).status).toBe(ApprovalRequestStatus.Approved);
+    });
 
-    await approve(id, U.hr);
-    expect((await load(id)).status).toBe(ApprovalRequestStatus.Pending);
-    expect((await pendingTasks(id)).map((t) => t.approver.id)).toEqual([U.staff2]);
+    it("assign: gives the task to one random member", async () => {
+      const id = await createRequest(U.staff, D.it, {}, assignRequestTypeId);
+      await engine.submit(id, U.staff);
+      const [task] = await pendingTasks(id);
+      expect([U.hr, U.admin]).toContain(who(task));
+      expect(task.originApprover.id).toBe(G.principalHr);
+      expect(task.assignedFromGroup).toBe(true);
 
-    await approve(id, U.staff2);
-    expect((await load(id)).status).toBe(ApprovalRequestStatus.Approved);
+      const other = who(task) === U.hr ? U.admin : U.hr;
+      await expect(approve(id, other)).rejects.toThrow(/not an approver/);
+      await approve(id, who(task));
+    });
+
+    it("assign: re-assigns when the assignee leaves the group, skips when nobody is left", async () => {
+      const id = await createRequest(U.staff, D.it, {}, assignRequestTypeId);
+      await engine.submit(id, U.staff);
+      const [task] = await pendingTasks(id);
+      const first = who(task);
+      const other = first === U.hr ? U.admin : U.hr;
+      const conn = em().getConnection();
+      await conn.execute("delete from users_groups where user_entity_id = ? and group_entity_id = ?", [first, G.hr]);
+      try {
+        expect(await engine.repairGroupTask(task.id)).toBe("reassigned");
+        expect(who(await loadTask(task.id))).toBe(other);
+
+        await conn.execute("delete from users_groups where user_entity_id = ? and group_entity_id = ?", [other, G.hr]);
+        expect(await engine.repairGroupTask(task.id)).toBe("skipped");
+        // g1 bị bỏ → đơn sang p1 (nhóm HR trống → bỏ suất; còn suất staff2)
+        expect((await pendingTasks(id)).map((t) => who(t))).toEqual([U.staff2]);
+      } finally {
+        for (const member of [U.hr, U.admin]) {
+          await conn.execute("insert into users_groups (user_entity_id, group_entity_id) values (?, ?) on conflict do nothing", [
+            member,
+            G.hr,
+          ]);
+        }
+      }
+    });
+
+    it("approves the other slots where the actor is the only possible approver", async () => {
+      const id = await createRequest(U.staff, D.it, {}, soloRequestTypeId);
+      await engine.submit(id, U.staff);
+      expect(await pendingTasks(id)).toHaveLength(2);
+      await approve(id, U.hr);
+      expect((await load(id)).status).toBe(ApprovalRequestStatus.Approved);
+      const auto = await em().findOne(ApprovalHistoryEntity, { request: id, action: ApprovalHistoryAction.AutoApprove });
+      expect(auto?.data).toEqual({ reason: "same_approver" });
+    });
+
+    it("reminds the group but does not escalate a shared group task", async () => {
+      const id = await createRequest(U.staff, D.it, {}, groupRequestTypeId);
+      await engine.submit(id, U.staff);
+      const [task] = await pendingTasks(id);
+      await em().nativeUpdate(ApprovalTaskEntity, { id: task.id }, { dueAt: new Date(Date.now() - 3 * 86_400_000) });
+      expect(await engine.handleOverdue(task.id)).toBe("reminded");
+      expect(who(await loadTask(task.id))).toBe(G.principalHr);
+    });
   });
 
   it("skips steps and slots without approvers when skipIfNoApprover is on", async () => {
     const id = await createRequest(U.staff, D.it, {}, emptyRequestTypeId);
     await engine.submit(id, U.staff);
-    expect((await pendingTasks(id)).map((t) => [t.nodeId, t.slot, t.approver.id])).toEqual([["p1", 1, U.staff2]]);
+    expect((await pendingTasks(id)).map((t) => [t.nodeId, t.slot, who(t)])).toEqual([["p1", 1, U.staff2]]);
     const skip = await em().findOne(ApprovalHistoryEntity, { request: id, action: ApprovalHistoryAction.Skip });
     expect(skip?.nodeId).toBe("e1");
 
@@ -756,7 +895,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
   it("routes to the parent department head when submitting for a parent unit", async () => {
     const id = await createRequest(U.staff, D.root, { days: 1 });
     await engine.submit(id, U.staff);
-    expect((await pendingTasks(id)).map((t) => t.approver.id)).toEqual([U.director]);
+    expect((await pendingTasks(id)).map((t) => who(t))).toEqual([U.director]);
 
     const preview = await engine.previewForRequest({ requestTypeId, departmentId: D.root, payload: { days: 1 }, requesterId: U.staff });
     expect(preview.workflow?.version).toBe(1);

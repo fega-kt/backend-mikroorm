@@ -19,10 +19,10 @@ export const createApprovalDelegationValidation = delegationShape.refine(endAfte
   path: ["endAt"],
 });
 
-// Không đổi người ủy quyền sau khi tạo; mode không có default khi sửa (giữ nguyên nếu không gửi)
+// Không đổi người ủy quyền / người được ủy quyền / kiểu ủy quyền sau khi tạo (task đã giao theo ủy quyền trỏ tới bản ghi này;
+// đổi kiểu giữa chừng làm quyền trên phiếu đã giao khó lường)
 export const updateApprovalDelegationValidation = delegationShape
-  .omit({ fromUser: true })
-  .extend({ mode: z.enum(ApprovalDelegationMode).optional() })
+  .omit({ fromUser: true, toUser: true, mode: true })
   .partial()
   .refine(endAfterStart, {
     message: "End time must be after start time",

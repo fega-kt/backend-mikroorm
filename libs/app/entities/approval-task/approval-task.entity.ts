@@ -1,4 +1,5 @@
 import { BaseEntity } from "@common/base/base.entity";
+import { PrincipalEntity } from "@core-service/entities/principal";
 import { UserEntity } from "@core-service/entities/user";
 import { Collection, Entity, Enum, Index, ManyToMany, ManyToOne, Property, types } from "@mikro-orm/core";
 import { ApprovalDelegationEntity } from "../approval-delegation/approval-delegation.entity";
@@ -12,7 +13,7 @@ export enum ApprovalTaskStatus {
   Skipped = "skipped",
 }
 
-/** Một lượt chờ duyệt của một người tại một bước (bước song song sinh nhiều task) */
+/** Một suất chờ duyệt tại một bước (bước song song sinh nhiều task, mỗi suất một task) */
 @Entity({ tableName: "approval_tasks" })
 @Index({ properties: ["approver", "status"] })
 @Index({ properties: ["status", "dueAt"] })
@@ -37,15 +38,22 @@ export class ApprovalTaskEntity extends BaseEntity {
   @Property({ type: types.integer, nullable: true })
   slot?: number;
 
-  @ManyToOne({ cascade: [], entity: () => UserEntity })
-  approver!: UserEntity;
+  /** Người duyệt theo quy trình (principal người hoặc nhóm) — không đổi suốt vòng đời task */
+  @ManyToOne({ cascade: [], entity: () => PrincipalEntity, fieldName: "origin_approver_id" })
+  originApprover!: PrincipalEntity;
 
   /**
-   * Người duyệt trước khi task bị chuyển hẳn sang `approver` (gán lại / chuyển cấp; dữ liệu cũ: ủy quyền).
-   * Ủy quyền hiện không chuyển task — người được ủy quyền chỉ được xử lý thay, xem `delegable` / `handoverDelegations`.
+   * Người / nhóm đang giữ task (principal):
+   * - Bằng `originApprover`: giao cho người đó, hoặc nhóm "cùng xử lý" (thành viên hiện tại nào cũng xử lý được).
+   * - Principal người khác: nhóm "chia cho một người" (`assignedFromGroup`), gán lại, chuyển cấp.
+   * Ủy quyền áp dụng khi đây là principal người.
    */
-  @ManyToOne({ cascade: [], entity: () => UserEntity, nullable: true })
-  originalApprover?: UserEntity;
+  @ManyToOne({ cascade: [], entity: () => PrincipalEntity, fieldName: "approver_principal_id" })
+  approver!: PrincipalEntity;
+
+  /** Task nhóm được hệ thống chia ngẫu nhiên cho một thành viên — người đó rời nhóm / bị khóa thì cron chia lại */
+  @Property({ type: types.boolean, default: false })
+  assignedFromGroup: boolean = false;
 
   /** Chụp tùy chọn "cho phép ủy quyền" của bước lúc tạo task — để lọc hộp chờ duyệt bằng SQL */
   @Property({ type: types.boolean, default: false })

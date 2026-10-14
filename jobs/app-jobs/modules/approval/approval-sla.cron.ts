@@ -11,7 +11,7 @@ const LOCK_KEY = "lock:approval:sla";
 const LOCK_TTL_MS = 14 * 60 * 1000;
 const BATCH = 500;
 
-/** Quét task quá hạn: nhắc, chuyển cấp hoặc tự động duyệt theo cấu hình từng bước */
+/** Quét task quá hạn: nhắc, chuyển cấp hoặc tự động duyệt theo cấu hình từng bước; sửa task nhóm không còn người xử lý */
 @Injectable()
 export class ApprovalSlaCron {
   private readonly logger = new Logger(ApprovalSlaCron.name);
@@ -30,6 +30,14 @@ export class ApprovalSlaCron {
       return;
     }
     if (locked === null) this.logger.warn("Redis unavailable — running SLA scan without lock");
+
+    // Task nhóm: người được chia rời nhóm / bị khóa → chia lại; nhóm không còn ai → bỏ suất
+    try {
+      const repaired = await this.engine.repairGroupTasks();
+      if (repaired) this.logger.log(`Repaired ${repaired} group task(s)`);
+    } catch (err) {
+      this.logger.error(`Repairing group tasks failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     const tasks = await this.orm.em.fork().find(
       ApprovalTaskEntity,
