@@ -1,1 +1,1 @@
-export { ApprovalDelegationEntity } from "./approval-delegation.entity";
+export { ApprovalDelegationEntity, ApprovalDelegationMode } from "./approval-delegation.entity";

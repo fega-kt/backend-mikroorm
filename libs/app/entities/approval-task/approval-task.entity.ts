@@ -1,6 +1,7 @@
 import { BaseEntity } from "@common/base/base.entity";
 import { UserEntity } from "@core-service/entities/user";
-import { Entity, Enum, Index, ManyToOne, Property, types } from "@mikro-orm/core";
+import { Collection, Entity, Enum, Index, ManyToMany, ManyToOne, Property, types } from "@mikro-orm/core";
+import { ApprovalDelegationEntity } from "../approval-delegation/approval-delegation.entity";
 import { ApprovalRequestEntity } from "../approval-request/approval-request.entity";
 
 export enum ApprovalTaskStatus {
@@ -39,9 +40,20 @@ export class ApprovalTaskEntity extends BaseEntity {
   @ManyToOne({ cascade: [], entity: () => UserEntity })
   approver!: UserEntity;
 
-  /** Người duyệt gốc theo quy trình khi task đã được ủy quyền / chuyển cấp sang `approver` */
+  /**
+   * Người duyệt trước khi task bị chuyển hẳn sang `approver` (gán lại / chuyển cấp; dữ liệu cũ: ủy quyền).
+   * Ủy quyền hiện không chuyển task — người được ủy quyền chỉ được xử lý thay, xem `delegable` / `handoverDelegations`.
+   */
   @ManyToOne({ cascade: [], entity: () => UserEntity, nullable: true })
   originalApprover?: UserEntity;
+
+  /** Chụp tùy chọn "cho phép ủy quyền" của bước lúc tạo task — để lọc hộp chờ duyệt bằng SQL */
+  @Property({ type: types.boolean, default: false })
+  delegable: boolean = false;
+
+  /** Ủy quyền kiểu "giao phiếu" đang hiệu lực lúc task được tạo: người được ủy quyền xử lý thay đến khi xong */
+  @ManyToMany({ cascade: [], entity: () => ApprovalDelegationEntity, pivotTable: "approval_task_handover_delegations" })
+  handoverDelegations = new Collection<ApprovalDelegationEntity>(this);
 
   @ManyToOne({ cascade: [], entity: () => UserEntity, nullable: true })
   actedBy?: UserEntity;

@@ -5,6 +5,7 @@ import { HttpException, Injectable, Scope } from "@nestjs/common";
 import type { InboxFilterDto } from "../../controllers/approval-task/approval-task.validation";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalAction, ApprovalEngineService } from "../approval-engine/approval-engine.service";
+import { delegatedTaskFilter } from "../approval-engine/delegation-access";
 
 @Injectable({ scope: Scope.REQUEST })
 export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
@@ -20,15 +21,16 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
   async getInbox(filter: InboxFilterDto) {
     const userId = this.getCurrentUser().id;
     const { page, limit, tab, requestTypeId, search } = filter;
+    const pendingMine = await this.pendingFilter(userId);
     const byTab: Record<typeof tab, FilterQuery<ApprovalTaskEntity>> = {
-      pending: { approver: userId, status: ApprovalTaskStatus.Pending },
+      pending: pendingMine,
       done: { actedBy: userId, status: { $ne: ApprovalTaskStatus.Pending } },
-      all: { $or: [{ approver: userId }, { actedBy: userId }] },
+      all: { $or: [pendingMine, { approver: userId }, { actedBy: userId }] },
     };
-    const where: FilterQuery<ApprovalTaskEntity> = { ...(byTab[tab] as object), request: { deleted: { $ne: true } } };
-    const requestWhere = where.request as Record<string, unknown>;
+    const requestWhere: Record<string, unknown> = { deleted: { $ne: true } };
     if (requestTypeId) requestWhere.requestType = requestTypeId;
     if (search) requestWhere.$or = [{ title: { $ilike: `%${search}%` } }, { code: { $ilike: `%${search}%` } }];
+    const where: FilterQuery<ApprovalTaskEntity> = { $and: [byTab[tab], { request: requestWhere }] };
 
     const [tasks, total] = await this.repo.findAndCount(where, {
       populate: [
@@ -37,6 +39,7 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
         "request.formVersion",
         "request.requester",
         "request.department",
+        "approver",
         "originalApprover",
       ],
       orderBy:
@@ -55,6 +58,8 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
       comment: t.comment,
       createdAt: t.createdAt,
       originalApprover: t.originalApprover ? { id: t.originalApprover.id, fullName: t.originalApprover.fullName } : null,
+      /** Task của người khác mà tôi xử lý / được xử lý thay theo ủy quyền */
+      onBehalfOf: t.approver.id !== userId ? { id: t.approver.id, fullName: t.approver.fullName } : null,
       request: {
         id: t.request.id,
         code: t.request.code,
@@ -76,12 +81,15 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
   }
 
   async countPending() {
-    const total = await this.repo.count({
-      approver: this.getCurrentUser().id,
-      status: ApprovalTaskStatus.Pending,
-      request: { deleted: { $ne: true } },
-    });
+    const filter = await this.pendingFilter(this.getCurrentUser().id);
+    const total = await this.repo.count({ $and: [filter, { request: { deleted: { $ne: true } } }] });
     return { total };
+  }
+
+  /** Task đang chờ tôi xử lý: của chính tôi, hoặc tôi được ủy quyền xử lý thay */
+  private async pendingFilter(userId: string): Promise<FilterQuery<ApprovalTaskEntity>> {
+    const delegated = await delegatedTaskFilter(this.repo.getEntityManager(), userId);
+    return { status: ApprovalTaskStatus.Pending, $or: [{ approver: userId }, ...delegated] };
   }
 
   async act(requestId: string, action: ApprovalAction, comment?: string) {
