@@ -1,8 +1,8 @@
 import { BaseEntity } from "@common/base/base.entity";
 import { Entity, Enum, Index, ManyToOne, Property, types } from "@mikro-orm/core";
 import type { AttachmentConfig } from "../../services/approval-engine/attachment-config";
-import type { FormSchema } from "../../services/approval-engine/form-schema";
 import { CategoryEntity } from "../category/category.entity";
+import { FormEntity } from "../form/form.entity";
 
 export enum RequestTypeStatus {
   Draft = "draft",
@@ -28,9 +28,10 @@ export class RequestTypeEntity extends BaseEntity {
   @Property({ type: types.text, nullable: true })
   description?: string;
 
-  /** Định nghĩa form của đơn — FE sinh form, BE validate payload khi gửi */
-  @Property({ type: types.json, nullable: true })
-  formSchema?: FormSchema;
+  /** Form (danh sách trường) mà loại này dùng — nhiều loại có thể dùng chung một form. FE sinh ô nhập, BE validate payload khi gửi */
+  @Index()
+  @ManyToOne({ cascade: [], entity: () => FormEntity })
+  form!: FormEntity;
 
   /** Cấu hình 2 khối tệp (Văn bản tờ trình, Tài liệu đính kèm) — null → mặc định */
   @Property({ type: types.json, nullable: true })

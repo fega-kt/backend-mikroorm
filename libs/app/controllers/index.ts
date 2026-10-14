@@ -1,5 +1,6 @@
 import { CategoryController } from "./category";
 import { RequestTypeController } from "./request-type";
+import { FormController } from "./form";
 import { HomeReportController } from "./home";
 import { ApprovalWorkflowController } from "./approval-workflow";
 import { ApprovalRequestController } from "./approval-request";
@@ -10,6 +11,7 @@ import { EmailTemplateController } from "./email-template";
 export {
   CategoryController,
   RequestTypeController,
+  FormController,
   HomeReportController,
   ApprovalWorkflowController,
   ApprovalRequestController,
@@ -21,6 +23,7 @@ export {
 export const appControllers = [
   CategoryController,
   RequestTypeController,
+  FormController,
   HomeReportController,
   ApprovalWorkflowController,
   ApprovalRequestController,

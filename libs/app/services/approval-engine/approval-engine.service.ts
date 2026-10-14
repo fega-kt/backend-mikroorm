@@ -12,10 +12,9 @@ import { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-version";
-import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
 import { ApprovalEventType, type ApprovalEventMessage } from "./approval-events";
 import { ApproverResolver } from "./approver-resolver";
-import { resolveAttachmentConfig, validateFileBlock } from "./attachment-config";
+import { resolveAttachmentConfig, validateFileBlock, type AttachmentConfig } from "./attachment-config";
 import {
   NodeType,
   NotifyChannel,
@@ -28,7 +27,7 @@ import {
   type WaitNode,
   type WorkflowDefinition,
 } from "./definition.schema";
-import { buildPayloadValidator } from "./form-schema";
+import { buildPayloadValidator, type FormSchema } from "./form-schema";
 import { findStartNode, walkFrom } from "./graph-walker";
 
 export enum ApprovalAction {
@@ -104,18 +103,18 @@ export class ApprovalEngineService {
         throw new ConflictException("Request has already been submitted");
       }
 
-      const requestType = await tx.em.findOne(RequestTypeEntity, { id: request.requestType.id, deleted: { $ne: true } });
-      if (requestType?.status !== RequestTypeStatus.Published) {
-        throw new BadRequestException("Request type is not available");
-      }
-      request.payload = this.validatePayload(requestType, request.payload);
-      await this.validateFiles(tx.em, request, requestType);
+      // Không kiểm tra trạng thái / xóa của loại tờ trình lúc gửi: loại có thể bị sửa hoặc xóa sau khi tạo phiếu,
+      // phiếu vẫn gửi và chạy theo thông tin chụp lúc tạo (chỉ lúc TẠO phiếu mới bắt buộc loại còn xuất bản)
+      // Kiểm tra theo form và cấu hình tệp gắn lúc tạo phiếu, không phải bản hiện hành của loại
+      await tx.em.populate(request, ["formVersion", "requestTypeVersion"]);
+      request.payload = this.validatePayload(request.formVersion.formSchema, request.payload);
+      await this.validateFiles(tx.em, request, request.requestTypeVersion.attachmentConfig);
 
       const resubmit = request.status === ApprovalRequestStatus.Returned;
       if (!resubmit || !request.workflowVersion) {
-        request.workflowVersion = await this.pickWorkflowVersion(tx.em, requestType.id, request.department.id);
+        request.workflowVersion = await this.pickWorkflowVersion(tx.em, request.requestType.id, request.department.id);
       }
-      if (!request.code) request.code = await this.nextCode(tx.em, requestType.prefix);
+      if (!request.code) request.code = await this.nextCode(tx.em, request.requestTypeVersion.prefix);
 
       request.round += 1;
       request.status = ApprovalRequestStatus.Pending;
@@ -564,7 +563,7 @@ export class ApprovalEngineService {
   private async lockRequest(tx: Tx, id: string) {
     const request = await tx.em.findOne(ApprovalRequestEntity, { id, deleted: { $ne: true } }, { lockMode: LockMode.PESSIMISTIC_WRITE });
     if (!request) throw new NotFoundException("Request not found");
-    await tx.em.populate(request, ["requestType"]);
+    await tx.em.populate(request, ["requestTypeVersion"]);
     return request;
   }
 
@@ -580,9 +579,9 @@ export class ApprovalEngineService {
   }
 
   /** Văn bản tờ trình + tài liệu đính kèm phải đúng cấu hình của loại tờ trình */
-  private async validateFiles(em: EntityManager, request: ApprovalRequestEntity, requestType: RequestTypeEntity) {
+  private async validateFiles(em: EntityManager, request: ApprovalRequestEntity, attachmentConfig: AttachmentConfig | null | undefined) {
     await em.populate(request, ["documents", "attachments"]);
-    const config = resolveAttachmentConfig(requestType.attachmentConfig);
+    const config = resolveAttachmentConfig(attachmentConfig);
     const errors = [
       ...validateFileBlock(config.documents, request.documents.getItems()).map((e) => ({ block: "documents", ...e })),
       ...validateFileBlock(config.attachments, request.attachments.getItems()).map((e) => ({ block: "attachments", ...e })),
@@ -593,9 +592,9 @@ export class ApprovalEngineService {
     }
   }
 
-  private validatePayload(requestType: RequestTypeEntity, payload: Record<string, unknown>) {
-    if (!requestType.formSchema?.length) return payload ?? {};
-    const result = buildPayloadValidator(requestType.formSchema).safeParse(payload ?? {});
+  private validatePayload(formSchema: FormSchema | null | undefined, payload: Record<string, unknown>) {
+    if (!formSchema?.length) return payload ?? {};
+    const result = buildPayloadValidator(formSchema).safeParse(payload ?? {});
     if (!result.success) {
       throw new BadRequestException({ message: "Invalid request data", errors: result.error.issues });
     }
@@ -702,7 +701,7 @@ export class ApprovalEngineService {
       requestId: request.id,
       code: request.code,
       title: request.title,
-      requestTypeName: request.requestType?.name,
+      requestTypeName: request.requestTypeVersion.name,
       requesterId: request.requester.id,
       recipientIds,
       actorId: tx.actorId ?? undefined,

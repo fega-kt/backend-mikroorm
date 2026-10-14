@@ -1,7 +1,7 @@
 import { PermissionType } from "@common/base/permission-type.enum";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import { ZodValidationPipe } from "@common/pipes";
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
 import { z } from "zod";
 import { RequestTypeService } from "../../services/request-type/request-type.service";
 import { createRequestTypeValidation, requestTypeFilterValidation, updateRequestTypeValidation } from "./request-type.validation";
@@ -28,7 +28,26 @@ export class RequestTypeController {
     return this.requestTypeService.getRequestTypeById(id);
   }
 
-  @Patch(":id")
+  @Get(":id/versions")
+  @Permissions(PermissionType.ViewRequestTypeDetail)
+  versions(@Param("id") id: string) {
+    return this.requestTypeService.getVersions(id);
+  }
+
+  @Get(":id/versions/:versionId")
+  @Permissions(PermissionType.ViewRequestTypeDetail)
+  version(@Param("id") id: string, @Param("versionId") versionId: string) {
+    return this.requestTypeService.getVersion(id, versionId);
+  }
+
+  @Post(":id/versions/:versionId/restore")
+  @Permissions(PermissionType.UpdateRequestType)
+  restore(@Param("id") id: string, @Param("versionId") versionId: string) {
+    return this.requestTypeService.restoreVersion(id, versionId);
+  }
+
+  /** PUT: thay thế toàn bộ phần sửa được (mã không đổi); trường tùy chọn vắng mặt = rỗng */
+  @Put(":id")
   @Permissions(PermissionType.UpdateRequestType)
   update(
     @Param("id") id: string,

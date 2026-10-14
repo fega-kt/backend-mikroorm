@@ -31,7 +31,14 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
     if (search) requestWhere.$or = [{ title: { $ilike: `%${search}%` } }, { code: { $ilike: `%${search}%` } }];
 
     const [tasks, total] = await this.repo.findAndCount(where, {
-      populate: ["request", "request.requestType", "request.requester", "request.department", "originalApprover"],
+      populate: [
+        "request",
+        "request.requestTypeVersion",
+        "request.formVersion",
+        "request.requester",
+        "request.department",
+        "originalApprover",
+      ],
       orderBy:
         tab === "pending" ? { dueAt: "ASC NULLS LAST", createdAt: "ASC" } : tab === "done" ? { actedAt: "DESC" } : { createdAt: "DESC" },
       limit,
@@ -56,7 +63,11 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
         priority: t.request.priority,
         payload: t.request.payload,
         submittedAt: t.request.submittedAt,
-        requestType: { id: t.request.requestType.id, name: t.request.requestType.name, formSchema: t.request.requestType.formSchema ?? [] },
+        requestType: {
+          id: t.request.requestType.id,
+          name: t.request.requestTypeVersion.name,
+          formSchema: t.request.formVersion.formSchema ?? [],
+        },
         requester: { id: t.request.requester.id, fullName: t.request.requester.fullName, avatar: t.request.requester.avatar },
         department: { id: t.request.department.id, name: t.request.department.name },
       },

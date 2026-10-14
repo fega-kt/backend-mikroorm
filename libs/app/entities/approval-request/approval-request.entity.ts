@@ -5,6 +5,8 @@ import { UserEntity } from "@core-service/entities/user";
 import { Collection, Entity, Enum, Index, ManyToMany, ManyToOne, Property, types } from "@mikro-orm/core";
 import { ApprovalWorkflowVersionEntity } from "../approval-workflow-version/approval-workflow-version.entity";
 import { RequestTypeEntity } from "../request-type/request-type.entity";
+import { RequestTypeVersionEntity } from "../request-type-version/request-type-version.entity";
+import { FormVersionEntity } from "../form-version/form-version.entity";
 
 export enum ApprovalRequestStatus {
   Draft = "draft",
@@ -37,6 +39,17 @@ export class ApprovalRequestEntity extends BaseEntity {
   @Index()
   @ManyToOne({ cascade: [], entity: () => RequestTypeEntity })
   requestType!: RequestTypeEntity;
+
+  /**
+   * Phiên bản cấu hình của loại tờ trình (tên, tiền tố, cấu hình tệp…) gắn cứng lúc tạo phiếu: loại bị sửa hay xóa sau đó
+   * không ảnh hưởng phiếu đã tạo — phiếu vẫn hiển thị, gửi và chạy bình thường; chỉ phiếu mới mới không chọn được loại đã xóa.
+   */
+  @ManyToOne({ cascade: [], entity: () => RequestTypeVersionEntity })
+  requestTypeVersion!: RequestTypeVersionEntity;
+
+  /** Phiên bản form gắn cứng lúc tạo phiếu; sửa form trong cài đặt không ảnh hưởng phiếu đã tạo */
+  @ManyToOne({ cascade: [], entity: () => FormVersionEntity })
+  formVersion!: FormVersionEntity;
 
   @ManyToOne({ cascade: [], entity: () => UserEntity })
   requester!: UserEntity;

@@ -16,12 +16,15 @@ import type {
   PreviewFlowDto,
   UpdateApprovalRequestDto,
 } from "../../controllers/approval-request/approval-request.validation";
-import { ApprovalHistoryEntity } from "../../entities/approval-history";
+import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-version";
 import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
+import { ensureLatestFormVersion } from "../form/form-version";
+import { ensureLatestTypeVersion } from "../request-type/request-type-version";
+import { buildChange, diffFiles, diffPayload, type FieldChange, type FileChangeItem } from "./request-change-log";
 import { buildRequestFileFolder, RequestFileCategory } from "./request-file.constants";
 import { ApprovalEngineService } from "../approval-engine/approval-engine.service";
 import { ApproverResolver } from "../approval-engine/approver-resolver";
@@ -50,9 +53,10 @@ const LIST_FIELDS = [
   "createdAt",
   "updatedAt",
   "currentNodeIds",
-  "requestType.id",
-  "requestType.code",
-  "requestType.name",
+  "requestType",
+  "requestTypeVersion.id",
+  "requestTypeVersion.code",
+  "requestTypeVersion.name",
   "requester.id",
   "requester.fullName",
   "requester.avatar",
@@ -80,7 +84,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const types = await this.em.find(
       RequestTypeEntity,
       { status: RequestTypeStatus.Published, deleted: { $ne: true } },
-      { populate: ["category"], orderBy: { name: "ASC" } },
+      { populate: ["category", "form"], orderBy: { name: "ASC" } },
     );
     const workflows = await this.em.find(
       ApprovalWorkflowEntity,
@@ -95,7 +99,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       prefix: t.prefix,
       description: t.description,
       category: t.category ? { id: t.category.id, name: t.category.name } : null,
-      formSchema: t.formSchema ?? [],
+      formSchema: t.form.formSchema ?? [],
       attachmentConfig: resolveAttachmentConfig(t.attachmentConfig),
       hasWorkflow: withWorkflow.has(t.id),
     }));
@@ -121,11 +125,15 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
 
   async createRequest(data: CreateApprovalRequestDto) {
     const user = this.getCurrentUser();
-    const requestType = await this.em.findOne(RequestTypeEntity, {
-      id: data.requestType,
-      status: RequestTypeStatus.Published,
-      deleted: { $ne: true },
-    });
+    const requestType = await this.em.findOne(
+      RequestTypeEntity,
+      {
+        id: data.requestType,
+        status: RequestTypeStatus.Published,
+        deleted: { $ne: true },
+      },
+      { populate: ["form"] },
+    );
     if (!requestType) throw new BadRequestException("Request type is not available");
     const departmentId = await this.resolveSubmitUnit(data.department);
 
@@ -134,10 +142,15 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       throw new ConflictException("Request id already exists");
     }
 
+    // Gắn cứng phiên bản loại tờ trình (tên, tiền tố, cấu hình tệp…) và phiên bản form lúc này: sửa / xóa loại hay form sau đó không ảnh hưởng phiếu này
+    const requestTypeVersion = await ensureLatestTypeVersion(this.em, requestType, this.getDefaultValuesForCreate());
+    const formVersion = await ensureLatestFormVersion(this.em, requestType.form, this.getDefaultValuesForCreate());
     const request = this.em.create(ApprovalRequestEntity, {
       ...(data.id ? { id: data.id } : {}),
       title: data.title,
       requestType,
+      requestTypeVersion,
+      formVersion,
       requester: this.em.getReference(UserEntity, user.id),
       department: this.em.getReference(DepartmentEntity, departmentId),
       payload: data.payload,
@@ -147,6 +160,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     });
     await this.setFiles(request, RequestFileCategory.Documents, data.documents);
     await this.setFiles(request, RequestFileCategory.Attachments, data.attachments);
+    this.recordHistory(request, ApprovalHistoryAction.Create);
     await this.em.flush();
 
     if (data.submit) await this.engine.submit(request.id, user.id);
@@ -155,12 +169,44 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
 
   async updateRequest(id: string, data: UpdateApprovalRequestDto) {
     const request = await this.getOwnEditable(id);
-    if (data.title !== undefined) request.title = data.title;
-    if (data.payload !== undefined) request.payload = data.payload;
-    if (data.priority !== undefined) request.priority = data.priority;
-    if (data.department) request.department = this.em.getReference(DepartmentEntity, await this.resolveSubmitUnit(data.department));
-    if (data.documents) await this.setFiles(request, RequestFileCategory.Documents, data.documents);
-    if (data.attachments) await this.setFiles(request, RequestFileCategory.Attachments, data.attachments);
+    const changes: FieldChange[] = [];
+    if (data.title !== undefined) {
+      if (data.title !== request.title) changes.push(buildChange("title", request.title, data.title));
+      request.title = data.title;
+    }
+    if (data.payload !== undefined) {
+      changes.push(...diffPayload(request.payload ?? {}, data.payload));
+      request.payload = data.payload;
+    }
+    if (data.priority !== undefined) {
+      if (data.priority !== request.priority) changes.push(buildChange("priority", request.priority, data.priority));
+      request.priority = data.priority;
+    }
+    if (data.department) {
+      const departmentId = await this.resolveSubmitUnit(data.department);
+      if (departmentId !== request.department.id) {
+        const names = await this.departmentBriefs([request.department.id, departmentId]);
+        changes.push({ field: "department", from: names.get(request.department.id) ?? null, to: names.get(departmentId) ?? null });
+      }
+      request.department = this.em.getReference(DepartmentEntity, departmentId);
+    }
+
+    const files = { added: [] as FileChangeItem[], removed: [] as FileChangeItem[] };
+    for (const [category, ids] of [
+      [RequestFileCategory.Documents, data.documents],
+      [RequestFileCategory.Attachments, data.attachments],
+    ] as const) {
+      if (!ids) continue;
+      const before = this.fileChangeItems(request, category);
+      await this.setFiles(request, category, ids);
+      const diff = diffFiles(before, this.fileChangeItems(request, category));
+      files.added.push(...diff.added);
+      files.removed.push(...diff.removed);
+    }
+
+    if (changes.length) this.recordHistory(request, ApprovalHistoryAction.Update, { changes });
+    if (files.added.length) this.recordHistory(request, ApprovalHistoryAction.FileAdd, { files: files.added });
+    if (files.removed.length) this.recordHistory(request, ApprovalHistoryAction.FileRemove, { files: files.removed });
     this.em.assign(request, this.getDefaultValuesForUpdate());
     await this.em.flush();
     return { id };
@@ -237,7 +283,18 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const user = this.getCurrentUser();
     const request = await this.repo.findOne(
       { id, deleted: { $ne: true } },
-      { populate: ["requestType", "requester", "department", "documents", "attachments", "workflowVersion", "workflowVersion.workflow"] },
+      {
+        populate: [
+          "requestTypeVersion",
+          "formVersion",
+          "requester",
+          "department",
+          "documents",
+          "attachments",
+          "workflowVersion",
+          "workflowVersion.workflow",
+        ],
+      },
     );
     if (!request) throw new NotFoundException("Request not found");
 
@@ -283,10 +340,11 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       updatedAt: request.updatedAt,
       requestType: {
         id: request.requestType.id,
-        code: request.requestType.code,
-        name: request.requestType.name,
-        formSchema: request.requestType.formSchema ?? [],
-        attachmentConfig: resolveAttachmentConfig(request.requestType.attachmentConfig),
+        code: request.requestTypeVersion.code,
+        name: request.requestTypeVersion.name,
+        // Form và cấu hình tệp gắn lúc tạo phiếu, không phải bản hiện hành của loại tờ trình
+        formSchema: request.formVersion.formSchema ?? [],
+        attachmentConfig: resolveAttachmentConfig(request.requestTypeVersion.attachmentConfig),
       },
       requester: userBrief(request.requester),
       department: { id: request.department.id, name: request.department.name },
@@ -349,10 +407,19 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       page,
       limit,
       fields: [...LIST_FIELDS],
-      populate: ["requestType", "requester", "department"],
+      populate: ["requestTypeVersion", "requester", "department"],
       sort: { updatedAt: "DESC" },
     });
-    return { ...result, data: serialize(result.data, { populate: ["requestType", "requester", "department"], forceObject: true }) };
+    const rows = serialize(result.data, { populate: ["requestTypeVersion", "requester", "department"], forceObject: true });
+    return { ...result, data: rows.map((row) => this.withRequestTypeBrief(row as unknown as Record<string, unknown>)) };
+  }
+
+  /** Giữ nguyên dạng `requestType: { id, code, name }` cho FE, nhưng code / name lấy từ bản chụp lúc tạo phiếu */
+  private withRequestTypeBrief(row: Record<string, unknown>) {
+    const { requestTypeVersion, requestType, ...rest } = row;
+    const id = requestType && typeof requestType === "object" ? (requestType as { id: string }).id : requestType;
+    const version = requestTypeVersion as { code?: string; name?: string } | undefined;
+    return { ...rest, requestType: { id, code: version?.code, name: version?.name } };
   }
 
   private async getOwnEditable(id: string) {
@@ -363,6 +430,27 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       throw new ConflictException("Request can no longer be edited");
     }
     return request;
+  }
+
+  /** Ghi một dòng vào timeline của phiếu; được flush cùng thao tác gọi nó (cùng transaction) */
+  private recordHistory(request: ApprovalRequestEntity, action: ApprovalHistoryAction, data?: Record<string, unknown>) {
+    this.em.create(ApprovalHistoryEntity, {
+      request,
+      action,
+      actor: this.em.getReference(UserEntity, this.getCurrentUser().id),
+      data,
+      ...this.getDefaultValuesForCreate(),
+    });
+  }
+
+  private fileChangeItems(request: ApprovalRequestEntity, block: RequestFileCategory): FileChangeItem[] {
+    return request[block].getItems().map((f) => ({ id: f.id, filename: f.filename, block }));
+  }
+
+  /** Tên phòng ban lúc ghi lịch sử: đổi tên phòng về sau thì dòng lịch sử cũ vẫn đọc đúng như thời điểm sửa */
+  private async departmentBriefs(ids: string[]) {
+    const departments = await this.em.find(DepartmentEntity, { id: { $in: ids } }, { fields: ["id", "name"] });
+    return new Map(departments.map((d) => [d.id, { id: d.id, name: d.name }]));
   }
 
   private async setFiles(request: ApprovalRequestEntity, field: RequestFileCategory, ids: string[]) {
