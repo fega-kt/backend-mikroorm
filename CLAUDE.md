@@ -92,6 +92,8 @@ validation/<name>.validation.ts   ← Zod schemas (not class-validator)
 
 To register a new module: import into `src/app.imports.ts` in the `modules` array.
 
+Controller route = class name without the `Controller` suffix, in kebab-case: `ApprovalTaskController` → `@Controller("approval-task")`, `HomeReportController` → `@Controller("home-report")`. Keep the frontend service `endpoint` identical so an API path leads straight to its controller.
+
 ### BaseEntity & BaseService
 
 All entities extend `BaseEntity` (`src/common/base/base.entity.ts`):
@@ -213,7 +215,7 @@ Errors handled by `HttpExceptionFilter` with `ResponseCode` enum (`src/common/ex
 1. Create entity extending `BaseEntity`, use `@Entity({ tableName: '<plural>' })`
 2. Create Zod schemas in `validation/`
 3. Create service with `Scope.REQUEST`, extending `BaseService<Entity>`
-4. Create controller with `@Permissions()` decorator on each endpoint
+4. Create controller with `@Permissions()` decorator on each endpoint; route = kebab-case class name without `Controller` (`ApprovalTaskController` → `approval-task`)
 5. Add permissions to `PermissionType` enum
 6. Create `.module.ts` with `MikroOrmModule.forFeature([Entity])`
 7. Import module into `src/app.imports.ts`
