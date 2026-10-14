@@ -8,7 +8,7 @@ import { ApprovalTaskService } from "../../services/approval-task/approval-task.
 import { actionValidation, bulkApproveValidation, inboxFilterValidation, reassignValidation } from "./approval-task.validation";
 
 /** Duyệt đơn — người thao tác phải là người duyệt của bước hiện tại (engine kiểm tra) */
-@Controller("approval")
+@Controller("approval-task")
 export class ApprovalTaskController {
   constructor(private readonly taskService: ApprovalTaskService) {}
 
