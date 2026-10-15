@@ -63,9 +63,18 @@ export const cancelApprovalRequestValidation = z.object({
   comment: z.string().trim().max(2000).optional(),
 });
 
+/** Chia sẻ tờ trình (chỉ xem) cho người / nhóm (principal) */
+export const shareApprovalRequestValidation = z.object({
+  principals: z.array(z.string().trim().min(1)).min(1, "Select at least one recipient").max(50),
+  message: z.string().trim().max(1000).optional(),
+  sendEmail: z.boolean().default(true),
+  sendNotification: z.boolean().default(true),
+});
+
 export type CreateApprovalRequestDto = z.infer<typeof createApprovalRequestValidation>;
 export type UpdateApprovalRequestDto = z.infer<typeof updateApprovalRequestValidation>;
 export type PreviewFlowDto = z.infer<typeof previewFlowValidation>;
+export type ShareApprovalRequestDto = z.infer<typeof shareApprovalRequestValidation>;
 export type ApprovalRequestFilterDto = z.infer<typeof approvalRequestFilterValidation>;
 
 export const presignRequestFileValidation = z.object({

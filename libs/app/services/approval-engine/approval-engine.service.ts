@@ -10,6 +10,7 @@ import { ApprovalCounterEntity } from "../../entities/approval-counter";
 import { ApprovalDelegationMode } from "../../entities/approval-delegation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
+import { ApprovalShareEntity } from "../../entities/approval-share";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-version";
@@ -280,6 +281,67 @@ export class ApprovalEngineService {
         { comment },
       );
       return request;
+    });
+  }
+
+  /**
+   * Chia sẻ tờ trình (chỉ xem) cho người / nhóm: ghi lịch sử, thông báo trong ứng dụng và email (cùng outbox với các event khác).
+   * Quyền chia sẻ do caller kiểm tra; ở đây chỉ chặn bản nháp và người nhận không hợp lệ. Principal đã được chia sẻ thì bỏ qua.
+   */
+  async share(requestId: string, actorId: string, input: { principalIds: string[]; message?: string; inApp: boolean; email: boolean }) {
+    return this.run(actorId, async (tx) => {
+      const request = await this.lockRequest(tx, requestId);
+      if (request.status === ApprovalRequestStatus.Draft) throw new ConflictException("Draft requests cannot be shared");
+
+      const ids = [...new Set(input.principalIds)];
+      const principals = await tx.em.find(PrincipalEntity, { id: { $in: ids }, deleted: { $ne: true } }, { populate: ["user", "group"] });
+      if (principals.length !== ids.length) throw new BadRequestException("Some recipients are invalid");
+
+      const existing = await tx.em.find(
+        ApprovalShareEntity,
+        { request: requestId, principal: { $in: ids }, deleted: { $ne: true } },
+        { fields: ["principal"] },
+      );
+      const shared = new Set(existing.map((row) => row.principal.id));
+      const fresh = principals.filter((p) => !shared.has(p.id));
+      if (!fresh.length) return { shared: 0 };
+
+      const message = input.message?.trim() || undefined;
+      for (const principal of fresh) {
+        tx.em.create(ApprovalShareEntity, { request, principal, message, ...this.audit(tx) });
+      }
+      this.history(tx, request, ApprovalHistoryAction.Share, {
+        comment: message,
+        data: { principals: fresh.map((p) => ({ id: p.id, name: p.user?.fullName ?? p.name })) },
+      });
+
+      // Người dùng nhận trực tiếp, hoặc các thành viên đang hoạt động của nhóm
+      const resolver = new ApproverResolver(tx.em);
+      const recipients = (await Promise.all(fresh.map((p) => (p.user ? [p.user.id] : resolver.groupMembers(p.id))))).flat();
+      await this.notify(tx, request, recipients, NotificationType.APPROVAL_SHARED, ApprovalEventType.Shared, {
+        message,
+        inApp: input.inApp,
+        email: input.email,
+      });
+      return { shared: fresh.length };
+    });
+  }
+
+  /** Thu hồi một lượt chia sẻ; người nhận không xem được tờ trình nữa (trừ khi còn lý do khác: người tạo, người duyệt, nhóm khác...) */
+  async unshare(requestId: string, shareId: string, actorId: string) {
+    return this.run(actorId, async (tx) => {
+      const request = await this.lockRequest(tx, requestId);
+      const share = await tx.em.findOne(
+        ApprovalShareEntity,
+        { id: shareId, request: requestId, deleted: { $ne: true } },
+        { populate: ["principal", "principal.user"] },
+      );
+      if (!share) throw new NotFoundException("Share not found");
+      this.history(tx, request, ApprovalHistoryAction.Unshare, {
+        data: { principals: [{ id: share.principal.id, name: share.principal.user?.fullName ?? share.principal.name }] },
+      });
+      // Xóa mềm: giữ dấu vết ai chia sẻ cho ai, lúc nào
+      Object.assign(share, { deleted: true, updatedBy: this.audit(tx).updatedBy });
     });
   }
 

@@ -25,6 +25,10 @@ export enum ApprovalHistoryAction {
   FileAdd = "file_add",
   /** Gỡ tệp — data.files: { id, filename, block }[] */
   FileRemove = "file_remove",
+  /** Chia sẻ tờ trình (chỉ xem) — data.principals: { id, name }[]; comment: lời nhắn */
+  Share = "share",
+  /** Thu hồi chia sẻ — data.principals: { id, name }[] */
+  Unshare = "unshare",
 }
 
 /** Nhật ký thao tác của đơn — nguồn dữ liệu cho timeline ở màn chi tiết đơn (append-only) */

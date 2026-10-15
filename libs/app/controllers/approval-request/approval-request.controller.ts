@@ -10,6 +10,7 @@ import {
   createApprovalRequestValidation,
   presignRequestFileValidation,
   previewFlowValidation,
+  shareApprovalRequestValidation,
   updateApprovalRequestValidation,
 } from "./approval-request.validation";
 
@@ -79,6 +80,20 @@ export class ApprovalRequestController {
   @Post(":id/submit")
   submit(@Param("id") id: string) {
     return this.requestService.submitRequest(id);
+  }
+
+  /** Chia sẻ tờ trình (chỉ xem) cho người / nhóm; quyền (người trình, người tạo, người duyệt) kiểm tra trong service */
+  @Post(":id/shares")
+  share(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(shareApprovalRequestValidation)) data: z.infer<typeof shareApprovalRequestValidation>,
+  ) {
+    return this.requestService.shareRequest(id, data);
+  }
+
+  @Delete(":id/shares/:shareId")
+  removeShare(@Param("id", ParseUUIDPipe) id: string, @Param("shareId", ParseUUIDPipe) shareId: string) {
+    return this.requestService.removeShare(id, shareId);
   }
 
   @Post(":id/cancel")
