@@ -8,15 +8,14 @@ import { BaseService } from "@common/base/base.service";
 import { IUserResponse } from "@common/base/consts";
 import { SYSTEM_DEPARTMENT_ID, SYSTEM_USER_ID } from "@common/constants/system.constant";
 import { ENV } from "@config/env.config";
-import { MailService } from "@modules/mail/mail.service";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import { ActivityLogAction, ActivityLogSubject, ActivityLogType } from "../../entities/activity-log";
-import { AppSettingType } from "../../entities/app-setting";
 import { DepartmentEntity } from "../../entities/department";
 import { PrincipalEntity, PrincipalType } from "../../entities/principal";
 import { UserEntity } from "../../entities/user";
 import { ActivityLogService } from "../activity-log/activity-log.service";
-import { AppSettingService } from "../app-setting/app-setting.service";
+import { CoreEmailTemplate } from "../email-template/core-email.templates";
+import { SystemMailService } from "../email-template/system-mail.service";
 import { AuthCacheKey, AuthOtpConfig } from "./auth.constants";
 import { AuthSessionService } from "./auth-session.service";
 import {
@@ -38,8 +37,7 @@ export class AuthService extends BaseService<UserEntity> {
     @InjectRepository(UserEntity)
     protected readonly repo: EntityRepository<UserEntity>,
     private readonly supabaseService: SupabaseService,
-    private readonly mailService: MailService,
-    private readonly appSettingService: AppSettingService,
+    private readonly systemMailService: SystemMailService,
     private readonly activityLogService: ActivityLogService,
     private readonly authSessionService: AuthSessionService,
   ) {
@@ -223,33 +221,30 @@ export class AuthService extends BaseService<UserEntity> {
     return rand(lower) + rand(upper) + rand(digits) + rest;
   }
 
-  private async sendLoginOtpMail(email: string, fullName: string, otp: string): Promise<void> {
-    const templateId = await this.appSettingService.getString(AppSettingType.MAIL_TEMPLATE_LOGIN_OTP);
-    if (!templateId) throw new Error("Login OTP mail template ID not configured");
-    await this.mailService.sendWithTemplate({
-      to: email,
-      templateId,
-      variables: { USER_NAME: fullName, OTP: otp, OTP_EXPIRE_MINUTES: AuthOtpConfig.loginOtpTtl / 60 },
+  private sendLoginOtpMail(email: string, fullName: string, otp: string) {
+    return this.systemMailService.send(CoreEmailTemplate.LoginOtp, email, {
+      "user.name": fullName,
+      "user.email": email,
+      "otp.code": otp,
+      "otp.expiresInMinutes": String(AuthOtpConfig.loginOtpTtl / 60),
     });
   }
 
-  private async sendOtpMail(email: string, fullName: string, otp: string): Promise<void> {
-    const templateId = await this.appSettingService.getString(AppSettingType.MAIL_TEMPLATE_FORGOT_PASSWORD_OTP);
-    if (!templateId) throw new Error("Forgot password OTP mail template ID not configured");
-    await this.mailService.sendWithTemplate({
-      to: email,
-      templateId,
-      variables: { USER_NAME: fullName, OTP: otp, OTP_EXPIRE_MINUTES: AuthOtpConfig.forgotPasswordTtl / 60 },
+  private sendOtpMail(email: string, fullName: string, otp: string) {
+    return this.systemMailService.send(CoreEmailTemplate.ForgotPasswordOtp, email, {
+      "user.name": fullName,
+      "user.email": email,
+      "otp.code": otp,
+      "otp.expiresInMinutes": String(AuthOtpConfig.forgotPasswordTtl / 60),
     });
   }
 
-  private async sendNewPasswordMail(email: string, fullName: string, newPassword: string): Promise<void> {
-    const templateId = await this.appSettingService.getString(AppSettingType.MAIL_TEMPLATE_NEW_PASSWORD);
-    if (!templateId) throw new Error("New password mail template ID not configured");
-    await this.mailService.sendWithTemplate({
-      to: email,
-      templateId,
-      variables: { USER_NAME: fullName, NEW_PASSWORD: newPassword },
+  // TODO(security): gửi mật khẩu dạng rõ qua email — tạm chấp nhận, sẽ thay bằng link đặt lại mật khẩu
+  private sendNewPasswordMail(email: string, fullName: string, newPassword: string) {
+    return this.systemMailService.send(CoreEmailTemplate.NewPassword, email, {
+      "user.name": fullName,
+      "user.email": email,
+      "password.new": newPassword,
     });
   }
 
@@ -395,17 +390,8 @@ export class AuthService extends BaseService<UserEntity> {
     return userId;
   }
 
-  private async sendAccountCreatedMail(email: string, fullName: string): Promise<void> {
-    const templateId = await this.appSettingService.getString(AppSettingType.MAIL_TEMPLATE_ACCOUNT_CREATED);
-    if (!templateId) {
-      this.logger.warn("Account created mail template ID not configured");
-      return;
-    }
-    await this.mailService.sendWithTemplate({
-      to: email,
-      templateId,
-      variables: { USER_NAME: fullName, LOGIN_EMAIL: email },
-    });
+  private sendAccountCreatedMail(email: string, fullName: string) {
+    return this.systemMailService.send(CoreEmailTemplate.AccountCreated, email, { "user.name": fullName, "user.email": email });
   }
 
   private verifyHookSignature(
@@ -449,21 +435,9 @@ export class AuthService extends BaseService<UserEntity> {
 
   private async sendPasswordChangedMail(currentUser: IUserResponse): Promise<void> {
     try {
-      const templateId = await this.appSettingService.getString(AppSettingType.MAIL_TEMPLATE_PASSWORD_CHANGED);
-      if (!templateId) {
-        this.logger.warn("Password changed mail template ID not configured");
-        return;
-      }
-
-      const time = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-
-      await this.mailService.sendWithTemplate({
-        to: currentUser.loginName,
-        templateId,
-        variables: {
-          USER_NAME: currentUser.fullName,
-          TIME: time,
-        },
+      await this.systemMailService.send(CoreEmailTemplate.PasswordChanged, currentUser.loginName, {
+        "user.name": currentUser.fullName,
+        "user.email": currentUser.loginName,
       });
     } catch (error) {
       this.logger.error("Failed to send password changed email: " + (error as Error).message);

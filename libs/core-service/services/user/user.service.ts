@@ -5,17 +5,16 @@ import { isAuthApiError } from "@supabase/supabase-js";
 
 import { BaseService } from "@common/base/base.service";
 import { STORAGE_PATH } from "@common/constants/storage.constant";
-import { MailService } from "@modules/mail/mail.service";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import z from "zod";
 import { ActivityLogAction, ActivityLogType } from "../../entities/activity-log";
-import { AppSettingType } from "../../entities/app-setting";
 import { DepartmentEntity, DepartmentStatus } from "../../entities/department";
 import { PrincipalEntity, PrincipalType } from "../../entities/principal";
 import { UserEntity } from "../../entities/user";
 import { ActivityLogService } from "../activity-log/activity-log.service";
 import { LogData, toLogRef } from "../activity-log/activity-log.util";
-import { AppSettingService } from "../app-setting/app-setting.service";
+import { CoreEmailTemplate } from "../email-template/core-email.templates";
+import { SystemMailService } from "../email-template/system-mail.service";
 import { AuthCacheKey } from "../auth/auth.constants";
 import { UploadService } from "../upload/upload.service";
 import {
@@ -35,8 +34,7 @@ export class UserService extends BaseService<UserEntity> {
     private readonly em: EntityManager,
     private readonly uploadService: UploadService,
     private readonly supabaseService: SupabaseService,
-    private readonly mailService: MailService,
-    private readonly appSettingService: AppSettingService,
+    private readonly systemMailService: SystemMailService,
     private readonly activityLogService: ActivityLogService,
   ) {
     super();
@@ -335,16 +333,7 @@ export class UserService extends BaseService<UserEntity> {
     });
   }
 
-  private async sendAccountCreatedMail(email: string, fullName: string): Promise<void> {
-    const templateId = await this.appSettingService.getString(AppSettingType.MAIL_TEMPLATE_ACCOUNT_CREATED);
-    if (!templateId) {
-      this.logger.warn("Account created mail template ID not configured");
-      return;
-    }
-    await this.mailService.sendWithTemplate({
-      to: email,
-      templateId,
-      variables: { USER_NAME: fullName, LOGIN_EMAIL: email },
-    });
+  private sendAccountCreatedMail(email: string, fullName: string) {
+    return this.systemMailService.send(CoreEmailTemplate.AccountCreated, email, { "user.name": fullName, "user.email": email });
   }
 }

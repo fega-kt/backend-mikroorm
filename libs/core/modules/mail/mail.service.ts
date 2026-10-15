@@ -10,10 +10,26 @@ export interface SendMailOptions {
   html: string;
 }
 
-export interface SendMailTemplateOptions {
-  to: string | string[];
-  templateId: string;
-  variables?: Record<string, string | number>;
+/** "Chrome · Windows" từ user-agent — đủ để người nhận nhận ra thiết bị, không hiện chuỗi dài */
+export function describeUserAgent(ua?: string): string {
+  if (!ua) return "unknown";
+  const match = (list: [string, RegExp][]) => list.find(([, re]) => re.test(ua))?.[0];
+  // Thứ tự quan trọng: UA của Edge / Opera cũng chứa "Chrome", của Chrome chứa "Safari", của Android chứa "Linux"
+  const browser = match([
+    ["Edge", /Edg\//],
+    ["Opera", /OPR\//],
+    ["Chrome", /Chrome\//],
+    ["Firefox", /Firefox\//],
+    ["Safari", /Safari\//],
+  ]);
+  const os = match([
+    ["Android", /Android/],
+    ["iOS", /iPhone|iPad|iPod/],
+    ["Windows", /Windows/],
+    ["macOS", /Mac OS X/],
+    ["Linux", /Linux/],
+  ]);
+  return [browser, os].filter(Boolean).join(" · ") || ua.slice(0, 80);
 }
 
 @Injectable({ scope: Scope.REQUEST })
@@ -41,27 +57,11 @@ export class MailService {
     this.logger.log(`Email "${options.subject}" sent to ${options.to}`);
   }
 
-  async sendWithTemplate(options: SendMailTemplateOptions): Promise<void> {
-    const commonVariables: Record<string, string> = {
-      IP: this.request?.ip ?? "unknown",
-      DEVICE: this.request?.headers["user-agent"] ?? "unknown",
-      LOGIN_LINK: ENV.FRONTEND_URL,
+  /** IP + thiết bị của request đang gửi (biến client.* của mẫu email); ngoài request (job) → "unknown" */
+  clientVariables(): Record<string, string> {
+    return {
+      "client.ip": this.request?.ip ?? "unknown",
+      "client.device": describeUserAgent(this.request?.headers?.["user-agent"]),
     };
-
-    const { error } = await this.resend.emails.send({
-      from: ENV.MAIL_FROM,
-      to: options.to,
-      template: {
-        id: options.templateId,
-        variables: { ...commonVariables, ...options.variables },
-      },
-    });
-
-    if (error) {
-      this.logger.error(`Failed to send template email to ${options.to} - "${options.templateId}": ${error.message}`);
-      throw error;
-    }
-
-    this.logger.log(`Template email "${options.templateId}" sent to ${options.to}`);
   }
 }

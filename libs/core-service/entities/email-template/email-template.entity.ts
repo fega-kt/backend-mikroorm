@@ -16,7 +16,7 @@ export class EmailTemplateEntity extends BaseEntity {
   @Property({ type: types.string })
   subject!: string;
 
-  /** HTML (soạn bằng rich text editor), chứa biến {{...}} */
+  /** Toàn bộ email (HTML: header, thẻ, footer), chứa biến {{...}}; khi gửi chỉ bọc thêm nền xám */
   @Property({ type: types.text })
   body!: string;
 

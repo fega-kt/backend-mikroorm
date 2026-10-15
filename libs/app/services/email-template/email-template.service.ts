@@ -1,12 +1,25 @@
 import { BaseService } from "@common/base/base.service";
+import { FrontendPath, frontendUrl } from "@common/constants/frontend-path.constant";
 import { ENV } from "@config/env.config";
+import { EmailTemplateEntity } from "@core-service/entities/email-template";
+import {
+  CORE_EMAIL_TEMPLATES,
+  CORE_REQUIRED_VARIABLES,
+  CORE_TEMPLATE_VARIABLES,
+  isCoreTemplate,
+} from "@core-service/services/email-template/core-email.templates";
+import { brandVariables, type EmailTemplateBody, toSampleVariables } from "@core-service/services/email-template/email-template.render";
+import {
+  EmailTemplateCategory,
+  type EmailTemplateContent,
+  templateCategory,
+} from "@core-service/services/email-template/email-template.resolve";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { ConflictException, Injectable, NotFoundException, Scope } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import type { CreateEmailTemplateDto, UpdateEmailTemplateDto } from "../../controllers/email-template/email-template.validation";
-import { EmailTemplateEntity } from "../../entities/email-template";
-import { isSystemTemplate, SYSTEM_EMAIL_TEMPLATES } from "./email-template.defaults";
-import { renderTemplate, sampleVariables, TEMPLATE_VARIABLES, usedVariables, wrapEmailHtml } from "./email-template.render";
+import { CUSTOM_TEMPLATE_STARTER, isSystemTemplate, SYSTEM_EMAIL_TEMPLATES } from "./email-template.defaults";
+import { renderEmail, TEMPLATE_VARIABLES, type TemplateVariable, usedVariables } from "./email-template.render";
 
 export interface EmailTemplateView {
   code: string;
@@ -14,12 +27,34 @@ export interface EmailTemplateView {
   subject: string;
   body: string;
   description?: string | null;
-  /** Mẫu hệ thống (gắn với sự kiện tờ trình) */
+  /** Nhóm theo tiền tố mã: tờ trình, đăng nhập/tài khoản, hệ thống, tùy chỉnh */
+  category: EmailTemplateCategory;
+  /** Mẫu hệ thống (gắn với một sự kiện) — chỉ sửa / khôi phục, không xoá */
   system: boolean;
   /** Mẫu hệ thống đã được sửa so với mặc định */
   customized: boolean;
+  /** Biến bắt buộc phải còn trong mẫu */
+  requiredVariables: string[];
   updatedAt?: Date;
 }
+
+/** Mặc định của mọi mẫu hệ thống: tờ trình (app) + đăng nhập, mật khẩu, nhắc nhở (core) */
+const DEFAULT_TEMPLATES: EmailTemplateContent[] = [...Object.values(SYSTEM_EMAIL_TEMPLATES), ...Object.values(CORE_EMAIL_TEMPLATES)];
+
+const isBuiltIn = (code: string) => isSystemTemplate(code) || isCoreTemplate(code);
+const defaultOf = (code: string): EmailTemplateContent | undefined =>
+  isSystemTemplate(code) ? SYSTEM_EMAIL_TEMPLATES[code] : isCoreTemplate(code) ? CORE_EMAIL_TEMPLATES[code] : undefined;
+const requiredVariablesOf = (code: string) => (isCoreTemplate(code) ? (CORE_REQUIRED_VARIABLES[code] ?? []) : []);
+
+/** Biến dùng được theo nhóm; mẫu tùy chỉnh dùng ở bước Thông báo của quy trình nên có biến của tờ trình */
+const VARIABLES_BY_CATEGORY: Record<EmailTemplateCategory, TemplateVariable[]> = {
+  [EmailTemplateCategory.Approval]: TEMPLATE_VARIABLES,
+  [EmailTemplateCategory.Custom]: TEMPLATE_VARIABLES,
+  ...CORE_TEMPLATE_VARIABLES,
+};
+
+/** Tiêu đề + nội dung — để kiểm tra biến */
+const templateText = (tpl: EmailTemplateBody) => `${tpl.subject} ${tpl.body}`;
 
 @Injectable({ scope: Scope.REQUEST })
 export class EmailTemplateService extends BaseService<EmailTemplateEntity> {
@@ -38,18 +73,19 @@ export class EmailTemplateService extends BaseService<EmailTemplateEntity> {
   async listTemplates(): Promise<EmailTemplateView[]> {
     const rows = await this.repo.find({ deleted: { $ne: true } }, { orderBy: { name: "ASC" } });
     const byCode = new Map(rows.map((r) => [r.code, r]));
-    const system = Object.values(SYSTEM_EMAIL_TEMPLATES).map((tpl) => {
+    const system = DEFAULT_TEMPLATES.map((tpl) => {
       const row = byCode.get(tpl.code);
-      return row ? this.view(row) : { ...tpl, system: true, customized: false };
+      return row ? this.view(row) : this.defaultView(tpl);
     });
-    const custom = rows.filter((r) => !isSystemTemplate(r.code)).map((r) => this.view(r));
+    const custom = rows.filter((r) => !isBuiltIn(r.code)).map((r) => this.view(r));
     return [...system, ...custom];
   }
 
   async getTemplate(code: string): Promise<EmailTemplateView> {
     const row = await this.repo.findOne({ code, deleted: { $ne: true } });
     if (row) return this.view(row);
-    if (isSystemTemplate(code)) return { ...SYSTEM_EMAIL_TEMPLATES[code], system: true, customized: false };
+    const tpl = defaultOf(code);
+    if (tpl) return this.defaultView(tpl);
     throw new NotFoundException("Email template not found");
   }
 
@@ -68,13 +104,14 @@ export class EmailTemplateService extends BaseService<EmailTemplateEntity> {
 
   /** Sửa mẫu tùy chỉnh, hoặc lưu bản đè cho mẫu hệ thống */
   async updateTemplate(code: string, data: UpdateEmailTemplateDto) {
+    this.assertRequiredVariables(code, data);
     const row = await this.repo.findOne({ code });
     if (row) {
       this.em.assign(row, { ...data, deleted: false, ...this.getDefaultValuesForUpdate() });
       await this.em.flush();
       return this.view(row);
     }
-    if (!isSystemTemplate(code)) throw new NotFoundException("Email template not found");
+    if (!isBuiltIn(code)) throw new NotFoundException("Email template not found");
     return this.view(await this.addOne({ code, ...data, description: data.description ?? undefined }));
   }
 
@@ -82,10 +119,10 @@ export class EmailTemplateService extends BaseService<EmailTemplateEntity> {
   async deleteTemplate(code: string) {
     const row = await this.repo.findOne({ code, deleted: { $ne: true } });
     if (!row) {
-      if (isSystemTemplate(code)) return { code, reset: true };
+      if (isBuiltIn(code)) return { code, reset: true };
       throw new NotFoundException("Email template not found");
     }
-    if (isSystemTemplate(code)) {
+    if (isBuiltIn(code)) {
       await this.em.removeAndFlush(row);
       return { code, reset: true };
     }
@@ -94,30 +131,65 @@ export class EmailTemplateService extends BaseService<EmailTemplateEntity> {
   }
 
   variables() {
-    return TEMPLATE_VARIABLES;
+    return VARIABLES_BY_CATEGORY;
   }
 
-  /** Xem trước với dữ liệu mẫu; trả về các biến không tồn tại để cảnh báo */
-  preview(subject: string, body: string) {
-    const vars = sampleVariables();
-    const known = new Set(TEMPLATE_VARIABLES.map((v) => v.key));
-    const unknown = usedVariables(`${subject} ${body}`).filter((key) => !known.has(key) && !key.startsWith("payload."));
+  /** Tên app, logo, link — để màn soạn vẽ header / footer giống email thật */
+  brand() {
+    return { appName: ENV.APP_NAME, logoUrl: brandVariables()["app.logo"], appLink: ENV.FRONTEND_URL };
+  }
+
+  /** Nội dung khởi đầu khi tạo mẫu tùy chỉnh */
+  starter() {
+    return { body: CUSTOM_TEMPLATE_STARTER };
+  }
+
+  /**
+   * Xem trước với dữ liệu mẫu theo nhóm của `code` (không có = mẫu tùy chỉnh); trả về các biến không tồn tại
+   * để cảnh báo
+   */
+  preview(template: EmailTemplateBody, code?: string) {
+    const category = code ? templateCategory(code) : EmailTemplateCategory.Custom;
+    const variables = VARIABLES_BY_CATEGORY[category];
+    const known = new Set(variables.map((v) => v.key));
+    const withPayload = category === EmailTemplateCategory.Approval || category === EmailTemplateCategory.Custom;
+    const unknown = usedVariables(templateText(template)).filter((key) => !known.has(key) && !(withPayload && key.startsWith("payload.")));
+    const vars = {
+      ...toSampleVariables(variables),
+      ...(withPayload && { "request.link": frontendUrl(FrontendPath.ApprovalRequests, "preview") }),
+    };
+    return { ...renderEmail(template, vars), unknownVariables: unknown };
+  }
+
+  /** Mẫu OTP / mật khẩu mới phải còn biến mang mã — xoá mất thì email gửi đi vô dụng */
+  private assertRequiredVariables(code: string, data: UpdateEmailTemplateDto) {
+    const used = new Set(usedVariables(templateText(data)));
+    const missing = requiredVariablesOf(code).filter((key) => !used.has(key));
+    if (missing.length) throw new BadRequestException(`Template must contain ${missing.map((key) => `{{${key}}}`).join(", ")}`);
+  }
+
+  private defaultView(tpl: EmailTemplateContent): EmailTemplateView {
     return {
-      subject: renderTemplate(subject, vars, { html: false }),
-      html: wrapEmailHtml(renderTemplate(body, vars, { html: true }), `${ENV.FRONTEND_URL.replace(/\/$/, "")}/approval/requests/preview`),
-      unknownVariables: unknown,
+      ...tpl,
+      category: templateCategory(tpl.code),
+      system: true,
+      customized: false,
+      requiredVariables: requiredVariablesOf(tpl.code),
     };
   }
 
   private view(row: EmailTemplateEntity): EmailTemplateView {
+    const system = isBuiltIn(row.code);
     return {
       code: row.code,
       name: row.name,
       subject: row.subject,
       body: row.body,
       description: row.description,
-      system: isSystemTemplate(row.code),
-      customized: isSystemTemplate(row.code),
+      category: templateCategory(row.code),
+      system,
+      customized: system,
+      requiredVariables: requiredVariablesOf(row.code),
       updatedAt: row.updatedAt,
     };
   }

@@ -64,12 +64,6 @@ export type AppSettingMeta = MetaBase &
 
 /** Khai báo bắt buộc cho mọi key — thêm key mới vào AppSettingType thì phải khai báo ở đây */
 export const APP_SETTING_META: Record<AppSettingType, AppSettingMeta> = {
-  [AppSettingType.MAIL_TEMPLATE_PASSWORD_CHANGED]: { type: AppSettingValueType.STRING, isShow: true },
-  [AppSettingType.MAIL_TEMPLATE_FORGOT_PASSWORD_OTP]: { type: AppSettingValueType.STRING, isShow: true },
-  [AppSettingType.MAIL_TEMPLATE_NEW_PASSWORD]: { type: AppSettingValueType.STRING, isShow: true },
-  [AppSettingType.MAIL_TEMPLATE_ACCOUNT_CREATED]: { type: AppSettingValueType.STRING, isShow: true },
-  [AppSettingType.MAIL_TEMPLATE_LOGIN_OTP]: { type: AppSettingValueType.STRING, isShow: true },
-
   [AppSettingType.INACTIVE_DAYS_THRESHOLD]: {
     type: AppSettingValueType.NUMBER,
     isShow: true,
@@ -84,6 +78,4 @@ export const APP_SETTING_META: Record<AppSettingType, AppSettingMeta> = {
 
   /** Bật/tắt viền focus đen quanh vùng nội dung chính ở FE */
   [AppSettingType.CONTENT_FOCUS_OUTLINE_ENABLED]: { type: AppSettingValueType.BOOLEAN, isShow: true, clientVisible: true },
-
-  [AppSettingType.MAIL_TEMPLATE_INACTIVE_REMINDER]: { type: AppSettingValueType.STRING, isShow: true },
 };

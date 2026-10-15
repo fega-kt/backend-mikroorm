@@ -2,7 +2,8 @@ import { ENV } from "@config/env.config";
 import { MikroORM } from "@mikro-orm/core";
 import { ActivityLogQueueService } from "@core-service/services/activity-log-queue/activity-log-queue.service";
 import { AppSettingEntity, AppSettingType } from "@core-service/entities/app-setting";
-import { parseValueArray, parseValueString } from "@common/utils/parse-value.util";
+import { parseValueArray } from "@common/utils/parse-value.util";
+import { CoreEmailTemplate, renderCoreEmail } from "@core-service/services/email-template/core-email.templates";
 import { RABBITMQ_QUEUES } from "@modules/rabbitmq/rabbitmq.constants";
 import { ConsumerHandler, RabbitMQService } from "@modules/rabbitmq/rabbitmq.service";
 import type { InactiveReminderMessage } from "@modules/rabbitmq/types/message.types";
@@ -33,18 +34,10 @@ export class InactiveReminderConsumer implements OnModuleInit {
     this.logger.log(`Received inactive reminder message for user ${payload.userId} with ${payload.days} days threshold`);
 
     const em = this.orm.em.fork();
-    const [templateSetting, allowListSetting] = await Promise.all([
-      em.findOne(AppSettingEntity, { key: AppSettingType.MAIL_TEMPLATE_INACTIVE_REMINDER, deleted: { $ne: true } }),
-      em.findOne(AppSettingEntity, { key: AppSettingType.INACTIVE_EMAIL_ALLOWED_LIST, deleted: { $ne: true } }),
-    ]);
-
-    const templateId: string = parseValueString(templateSetting?.value);
-    if (!templateId) {
-      this.logger.warn("MAIL_TEMPLATE_INACTIVE_REMINDER not configured, skipping");
-      ack();
-      return;
-    }
-
+    const allowListSetting = await em.findOne(AppSettingEntity, {
+      key: AppSettingType.INACTIVE_EMAIL_ALLOWED_LIST,
+      deleted: { $ne: true },
+    });
     const allowedList: string[] = parseValueArray<string>(allowListSetting?.value).filter((v): v is string => typeof v === "string");
 
     const user = await em.findOne(
@@ -80,11 +73,12 @@ export class InactiveReminderConsumer implements OnModuleInit {
     if (payload.queueId) await this.activityLogQueueService.markInProgress(payload.queueId);
 
     try {
-      const { error } = await this.resend.emails.send({
-        from: ENV.MAIL_FROM,
-        to: loginName,
-        template: { id: templateId, variables: { USER_NAME: fullName, DAYS: String(payload.days) } },
+      const content = await renderCoreEmail(em, CoreEmailTemplate.InactiveReminder, {
+        "user.name": fullName,
+        "user.email": loginName,
+        "inactive.days": String(payload.days),
       });
+      const { error } = await this.resend.emails.send({ from: ENV.MAIL_FROM, to: loginName, ...content });
       if (error) throw new Error(error.message);
       if (payload.queueId) await this.activityLogQueueService.markCompleted(payload.queueId);
       ack();

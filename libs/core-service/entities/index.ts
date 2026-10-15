@@ -9,6 +9,7 @@ export { ActivityLogQueueEntity, ActivityLogQueueStatus } from "./activity-log-q
 export { NotificationEntity, NotificationType } from "./notification";
 export { AttachmentEntity } from "./attachment";
 export { UserDeviceEntity } from "./user-device";
+export { EmailTemplateEntity } from "./email-template";
 export type { AppRoute, RouteHandle } from "./route";
 
 import { UserEntity } from "./user";
@@ -22,6 +23,7 @@ import { ActivityLogQueueEntity } from "./activity-log-queue";
 import { NotificationEntity } from "./notification";
 import { AttachmentEntity } from "./attachment";
 import { UserDeviceEntity } from "./user-device";
+import { EmailTemplateEntity } from "./email-template";
 
 export const coreEntities = [
   UserEntity,
@@ -35,4 +37,5 @@ export const coreEntities = [
   NotificationEntity,
   AttachmentEntity,
   UserDeviceEntity,
+  EmailTemplateEntity,
 ];

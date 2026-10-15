@@ -1,10 +1,11 @@
 import { ApprovalRequestEntity } from "@app-domain/entities/approval-request";
 import { ApprovalEventType, type ApprovalEventMessage } from "@app-domain/services/approval-engine/approval-events";
 import { SystemEmailTemplate } from "@app-domain/services/email-template/email-template.defaults";
-import { renderTemplate, wrapEmailHtml } from "@app-domain/services/email-template/email-template.render";
 import { resolveEmailTemplate } from "@app-domain/services/email-template/email-template.resolve";
 import { buildRequestVariables } from "@app-domain/services/email-template/email-template.vars";
+import { FrontendPath, frontendUrl } from "@common/constants/frontend-path.constant";
 import { ENV } from "@config/env.config";
+import { type EmailTemplateBody, renderEmail } from "@core-service/services/email-template/email-template.render";
 import { ActivityLogQueueStatus } from "@core-service/entities/activity-log-queue";
 import { NotificationType } from "@core-service/entities/notification";
 import { UserEntity } from "@core-service/entities/user";
@@ -41,9 +42,8 @@ type EmailMessage = ApprovalEventMessage & { queueId?: string; userId?: string }
 type Recipient = Pick<UserEntity, "id" | "fullName" | "workEmail" | "loginName">;
 
 interface EmailContext {
-  template: { subject: string; body: string };
+  template: EmailTemplateBody;
   vars: Record<string, string>;
-  link: string;
   users: Map<string, Recipient>;
 }
 
@@ -142,7 +142,7 @@ export class ApprovalEmailConsumer implements OnModuleInit {
       event.actorId ? em.findOne(UserEntity, { id: event.actorId }, { fields: ["id", "fullName"] }) : Promise.resolve(null),
     ]);
 
-    const link = `${ENV.FRONTEND_URL.replace(/\/$/, "")}/approval/requests/${event.requestId}`;
+    const link = frontendUrl(FrontendPath.ApprovalRequests, event.requestId);
     const vars = buildRequestVariables({
       code: request?.code ?? event.code,
       title: request?.title ?? event.title,
@@ -158,7 +158,7 @@ export class ApprovalEmailConsumer implements OnModuleInit {
       comment: event.comment,
       message: event.message,
     });
-    return { template, vars, link, users: new Map(users.map((user) => [user.id, user])) };
+    return { template, vars, users: new Map(users.map((user) => [user.id, user])) };
   }
 
   /** Gửi cho một người nhận và ghi kết quả vào dòng hàng đợi `queueId` */
@@ -169,9 +169,8 @@ export class ApprovalEmailConsumer implements OnModuleInit {
     if (!to?.includes("@")) return this.queue.markSkipped(queueId, "Recipient has no email address");
 
     const personal = { ...context.vars, "recipient.name": user.fullName };
-    const subject = renderTemplate(context.template.subject, personal, { html: false });
+    const { subject, html } = renderEmail(context.template, personal);
     if (!this.resend) return this.queue.markSkipped(queueId, "RESEND_API_KEY not configured", { recipient: to, subject });
-    const html = wrapEmailHtml(renderTemplate(context.template.body, personal, { html: true }), context.link);
 
     const previous = (await this.queue.findOne(queueId))?.attempts ?? 0;
     await this.queue.update(queueId, { status: ActivityLogQueueStatus.IN_PROGRESS, recipient: to, subject, lastAttemptAt: new Date() });

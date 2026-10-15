@@ -1,6 +1,6 @@
 import type { EntityManager } from "@mikro-orm/core";
-import { EmailTemplateEntity } from "../../entities/email-template";
-import { isSystemTemplate, SYSTEM_EMAIL_TEMPLATES, SystemEmailTemplate, type EmailTemplateContent } from "./email-template.defaults";
+import { type EmailTemplateContent, findEmailTemplate } from "@core-service/services/email-template/email-template.resolve";
+import { isSystemTemplate, SYSTEM_EMAIL_TEMPLATES, SystemEmailTemplate } from "./email-template.defaults";
 
 /**
  * Nội dung mẫu sẽ dùng để gửi: bản ghi trong DB (bản đè của mẫu hệ thống hoặc mẫu tùy chỉnh) → mặc định hệ thống.
@@ -11,8 +11,8 @@ export async function resolveEmailTemplate(
   code: string,
   fallback: SystemEmailTemplate = SystemEmailTemplate.Notify,
 ): Promise<EmailTemplateContent> {
-  const row = await em.findOne(EmailTemplateEntity, { code, deleted: { $ne: true } });
-  if (row) return { code: row.code, name: row.name, subject: row.subject, body: row.body };
+  const row = await findEmailTemplate(em, code);
+  if (row) return row;
   if (isSystemTemplate(code)) return SYSTEM_EMAIL_TEMPLATES[code];
   return resolveEmailTemplate(em, fallback, fallback);
 }

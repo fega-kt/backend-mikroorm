@@ -4,6 +4,7 @@ import { ActivityLogQueueEntity } from "@core-service/entities/activity-log-queu
 import { AppSettingEntity } from "@core-service/entities/app-setting";
 import { AttachmentEntity } from "@core-service/entities/attachment";
 import { DepartmentEntity } from "@core-service/entities/department";
+import { EmailTemplateEntity } from "@core-service/entities/email-template";
 import { NotificationEntity } from "@core-service/entities/notification";
 import { PrincipalEntity } from "@core-service/entities/principal";
 import { UserEntity } from "@core-service/entities/user";
@@ -26,6 +27,7 @@ import { OutboxRelayCron } from "./outbox-relay.cron";
       AppSettingEntity,
       AttachmentEntity,
       DepartmentEntity,
+      EmailTemplateEntity,
       NotificationEntity,
       PrincipalEntity,
       UserEntity,

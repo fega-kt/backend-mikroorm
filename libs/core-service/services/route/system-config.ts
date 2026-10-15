@@ -18,6 +18,7 @@ export class SystemConfigRouteService {
     }
 
     const canViewAppSetting = currentUser.canAccess([PermissionType.MenuAppSetting]);
+    const canManageEmailTemplates = currentUser.canAccess([PermissionType.MenuEmailTemplate]);
 
     const children = [];
 
@@ -30,6 +31,21 @@ export class SystemConfigRouteService {
           icon: "SlidersOutlined",
           title: "common.menu.appSetting",
           roles: [PermissionType.MenuAppSetting],
+          permissions: [],
+        },
+      });
+    }
+
+    // Mẫu email của cả tờ trình lẫn hệ thống (đăng nhập, mật khẩu, nhắc nhở)
+    if (canManageEmailTemplates) {
+      children.push({
+        path: "/system-config/email-template",
+        component: "/system-config/email-template/index.tsx",
+        handle: {
+          keepAlive: false,
+          icon: "MailOutlined",
+          title: "common.menu.emailTemplate",
+          roles: [PermissionType.MenuEmailTemplate],
           permissions: [],
         },
       });

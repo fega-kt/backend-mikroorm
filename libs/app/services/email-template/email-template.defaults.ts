@@ -1,3 +1,8 @@
+import { buildEmailBody, type EmailLayout, type EmailTone } from "@core-service/services/email-template/email-template.render";
+import type { EmailTemplateContent } from "@core-service/services/email-template/email-template.resolve";
+
+export type { EmailTemplateContent };
+
 /** Mã mẫu email hệ thống — mỗi sự kiện của tờ trình dùng một mẫu */
 export enum SystemEmailTemplate {
   StepPending = "approval.step_pending",
@@ -13,12 +18,21 @@ export enum SystemEmailTemplate {
   Notify = "approval.notify",
 }
 
-export interface EmailTemplateContent {
-  code: string;
-  name: string;
-  subject: string;
-  body: string;
-}
+/** Layout email tờ trình: tiêu đề lớn theo sự kiện + nút mở tờ trình */
+const requestLayout = (tone: EmailTone, icon?: string, title?: string): EmailLayout => ({
+  tone,
+  icon,
+  title,
+  button: { label: "Xem tờ trình", link: "{{request.link}}" },
+});
+
+/** Nội dung khởi đầu khi tạo mẫu tùy chỉnh (bước Thông báo của quy trình) */
+export const CUSTOM_TEMPLATE_STARTER = buildEmailBody(
+  "<p>Xin chào {{recipient.name}},</p>" +
+    "<p>Bạn nhận được thông báo về tờ trình <strong>{{request.code}}</strong> {{request.title}}.</p>" +
+    "<p>{{message}}</p>",
+  requestLayout("brand", "🔔", "Thông báo về tờ trình"),
+);
 
 /**
  * Nội dung mặc định của mẫu hệ thống. Admin sửa ở màn Mẫu email → lưu thành bản ghi đè trong DB;
@@ -29,73 +43,100 @@ export const SYSTEM_EMAIL_TEMPLATES: Record<SystemEmailTemplate, EmailTemplateCo
     code: SystemEmailTemplate.StepPending,
     name: "Tờ trình chờ duyệt",
     subject: "[Phê duyệt] {{request.code}} – {{request.title}} đang chờ bạn duyệt",
-    body: "<p>Xin chào {{recipient.name}},</p><p>Bạn có một tờ trình cần duyệt ở bước <strong>{{step.name}}</strong>.</p><p><strong>{{request.code}}</strong> {{request.title}} · {{request.type}}<br>Người trình: {{request.requester}} ({{request.department}}) · Độ ưu tiên: {{request.priority}}</p>",
+    body: buildEmailBody(
+      "<p>Xin chào {{recipient.name}},</p><p>Bạn có một tờ trình cần duyệt ở bước <strong>{{step.name}}</strong>.</p><p><strong>{{request.code}}</strong> {{request.title}} · {{request.type}}<br>Người trình: {{request.requester}} ({{request.department}}) · Độ ưu tiên: {{request.priority}}</p>",
+      requestLayout("brand", "📄", "Tờ trình chờ bạn duyệt"),
+    ),
   },
   [SystemEmailTemplate.Approved]: {
     code: SystemEmailTemplate.Approved,
     name: "Tờ trình đã được duyệt",
     subject: "[Phê duyệt] {{request.code}} – {{request.title}} đã được duyệt",
-    body: "<p>Xin chào {{recipient.name}},</p><p>Tờ trình <strong>{{request.code}}</strong> {{request.title}} của bạn đã được duyệt xong.</p>",
+    body: buildEmailBody(
+      "<p>Xin chào {{recipient.name}},</p><p>Tờ trình <strong>{{request.code}}</strong> {{request.title}} của bạn đã được duyệt xong.</p>",
+      requestLayout("success", "✓", "Tờ trình đã được duyệt"),
+    ),
   },
   [SystemEmailTemplate.StepApproved]: {
     code: SystemEmailTemplate.StepApproved,
     name: "Một bước đã được duyệt",
     subject: "[Phê duyệt] {{request.code}} – {{request.title}}: bước {{step.name}} đã được duyệt",
-    body:
+    body: buildEmailBody(
       "<p>Xin chào {{recipient.name}},</p>" +
-      "<p>Bước <strong>{{step.name}}</strong> của tờ trình <strong>{{request.code}}</strong> {{request.title}} đã được {{actor.name}} duyệt.</p>" +
-      "<p>Ý kiến: {{comment}}</p><p>{{message}}</p>" +
-      "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
+        "<p>Bước <strong>{{step.name}}</strong> của tờ trình <strong>{{request.code}}</strong> {{request.title}} đã được {{actor.name}} duyệt.</p>" +
+        "<p>Ý kiến: {{comment}}</p><p>{{message}}</p>" +
+        "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
+      requestLayout("success", "✓", "Một bước đã được duyệt"),
+    ),
   },
   [SystemEmailTemplate.Rejected]: {
     code: SystemEmailTemplate.Rejected,
     name: "Tờ trình bị từ chối",
     subject: "[Phê duyệt] {{request.code}} – {{request.title}} bị từ chối",
-    body: "<p>Xin chào {{recipient.name}},</p><p>Tờ trình <strong>{{request.code}}</strong> {{request.title}} bị {{actor.name}} từ chối ở bước <strong>{{step.name}}</strong>.</p><p>Lý do: {{comment}}</p>",
+    body: buildEmailBody(
+      "<p>Xin chào {{recipient.name}},</p><p>Tờ trình <strong>{{request.code}}</strong> {{request.title}} bị {{actor.name}} từ chối ở bước <strong>{{step.name}}</strong>.</p><p>Lý do: {{comment}}</p>",
+      requestLayout("danger", "✕", "Tờ trình bị từ chối"),
+    ),
   },
   [SystemEmailTemplate.Returned]: {
     code: SystemEmailTemplate.Returned,
     name: "Tờ trình được trả lại",
     subject: "[Phê duyệt] {{request.code}} – {{request.title}} được trả lại để bổ sung",
-    body: "<p>Xin chào {{recipient.name}},</p><p>Tờ trình <strong>{{request.code}}</strong> {{request.title}} được {{actor.name}} trả lại ở bước <strong>{{step.name}}</strong>. Vui lòng bổ sung và gửi lại.</p><p>Nội dung cần bổ sung: {{comment}}</p>",
+    body: buildEmailBody(
+      "<p>Xin chào {{recipient.name}},</p><p>Tờ trình <strong>{{request.code}}</strong> {{request.title}} được {{actor.name}} trả lại ở bước <strong>{{step.name}}</strong>. Vui lòng bổ sung và gửi lại.</p><p>Nội dung cần bổ sung: {{comment}}</p>",
+      requestLayout("warning", "↩", "Tờ trình được trả lại"),
+    ),
   },
   [SystemEmailTemplate.Cancelled]: {
     code: SystemEmailTemplate.Cancelled,
     name: "Tờ trình đã bị hủy",
     subject: "[Phê duyệt] {{request.code}} – {{request.title}} đã bị hủy",
-    body: "<p>Xin chào {{recipient.name}},</p><p>{{request.requester}} đã hủy tờ trình <strong>{{request.code}}</strong> {{request.title}}, bạn không cần duyệt nữa.</p>",
+    body: buildEmailBody(
+      "<p>Xin chào {{recipient.name}},</p><p>{{request.requester}} đã hủy tờ trình <strong>{{request.code}}</strong> {{request.title}}, bạn không cần duyệt nữa.</p>",
+      requestLayout("danger", "⊘", "Tờ trình đã bị hủy"),
+    ),
   },
   [SystemEmailTemplate.Reminder]: {
     code: SystemEmailTemplate.Reminder,
     name: "Nhắc duyệt quá hạn",
     subject: "[Nhắc duyệt] {{request.code}} – {{request.title}} đã quá hạn",
-    body: "<p>Xin chào {{recipient.name}},</p><p>Tờ trình <strong>{{request.code}}</strong> {{request.title}} đang chờ bạn duyệt ở bước <strong>{{step.name}}</strong> đã quá hạn xử lý.</p>",
+    body: buildEmailBody(
+      "<p>Xin chào {{recipient.name}},</p><p>Tờ trình <strong>{{request.code}}</strong> {{request.title}} đang chờ bạn duyệt ở bước <strong>{{step.name}}</strong> đã quá hạn xử lý.</p>",
+      requestLayout("warning", "⏰", "Tờ trình đã quá hạn duyệt"),
+    ),
   },
   [SystemEmailTemplate.Escalated]: {
     code: SystemEmailTemplate.Escalated,
     name: "Tờ trình được chuyển cấp",
     subject: "[Phê duyệt] {{request.code}} – {{request.title}} được chuyển cấp cho bạn",
-    body: "<p>Xin chào {{recipient.name}},</p><p>Bước <strong>{{step.name}}</strong> của tờ trình <strong>{{request.code}}</strong> {{request.title}} quá hạn nên được chuyển cho bạn duyệt.</p>",
+    body: buildEmailBody(
+      "<p>Xin chào {{recipient.name}},</p><p>Bước <strong>{{step.name}}</strong> của tờ trình <strong>{{request.code}}</strong> {{request.title}} quá hạn nên được chuyển cho bạn duyệt.</p>",
+      requestLayout("warning", "⇪", "Tờ trình được chuyển cấp cho bạn"),
+    ),
   },
   [SystemEmailTemplate.Shared]: {
     code: SystemEmailTemplate.Shared,
     name: "Tờ trình được chia sẻ",
     subject: "[Phê duyệt] {{actor.name}} chia sẻ tờ trình {{request.code}} – {{request.title}} với bạn",
-    body:
+    body: buildEmailBody(
       "<p>Xin chào {{recipient.name}},</p>" +
-      "<p>{{actor.name}} đã chia sẻ với bạn tờ trình <strong>{{request.code}}</strong> {{request.title}}. Bạn có thể xem nhưng không duyệt hay sửa được.</p>" +
-      "<p>Lời nhắn: {{message}}</p>" +
-      "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
+        "<p>{{actor.name}} đã chia sẻ với bạn tờ trình <strong>{{request.code}}</strong> {{request.title}}. Bạn có thể xem nhưng không duyệt hay sửa được.</p>" +
+        "<p>Lời nhắn: {{message}}</p>" +
+        "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
+      requestLayout("brand", "✉️", "Tờ trình được chia sẻ với bạn"),
+    ),
   },
   [SystemEmailTemplate.Notify]: {
     code: SystemEmailTemplate.Notify,
     name: "Thông báo theo quy trình (mặc định)",
     subject: "[Thông báo] {{request.code}} – {{request.title}}",
-    body:
+    body: buildEmailBody(
       "<p>Xin chào {{recipient.name}},</p>" +
-      "<p>Bạn nhận được thông báo về tờ trình <strong>{{request.code}}</strong> {{request.title}}.</p>" +
-      "<p><strong>Nội dung:</strong> {{message}}</p>" +
-      "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
+        "<p>Bạn nhận được thông báo về tờ trình <strong>{{request.code}}</strong> {{request.title}}.</p>" +
+        "<p><strong>Nội dung:</strong> {{message}}</p>" +
+        "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
+      requestLayout("brand", "🔔", "Thông báo về tờ trình"),
+    ),
   },
 };
 
