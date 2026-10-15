@@ -18,8 +18,8 @@ export class PrincipalEntity extends BaseEntity {
    * user: thì Principal là user, chỉ có user ở field user
    * group: thì Principal là group, chỉ có group ở field group
    */
-  @Enum(() => PrincipalType)
-  public type?: PrincipalType;
+  @Enum({ items: () => PrincipalType, nullable: false })
+  public type!: PrincipalType;
 
   @OneToOne({
     cascade: [],
