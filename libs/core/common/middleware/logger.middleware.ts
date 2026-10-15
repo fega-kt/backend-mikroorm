@@ -1,5 +1,6 @@
 import { Injectable, Logger, NestMiddleware } from "@nestjs/common";
 import { runWithRequestInfo } from "@common/request-context";
+import { redactUrl } from "@common/utils/redact-url.util";
 import { NextFunction, Request, Response } from "express";
 import { compact } from "lodash";
 import { randomBytes } from "node:crypto";
@@ -16,7 +17,7 @@ export class LoggerMiddleware implements NestMiddleware {
     const requestId = this.resolveRequestId(req);
     res.setHeader(REQUEST_ID_HEADER, requestId);
 
-    runWithRequestInfo({ requestId, method: req.method, path: req.originalUrl }, () => {
+    runWithRequestInfo({ requestId, method: req.method, path: redactUrl(req.originalUrl) }, () => {
       const start = Date.now();
       // bind so the finish callback runs inside this request's context (logger picks up requestId)
       res.on(
@@ -37,7 +38,7 @@ export class LoggerMiddleware implements NestMiddleware {
     }
     const status = res.statusCode;
     const ip = this.getClientIp(req);
-    const arrayInfo = compact([userInfo, method, originalUrl, status, duration]).join(" ");
+    const arrayInfo = compact([userInfo, method, redactUrl(originalUrl), status, duration]).join(" ");
     const message = `[${ip}] ${arrayInfo}ms | ${this.getMemoryInfo()}`;
 
     if (status >= 500) {

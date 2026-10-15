@@ -625,7 +625,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     }
 
     const folder = buildRequestFileFolder(requestId, data.category);
-    const { key, uploadUrl, headers, expiresAt } = await this.uploadService.createUploadUrl({
+    const { key, uploadUrl, headers, expiresAt, multipart } = await this.uploadService.createUploadUrl({
       folder,
       filename: data.filename,
       mimetype: data.mimetype,
@@ -646,7 +646,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       ...this.getDefaultValuesForCreate(),
     });
     await this.em.flush();
-    return { attachmentId: attachment.id, uploadUrl, headers, expiresAt };
+    return { attachmentId: attachment.id, uploadUrl, headers, expiresAt, multipart };
   }
 
   private async userDepartmentId() {

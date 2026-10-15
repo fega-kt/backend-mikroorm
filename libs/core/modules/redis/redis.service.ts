@@ -1,23 +1,11 @@
+import { describeError } from "@common/utils/describe-error.util";
+import { maskUrl } from "@common/utils/mask-url.util";
 import { ENV } from "@config/env.config";
 import { ICacheService } from "@modules/cache/cache.interface";
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import Redis from "ioredis";
 
 const MAX_RETRY_DELAY_MS = 30_000;
-
-// Nest's Logger treats the 2nd arg as a stack string, so Error objects (esp. AggregateError
-// with an empty message) must be flattened into text to be readable.
-function describeError(err: unknown): string {
-  const e = err as (NodeJS.ErrnoException & { errors?: NodeJS.ErrnoException[] }) | undefined;
-  if (!e) return String(err);
-  const parts = (e.errors?.length ? e.errors : [e]).map((x) => {
-    const addr = (x as { address?: string; port?: number }).address
-      ? ` (${(x as { address?: string }).address}:${(x as { port?: number }).port})`
-      : "";
-    return `${x.code ?? x.name ?? "Error"}: ${x.message || "no message"}${addr}`;
-  });
-  return parts.join(" | ");
-}
 
 @Injectable()
 export class RedisService implements ICacheService, OnModuleInit, OnModuleDestroy {
@@ -38,7 +26,7 @@ export class RedisService implements ICacheService, OnModuleInit, OnModuleDestro
       },
     });
 
-    const maskedUrl = ENV.REDIS_URL.replace(/:\/\/[^@]+@/, "://***@");
+    const maskedUrl = maskUrl(ENV.REDIS_URL);
 
     this.client.on("error", (err) => this.logger.error(`Redis error: ${describeError(err)}`, err?.stack));
     this.client.on("connect", () => this.logger.log(`Redis connected: ${maskedUrl}`));

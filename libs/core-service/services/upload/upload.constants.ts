@@ -38,5 +38,17 @@ export const DOWNLOAD_URL_TTL_SECONDS = 60;
 /** Số byte đầu file đọc để nhận dạng loại nội dung thật */
 export const SNIFF_BYTES = 4100;
 
+/** Trần dung lượng file upload qua backend (multipart/form-data, giữ trong RAM) — file lớn phải đi bằng link ký */
+export const MAX_PUBLIC_UPLOAD_SIZE = 10 * 1024 * 1024;
+
+/** File lớn hơn mức này được upload theo từng phần (R2 multipart) để thử lại từng phần, không mất cả file khi đứt mạng */
+export const MULTIPART_THRESHOLD = 5 * 1024 * 1024;
+
+/** Dung lượng mỗi phần (byte); R2/S3 yêu cầu tối thiểu 5 MiB trừ phần cuối, các phần phải bằng nhau */
+export const MULTIPART_PART_SIZE = 5 * 1024 * 1024;
+
+/** Số phần tối đa khi hoàn tất upload, suy ra từ trần dung lượng */
+export const MULTIPART_MAX_PARTS = Math.ceil(MAX_PRIVATE_UPLOAD_SIZE / MULTIPART_PART_SIZE);
+
 /** Bản ghi upload dở (chưa xác nhận) quá thời gian này sẽ bị dọn (phút) */
 export const PENDING_UPLOAD_MAX_AGE_MINUTES = 120;

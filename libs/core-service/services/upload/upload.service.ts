@@ -1,6 +1,17 @@
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  UploadPartCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { isPrivateStoragePath } from "@common/constants/storage.constant";
+import { describeError } from "@common/utils/describe-error.util";
 import { slugifyFilename } from "@common/utils/file-slug.util";
 import { urlJoin } from "@common/utils/url-join";
 import { ENV } from "@config/env.config";
@@ -18,6 +29,9 @@ import {
   INVALID_FILENAME_CHARS,
   MAX_FILENAME_LENGTH,
   MAX_PRIVATE_UPLOAD_SIZE,
+  MULTIPART_MAX_PARTS,
+  MULTIPART_PART_SIZE,
+  MULTIPART_THRESHOLD,
   SNIFF_BYTES,
   UPLOAD_URL_TTL_SECONDS,
 } from "./upload.constants";
@@ -161,6 +175,13 @@ export class UploadService {
     }
 
     const key = await this.buildUniqueKey(folder, filename.trim(), ext);
+    const expiresAt = new Date(Date.now() + UPLOAD_URL_TTL_SECONDS * 1000).toISOString();
+
+    // File lớn: chia thành nhiều phần, mỗi phần một link ký riêng — đứt mạng chỉ phải gửi lại phần lỗi
+    if (size > MULTIPART_THRESHOLD) {
+      return { key, uploadUrl: "", headers: {}, expiresAt, multipart: await this.createMultipartUpload({ key, mimetype, size }) };
+    }
+
     const uploadUrl = await getSignedUrl(
       this.s3,
       new PutObjectCommand({ Bucket: this.privateBucket, Key: key, ContentType: mimetype, ContentLength: size }),
@@ -168,12 +189,75 @@ export class UploadService {
       { expiresIn: UPLOAD_URL_TTL_SECONDS, signableHeaders: new Set(["content-type", "content-length"]) },
     );
 
-    return {
-      key,
-      uploadUrl,
-      headers: { "Content-Type": mimetype },
-      expiresAt: new Date(Date.now() + UPLOAD_URL_TTL_SECONDS * 1000).toISOString(),
-    };
+    return { key, uploadUrl, headers: { "Content-Type": mimetype }, expiresAt, multipart: undefined };
+  }
+
+  /** Mở upload nhiều phần và ký sẵn link PUT cho từng phần (mỗi link chỉ ghi đúng phần đó, đúng dung lượng phần đó) */
+  private async createMultipartUpload(params: { key: string; mimetype: string; size: number }) {
+    const { key, mimetype, size } = params;
+    const created = await this.s3.send(new CreateMultipartUploadCommand({ Bucket: this.privateBucket, Key: key, ContentType: mimetype }));
+    const uploadId = created.UploadId;
+    if (!uploadId) throw new InternalServerErrorException("Could not start multipart upload");
+
+    const partCount = Math.ceil(size / MULTIPART_PART_SIZE);
+    try {
+      const parts = await Promise.all(
+        Array.from({ length: partCount }, async (_, i) => {
+          const partNumber = i + 1;
+          const contentLength = Math.min(MULTIPART_PART_SIZE, size - i * MULTIPART_PART_SIZE);
+          const url = await getSignedUrl(
+            this.s3,
+            new UploadPartCommand({
+              Bucket: this.privateBucket,
+              Key: key,
+              UploadId: uploadId,
+              PartNumber: partNumber,
+              ContentLength: contentLength,
+            }),
+            { expiresIn: UPLOAD_URL_TTL_SECONDS, signableHeaders: new Set(["content-length"]) },
+          );
+          return { partNumber, url };
+        }),
+      );
+      return { uploadId, partSize: MULTIPART_PART_SIZE, parts };
+    } catch (error) {
+      await this.abortMultipartUpload(key, uploadId);
+      throw error;
+    }
+  }
+
+  /** Ghép các phần đã upload thành một object; lỗi thì hủy upload dở để R2 không giữ lại các phần mồ côi */
+  async completeMultipartUpload(params: { key: string; uploadId: string; parts: { partNumber: number; etag: string }[] }) {
+    const { key, uploadId, parts } = params;
+    if (parts.length > MULTIPART_MAX_PARTS || new Set(parts.map((p) => p.partNumber)).size !== parts.length) {
+      await this.abortMultipartUpload(key, uploadId);
+      throw new BadRequestException("Invalid multipart parts");
+    }
+    try {
+      await this.s3.send(
+        new CompleteMultipartUploadCommand({
+          Bucket: this.privateBucket,
+          Key: key,
+          UploadId: uploadId,
+          MultipartUpload: {
+            Parts: [...parts].sort((a, b) => a.partNumber - b.partNumber).map((p) => ({ PartNumber: p.partNumber, ETag: p.etag })),
+          },
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(`completeMultipartUpload key=${key} uploadId=${uploadId} parts=${parts.length} failed: ${describeError(error)}`);
+      await this.abortMultipartUpload(key, uploadId);
+      throw new BadRequestException("Could not assemble the uploaded file parts");
+    }
+  }
+
+  /** Hủy upload nhiều phần dở dang (không ném lỗi: chỉ là dọn dẹp) */
+  private async abortMultipartUpload(key: string, uploadId: string) {
+    try {
+      await this.s3.send(new AbortMultipartUploadCommand({ Bucket: this.privateBucket, Key: key, UploadId: uploadId }));
+    } catch (error) {
+      this.logger.warn(`abortMultipartUpload key=${key} uploadId=${uploadId} failed: ${describeError(error)}`);
+    }
   }
 
   /**
@@ -207,7 +291,8 @@ export class UploadService {
     let head;
     try {
       head = await this.s3.send(new HeadObjectCommand({ Bucket: this.privateBucket, Key: key }));
-    } catch {
+    } catch (error) {
+      this.logger.warn(`verifyUploadedObject key=${key}: object not found or unreadable: ${describeError(error)}`);
       throw new BadRequestException("File has not been uploaded");
     }
 
@@ -220,7 +305,10 @@ export class UploadService {
       const detected = await fromBuffer(bytes);
       this.assertMimeAllowed(ext, detected?.mime || head.ContentType);
     } catch (error) {
-      await this.deleteObject(key).catch(() => undefined);
+      this.logger.warn(`verifyUploadedObject key=${key} filename=${filename} rejected, deleting object: ${describeError(error)}`);
+      await this.deleteObject(key).catch((deleteError) =>
+        this.logger.error(`Cannot delete rejected object key=${key} (orphan left on R2): ${describeError(deleteError)}`),
+      );
       throw error;
     }
   }
@@ -290,7 +378,9 @@ export class UploadService {
         return await result.Body.transformToByteArray();
       } catch (error) {
         if (signal.aborted || attempt >= attempts) throw error;
-        this.logger.warn(`getObject key=${key} range=${range.start}-${range.end} attempt=${attempt} failed: ${String(error)}`);
+        this.logger.warn(
+          `getObject key=${key} range=${range.start}-${range.end} attempt=${attempt}/${attempts} failed: ${describeError(error)}`,
+        );
       }
     }
   }
