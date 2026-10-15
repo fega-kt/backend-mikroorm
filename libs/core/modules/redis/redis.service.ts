@@ -5,6 +5,20 @@ import Redis from "ioredis";
 
 const MAX_RETRY_DELAY_MS = 30_000;
 
+// Nest's Logger treats the 2nd arg as a stack string, so Error objects (esp. AggregateError
+// with an empty message) must be flattened into text to be readable.
+function describeError(err: unknown): string {
+  const e = err as (NodeJS.ErrnoException & { errors?: NodeJS.ErrnoException[] }) | undefined;
+  if (!e) return String(err);
+  const parts = (e.errors?.length ? e.errors : [e]).map((x) => {
+    const addr = (x as { address?: string; port?: number }).address
+      ? ` (${(x as { address?: string }).address}:${(x as { port?: number }).port})`
+      : "";
+    return `${x.code ?? x.name ?? "Error"}: ${x.message || "no message"}${addr}`;
+  });
+  return parts.join(" | ");
+}
+
 @Injectable()
 export class RedisService implements ICacheService, OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
@@ -26,12 +40,12 @@ export class RedisService implements ICacheService, OnModuleInit, OnModuleDestro
 
     const maskedUrl = ENV.REDIS_URL.replace(/:\/\/[^@]+@/, "://***@");
 
-    this.client.on("error", (err) => this.logger.error("Redis error", err));
+    this.client.on("error", (err) => this.logger.error(`Redis error: ${describeError(err)}`, err?.stack));
     this.client.on("connect", () => this.logger.log(`Redis connected: ${maskedUrl}`));
     this.client.on("close", () => this.logger.warn("Redis connection closed"));
     this.client.on("reconnecting", () => this.logger.warn("Redis reconnecting..."));
 
-    this.client.connect().catch((err) => this.logger.error("Redis initial connect failed", err));
+    this.client.connect().catch((err) => this.logger.error(`Redis initial connect failed: ${describeError(err)}`, err?.stack));
   }
 
   async onModuleDestroy() {
