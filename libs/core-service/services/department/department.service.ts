@@ -1,5 +1,4 @@
 import { BaseService } from "@common/base/base.service";
-import { SYSTEM_USER_ID } from "@common/constants/system.constant";
 import { WithChildren, handleTree } from "@common/utils/tree.util";
 import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
@@ -65,8 +64,6 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
       parentCode: parent ? (parent.parentCode ? `${parent.parentCode}.${parent.code}` : parent.code) : null,
       manager: manager ?? undefined,
       deputy: deputy ?? undefined,
-      createdBy: { id: SYSTEM_USER_ID },
-      updatedBy: { id: SYSTEM_USER_ID },
     });
 
     const newData = (await this.loadLogData([department.id])).get(department.id);
