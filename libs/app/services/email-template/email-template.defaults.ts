@@ -8,6 +8,7 @@ export enum SystemEmailTemplate {
   Reminder = "approval.reminder",
   Escalated = "approval.escalated",
   StepApproved = "approval.step_approved",
+  Shared = "approval.shared",
   /** Mặc định của bước Thông báo khi không chọn mẫu riêng */
   Notify = "approval.notify",
 }
@@ -75,6 +76,16 @@ export const SYSTEM_EMAIL_TEMPLATES: Record<SystemEmailTemplate, EmailTemplateCo
     name: "Tờ trình được chuyển cấp",
     subject: "[Phê duyệt] {{request.code}} – {{request.title}} được chuyển cấp cho bạn",
     body: "<p>Xin chào {{recipient.name}},</p><p>Bước <strong>{{step.name}}</strong> của tờ trình <strong>{{request.code}}</strong> {{request.title}} quá hạn nên được chuyển cho bạn duyệt.</p>",
+  },
+  [SystemEmailTemplate.Shared]: {
+    code: SystemEmailTemplate.Shared,
+    name: "Tờ trình được chia sẻ",
+    subject: "[Phê duyệt] {{actor.name}} chia sẻ tờ trình {{request.code}} – {{request.title}} với bạn",
+    body:
+      "<p>Xin chào {{recipient.name}},</p>" +
+      "<p>{{actor.name}} đã chia sẻ với bạn tờ trình <strong>{{request.code}}</strong> {{request.title}}. Bạn có thể xem nhưng không duyệt hay sửa được.</p>" +
+      "<p>Lời nhắn: {{message}}</p>" +
+      "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
   },
   [SystemEmailTemplate.Notify]: {
     code: SystemEmailTemplate.Notify,

@@ -18,6 +18,7 @@ const APPROVAL_EMAIL_TYPES = [
   NotificationType.APPROVAL_ESCALATED,
   NotificationType.APPROVAL_NOTIFY,
   NotificationType.APPROVAL_STEP_APPROVED,
+  NotificationType.APPROVAL_SHARED,
 ];
 
 const QUEUE_BY_TYPE: Partial<Record<NotificationType, string>> = {

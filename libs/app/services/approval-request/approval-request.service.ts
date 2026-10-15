@@ -15,10 +15,12 @@ import type {
   CreateApprovalRequestDto,
   PresignRequestFileDto,
   PreviewFlowDto,
+  ShareApprovalRequestDto,
   UpdateApprovalRequestDto,
 } from "../../controllers/approval-request/approval-request.validation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
+import { ApprovalShareEntity } from "../../entities/approval-share";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-version";
@@ -253,6 +255,36 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     return { id };
   }
 
+  /** Chia sẻ tờ trình (chỉ xem) cho người / nhóm: người trình, người tạo hoặc người tham gia duyệt */
+  async shareRequest(id: string, data: ShareApprovalRequestDto) {
+    await this.assertCanShare(id);
+    return this.engine.share(id, this.getCurrentUser().id, {
+      principalIds: data.principals,
+      message: data.message,
+      inApp: data.sendNotification,
+      email: data.sendEmail,
+    });
+  }
+
+  async removeShare(id: string, shareId: string) {
+    await this.assertCanShare(id);
+    await this.engine.unshare(id, shareId, this.getCurrentUser().id);
+  }
+
+  private async assertCanShare(id: string) {
+    const user = this.getCurrentUser();
+    const request = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["requester"] });
+    if (!request) throw new NotFoundException("Request not found");
+    const tasks = await this.em.find(
+      ApprovalTaskEntity,
+      // Chỉ xét người tham gia của lượt duyệt hiện tại (lượt cũ đã kết thúc)
+      { request: id, round: request.round },
+      { populate: ["approver", "approver.user", "originApprover", "originApprover.user", "actedBy", "handoverDelegations"] },
+    );
+    const access = await buildTaskAccess(this.em, tasks, this.delegationScope(request), user.id);
+    if (!this.canShareRequest(request, tasks, user, access)) throw new ForbiddenException("You cannot share this request");
+  }
+
   async getMyRequests(filter: ApprovalRequestFilterDto) {
     return this.list(filter, { requester: this.getCurrentUser().id });
   }
@@ -261,21 +293,54 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     return this.list(filter, filter.requesterId ? { requester: filter.requesterId } : {});
   }
 
-  /** Người xem hợp lệ: người tạo, người tham gia duyệt, hoặc có quyền xem mọi tờ trình */
+  /** Người tham gia: người giữ / người duyệt theo quy trình / người đã xử lý, hoặc đang xử lý được (ủy quyền, thành viên nhóm) */
+  private isParticipant(tasks: ApprovalTaskEntity[], user: ReturnType<ApprovalRequestService["getCurrentUser"]>, access: TaskAccess) {
+    return tasks.some(
+      (t) => [holderUserId(t), t.originApprover?.user?.id, t.actedBy?.id].includes(user.id) || canActOnTask(t, user.id, access),
+    );
+  }
+
+  /** Phiếu đã được chia sẻ cho người dùng — trực tiếp hoặc qua nhóm họ đang là thành viên */
+  private async isSharedWith(requestId: string, userId: string, access: TaskAccess) {
+    const count = await this.em.count(ApprovalShareEntity, {
+      request: requestId,
+      deleted: { $ne: true },
+      $or: [{ principal: { user: userId } }, { principal: { $in: [...access.memberOf] } }],
+    });
+    return count > 0;
+  }
+
+  /** Người xem hợp lệ: người tạo, người tham gia duyệt, người được chia sẻ, hoặc có quyền xem mọi tờ trình */
   private assertCanView(
     request: ApprovalRequestEntity,
     tasks: ApprovalTaskEntity[],
     user: ReturnType<ApprovalRequestService["getCurrentUser"]>,
     access: TaskAccess,
+    shared: boolean,
   ) {
     const isRequester = request.requester.id === user.id;
-    // Người tham gia: người giữ / người duyệt theo quy trình / người đã xử lý, hoặc đang xử lý được (ủy quyền, thành viên nhóm)
-    const isParticipant = tasks.some(
-      (t) => [holderUserId(t), t.originApprover?.user?.id, t.actedBy?.id].includes(user.id) || canActOnTask(t, user.id, access),
-    );
-    if (!isRequester && !isParticipant && !user.canAccess([PermissionType.MenuAllApprovalRequest])) {
+    if (!isRequester && !shared && !this.isParticipant(tasks, user, access) && !user.canAccess([PermissionType.MenuAllApprovalRequest])) {
       throw new ForbiddenException("You cannot view this request");
     }
+  }
+
+  /**
+   * Được chia sẻ:
+   * - bản nháp: không ai (chưa có ai khác tham gia);
+   * - bị trả lại / từ chối: chỉ người trình;
+   * - còn lại: người trình, người tạo phiếu, người tham gia duyệt của lượt hiện tại.
+   */
+  private canShareRequest(
+    request: ApprovalRequestEntity,
+    tasks: ApprovalTaskEntity[],
+    user: ReturnType<ApprovalRequestService["getCurrentUser"]>,
+    access: TaskAccess,
+  ) {
+    if (request.status === ApprovalRequestStatus.Draft) return false;
+    const isRequester = request.requester.id === user.id;
+    if ([ApprovalRequestStatus.Returned, ApprovalRequestStatus.Rejected].includes(request.status)) return isRequester;
+    const currentRound = tasks.filter((t) => t.round === request.round);
+    return isRequester || request.createdBy?.id === user.id || this.isParticipant(currentRound, user, access);
   }
 
   /**
@@ -296,7 +361,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         { request: requestId },
         { populate: ["approver", "originApprover", "actedBy", "handoverDelegations"] },
       );
-      this.assertCanView(request, tasks, user, await buildTaskAccess(this.em, tasks, this.delegationScope(request), user.id));
+      const access = await buildTaskAccess(this.em, tasks, this.delegationScope(request), user.id);
+      this.assertCanView(request, tasks, user, access, await this.isSharedWith(request.id, user.id, access));
       const linked = [...request.documents.getItems(), ...request.attachments.getItems()].find((f) => f.id === fileId && !f.deleted);
       if (linked) return linked;
     }
@@ -348,7 +414,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     // Quyền xử lý của tôi (ủy quyền + nhóm) — vừa để phân quyền vừa để hiển thị người được xử lý thay
     const access = await buildTaskAccess(this.em, tasks, this.delegationScope(request), user.id);
     const { delegates } = access;
-    this.assertCanView(request, tasks, user, access);
+    const shared = await this.isSharedWith(id, user.id, access);
+    this.assertCanView(request, tasks, user, access, shared);
     const delegateIds = [...new Set([...delegates.values()].flat())];
     const delegateUsers = delegateIds.length
       ? await this.em.find(UserEntity, { id: { $in: delegateIds } }, { fields: ["id", "fullName", "avatar"] })
@@ -356,6 +423,11 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const delegateBriefs = new Map(delegateUsers.map((u) => [u.id, { id: u.id, fullName: u.fullName, avatar: u.avatar }]));
 
     const histories = await this.em.find(ApprovalHistoryEntity, { request: id }, { populate: ["actor"], orderBy: { createdAt: "ASC" } });
+    const shares = await this.em.find(
+      ApprovalShareEntity,
+      { request: id, deleted: { $ne: true } },
+      { populate: ["principal", "principal.user", "principal.group", "createdBy"], orderBy: { createdAt: "ASC" } },
+    );
     const version = request.workflowVersion as ApprovalWorkflowVersionEntity | undefined;
     const definition = version ? workflowDefinitionSchema.parse(version.definition) : null;
 
@@ -436,7 +508,15 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         data: h.data,
         createdAt: h.createdAt,
       })),
+      shares: shares.map((sh) => ({
+        id: sh.id,
+        principal: principalBrief(sh.principal),
+        sharedBy: userBrief(sh.createdBy),
+        message: sh.message,
+        createdAt: sh.createdAt,
+      })),
       permissions: {
+        canShare: this.canShareRequest(request, tasks, user, access),
         canEdit: editable,
         canSubmit: editable,
         canDelete: isRequester && request.status === ApprovalRequestStatus.Draft,
