@@ -1,13 +1,21 @@
 import { BaseService } from "@common/base/base.service";
 import { isPrivateStoragePath } from "@common/constants/storage.constant";
+import { describeError } from "@common/utils/describe-error.util";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
-import { BadRequestException, ForbiddenException, Injectable, Scope } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, Scope } from "@nestjs/common";
 import { AttachmentEntity, AttachmentStatus } from "../../entities/attachment";
 import { UploadService } from "./upload.service";
 
+export interface CompleteMultipart {
+  uploadId: string;
+  parts: { partNumber: number; etag: string }[];
+}
+
 @Injectable({ scope: Scope.REQUEST })
 export class AttachmentService extends BaseService<AttachmentEntity> {
+  private readonly logger = new Logger(AttachmentService.name);
+
   constructor(
     @InjectRepository(AttachmentEntity)
     protected readonly repo: EntityRepository<AttachmentEntity>,
@@ -38,7 +46,7 @@ export class AttachmentService extends BaseService<AttachmentEntity> {
   }
 
   /** Xác minh file đã upload (tồn tại, đúng dung lượng, nội dung khớp đuôi) rồi chuyển sang `ready` */
-  async completeUpload(id: string): Promise<AttachmentEntity> {
+  async completeUpload(id: string, multipart?: CompleteMultipart): Promise<AttachmentEntity> {
     const attachment = await this.findById(id);
     if (attachment.createdBy.id !== this.getCurrentUser().id) {
       throw new ForbiddenException("You cannot access this file");
@@ -48,8 +56,13 @@ export class AttachmentService extends BaseService<AttachmentEntity> {
     if (attachment.deleted) throw new BadRequestException("Upload was cancelled");
 
     try {
+      // Upload nhiều phần: ghép các phần thành một object trước, rồi mới kiểm như file thường
+      if (multipart) await this.uploadService.completeMultipartUpload({ key: attachment.key, ...multipart });
       await this.uploadService.verifyUploadedObject({ key: attachment.key, filename: attachment.filename, expectedSize: attachment.size });
     } catch (error) {
+      this.logger.warn(
+        `completeUpload id=${id} key=${attachment.key} filename=${attachment.filename} multipart=${!!multipart} failed, removing record: ${describeError(error)}`,
+      );
       // File sai đã bị xóa khỏi R2; bỏ luôn bản ghi để không bị gắn nhầm vào tờ trình
       await this.remove(id);
       throw error;
