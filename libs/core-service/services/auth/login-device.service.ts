@@ -127,7 +127,8 @@ export class LoginDeviceService {
     const user = em.getReference(UserEntity, userId);
     const system = em.getReference(UserEntity, SYSTEM_USER_ID);
 
-    em.create(UserDeviceEntity, { user, deviceId, browser, os, lastIp: ip, lastSeenAt: now, createdBy: system, updatedBy: system });
+    // Thiết bị do chính user đăng nhập tạo ra; thông báo bên dưới là của hệ thống
+    em.create(UserDeviceEntity, { user, deviceId, browser, os, lastIp: ip, lastSeenAt: now, createdBy: user, updatedBy: user });
     if (hasOtherDevices && isFreshLogin) {
       em.create(NotificationEntity, {
         user,

@@ -29,6 +29,9 @@ import {
 /** authentication_method của Custom Access Token hook không ghi log LOGIN */
 const AUTH_HOOK_SKIPPED_METHODS = new Set(["token_refresh", "magiclink"]);
 
+/** Thao tác do chính chủ tài khoản yêu cầu (chưa đăng nhập nhưng xác định được tài khoản) */
+const selfAction = (userId: string) => ({ type: ActivityLogType.User, actorId: userId });
+
 @Injectable({ scope: Scope.REQUEST })
 export class AuthService extends BaseService<UserEntity> {
   private readonly logger = new Logger(AuthService.name);
@@ -77,7 +80,7 @@ export class AuthService extends BaseService<UserEntity> {
     await this.cache.set(AuthCacheKey.forgotPasswordOtp(data.email), otp.toLowerCase(), AuthOtpConfig.forgotPasswordTtl);
     await this.cache.set(AuthCacheKey.forgotPasswordSendCount(data.email, today), (parseInt(sendCountRaw ?? "0") + 1).toString(), 86400);
 
-    await this.writeAuthLog(user.id, ActivityLogAction.FORGOT_PASSWORD, { newData: { email: user.loginName } });
+    await this.writeAuthLog(user.id, ActivityLogAction.FORGOT_PASSWORD, { ...selfAction(user.id), newData: { email: user.loginName } });
 
     await this.sendOtpMail(user.loginName, user.fullName, otp).catch((error: Error) => {
       this.logger.error("Failed to send OTP email: " + error.message);
@@ -102,7 +105,7 @@ export class AuthService extends BaseService<UserEntity> {
       throw new BadRequestException("Failed to update password: " + error.message);
     });
     await this.cache.del(AuthCacheKey.forgotPasswordOtp(data.email));
-    await this.writeAuthLog(user.id, ActivityLogAction.RESET_PASSWORD, { newData: { email: user.loginName } });
+    await this.writeAuthLog(user.id, ActivityLogAction.RESET_PASSWORD, { ...selfAction(user.id), newData: { email: user.loginName } });
 
     await this.sendNewPasswordMail(user.loginName, user.fullName, newPassword).catch((error: Error) => {
       this.logger.error("Failed to send new password email: " + error.message);
@@ -125,7 +128,7 @@ export class AuthService extends BaseService<UserEntity> {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await this.cache.set(AuthCacheKey.loginOtp(data.email), JSON.stringify({ code: otp, attempts: 0 }), AuthOtpConfig.loginOtpTtl);
     await this.cache.set(AuthCacheKey.loginOtpRateLimit(data.email), (parseInt(countRaw ?? "0") + 1).toString(), 3600);
-    await this.writeAuthLog(user.id, ActivityLogAction.LOGIN_OTP_REQUEST, { newData: { email: user.loginName } });
+    await this.writeAuthLog(user.id, ActivityLogAction.LOGIN_OTP_REQUEST, { ...selfAction(user.id), newData: { email: user.loginName } });
 
     await this.sendLoginOtpMail(user.loginName, user.fullName, otp).catch((error: Error) => {
       this.logger.error("Failed to send login OTP email: " + error.message);
@@ -176,7 +179,8 @@ export class AuthService extends BaseService<UserEntity> {
 
   /**
    * Ghi log nhóm auth (parentType = auth, parentId = id user); không chứa OTP hay mật khẩu.
-   * Mặc định do hệ thống thực hiện (request chưa đăng nhập). Lỗi ghi log chỉ in ra, không làm hỏng luồng xác thực.
+   * Mặc định do hệ thống thực hiện; thao tác người dùng tự yêu cầu (OTP, quên / đặt lại mật khẩu) ghi chính họ
+   * là người thực hiện (selfAction). Lỗi ghi log chỉ in ra, không làm hỏng luồng xác thực.
    */
   private async writeAuthLog(
     userId: string,
@@ -342,7 +346,10 @@ export class AuthService extends BaseService<UserEntity> {
     return user?.id;
   }
 
-  /** Log thay đổi bảng users do hook đăng ký (hệ thống thực hiện); hiện trong lịch sử của user */
+  /**
+   * Log thay đổi bảng users do hook đăng ký; hiện trong lịch sử của user. Người thực hiện là chính user (họ đăng nhập /
+   * đăng ký và Supabase đã xác thực email) — riêng cột người tạo của bản ghi user vẫn là hệ thống.
+   */
   private async writeUserLog(
     userId: string,
     action: ActivityLogAction,
@@ -351,8 +358,8 @@ export class AuthService extends BaseService<UserEntity> {
   ) {
     await this.activityLogService
       .addOne(
-        { parentId: userId, parentType: this.tableName, action, type: ActivityLogType.System, oldData, newData },
-        { user: { id: SYSTEM_USER_ID } as IUserResponse },
+        { parentId: userId, parentType: this.tableName, action, type: ActivityLogType.User, oldData, newData },
+        { user: { id: userId } as IUserResponse },
       )
       .catch((error: Error) => this.logger.error(`Failed to write user activity log (${action}): ${error.message}`));
   }
