@@ -17,6 +17,7 @@ import { ActivityLogService } from "./activity-log";
 import { ActivityLogQueueService } from "./activity-log-queue";
 import { NotificationService } from "./notification";
 import { UploadService, AttachmentService } from "./upload";
+import { SystemMailService } from "./email-template";
 
 export {
   AuthService,
@@ -39,6 +40,7 @@ export {
   NotificationService,
   UploadService,
   AttachmentService,
+  SystemMailService,
 };
 
 export const coreServices = [
@@ -62,4 +64,5 @@ export const coreServices = [
   NotificationService,
   UploadService,
   AttachmentService,
+  SystemMailService,
 ];

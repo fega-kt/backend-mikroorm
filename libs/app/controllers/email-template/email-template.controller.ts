@@ -23,10 +23,23 @@ export class EmailTemplateController {
     return this.templateService.variables();
   }
 
+  @Get("brand")
+  @Permissions(PermissionType.MenuEmailTemplate)
+  brand() {
+    return this.templateService.brand();
+  }
+
+  @Get("starter")
+  @Permissions(PermissionType.MenuEmailTemplate)
+  starter() {
+    return this.templateService.starter();
+  }
+
   @Post("preview")
   @Permissions(PermissionType.MenuEmailTemplate)
   preview(@Body(new ZodValidationPipe(previewEmailTemplateValidation)) data: z.infer<typeof previewEmailTemplateValidation>) {
-    return this.templateService.preview(data.subject, data.body);
+    const { code, ...template } = data;
+    return this.templateService.preview(template, code);
   }
 
   @Get(":code")

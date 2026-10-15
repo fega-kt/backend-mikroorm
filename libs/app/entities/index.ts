@@ -11,7 +11,6 @@ export { ApprovalHistoryEntity, ApprovalHistoryAction } from "./approval-history
 export { ApprovalDelegationEntity, ApprovalDelegationMode } from "./approval-delegation";
 export { ApprovalShareEntity } from "./approval-share";
 export { ApprovalCounterEntity } from "./approval-counter";
-export { EmailTemplateEntity } from "./email-template";
 
 import { CategoryEntity } from "./category";
 import { RequestTypeEntity } from "./request-type";
@@ -26,7 +25,6 @@ import { ApprovalHistoryEntity } from "./approval-history";
 import { ApprovalDelegationEntity } from "./approval-delegation";
 import { ApprovalShareEntity } from "./approval-share";
 import { ApprovalCounterEntity } from "./approval-counter";
-import { EmailTemplateEntity } from "./email-template";
 
 export const appEntities = [
   CategoryEntity,
@@ -42,5 +40,4 @@ export const appEntities = [
   ApprovalDelegationEntity,
   ApprovalShareEntity,
   ApprovalCounterEntity,
-  EmailTemplateEntity,
 ];

@@ -41,6 +41,10 @@ export const ENV = {
 
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   MAIL_FROM: process.env.MAIL_FROM || "noreply@example.com",
+  /** Tên hiển thị trên header / footer email */
+  APP_NAME: process.env.APP_NAME || "HRM",
+  /** Logo PNG trên header email — hộp thư phải tải được nên là URL công khai (Gmail không hiện SVG) */
+  APP_LOGO_URL: process.env.APP_LOGO_URL ?? "",
 
   SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET,
   SUPABASE_JWT_PUBLISHABLE: process.env.SUPABASE_JWT_PUBLISHABLE,

@@ -47,7 +47,6 @@ function setup(send: (to: string) => { error: { name: string; message: string } 
   internals.buildContext = vi.fn(async () => ({
     template: { subject: "Tờ trình {{request.code}}", body: "<p>{{recipient.name}}</p>" },
     vars: { "request.code": "TT-1" },
-    link: "http://app/approval/requests/r1",
     users: new Map(Object.values(users).map((user) => [user.id, user])),
   }));
   const handle = (body: object) =>
