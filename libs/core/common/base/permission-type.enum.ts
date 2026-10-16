@@ -131,6 +131,14 @@ export enum PermissionType {
   /** tạo / sửa / xoá mẫu email, khôi phục mẫu hệ thống */
   UpdateEmailTemplate = "permission:email-template:update",
 
+  /** ===== I18N (bản dịch dữ liệu) ===== */
+
+  /** vào menu quản lý bản dịch */
+  MenuI18n = "permission:menu:i18n",
+
+  /** thêm / sửa / xóa bản dịch */
+  UpdateI18n = "permission:i18n:update",
+
   /** ===== APPROVAL REQUEST (quản trị) ===== */
 
   /** vào menu tất cả đơn + xem chi tiết mọi đơn */

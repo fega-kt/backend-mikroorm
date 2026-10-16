@@ -11,12 +11,14 @@ export { ApprovalHistoryEntity, ApprovalHistoryAction } from "./approval-history
 export { ApprovalDelegationEntity, ApprovalDelegationMode } from "./approval-delegation";
 export { ApprovalShareEntity } from "./approval-share";
 export { ApprovalCounterEntity } from "./approval-counter";
+export { TranslationEntity } from "./translation";
 
 import { CategoryEntity } from "./category";
 import { RequestTypeEntity } from "./request-type";
 import { RequestTypeVersionEntity } from "./request-type-version";
 import { FormEntity } from "./form";
 import { FormVersionEntity } from "./form-version";
+import { TranslationEntity } from "./translation";
 import { ApprovalWorkflowEntity } from "./approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "./approval-workflow-version";
 import { ApprovalRequestEntity } from "./approval-request";
@@ -32,6 +34,7 @@ export const appEntities = [
   RequestTypeVersionEntity,
   FormEntity,
   FormVersionEntity,
+  TranslationEntity,
   ApprovalWorkflowEntity,
   ApprovalWorkflowVersionEntity,
   ApprovalRequestEntity,

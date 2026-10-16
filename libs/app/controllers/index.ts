@@ -7,6 +7,7 @@ import { ApprovalRequestController } from "./approval-request";
 import { ApprovalTaskController } from "./approval-task";
 import { ApprovalDelegationController } from "./approval-delegation";
 import { EmailTemplateController } from "./email-template";
+import { I18nController } from "./i18n";
 
 export {
   CategoryController,
@@ -18,6 +19,7 @@ export {
   ApprovalTaskController,
   ApprovalDelegationController,
   EmailTemplateController,
+  I18nController,
 };
 
 export const appControllers = [
@@ -30,4 +32,5 @@ export const appControllers = [
   ApprovalTaskController,
   ApprovalDelegationController,
   EmailTemplateController,
+  I18nController,
 ];
