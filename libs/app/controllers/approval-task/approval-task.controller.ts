@@ -4,7 +4,7 @@ import { ZodValidationPipe } from "@common/pipes";
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { z } from "zod";
 import { ApprovalAction } from "../../services/approval-engine/approval-engine.service";
-import { ApprovalTaskService } from "../../services/approval-task/approval-task.service";
+import { type ApprovalRateStats, type ApprovedStats, ApprovalTaskService } from "../../services/approval-task/approval-task.service";
 import { actionValidation, bulkApproveValidation, inboxFilterValidation, reassignValidation } from "./approval-task.validation";
 
 /** Duyệt đơn — người thao tác phải là người duyệt của bước hiện tại (engine kiểm tra) */
@@ -20,6 +20,18 @@ export class ApprovalTaskController {
   @Get("inbox/count")
   count() {
     return this.taskService.countPending();
+  }
+
+  /** Thẻ "Tôi đã duyệt tháng này" ở trang chủ */
+  @Get("stats/approved")
+  approvedStats(): Promise<ApprovedStats> {
+    return this.taskService.getApprovedStats();
+  }
+
+  /** Thẻ "Tỷ lệ duyệt" ở trang chủ */
+  @Get("stats/approval-rate")
+  approvalRateStats(): Promise<ApprovalRateStats> {
+    return this.taskService.getApprovalRateStats();
   }
 
   @Post("bulk-approve")
