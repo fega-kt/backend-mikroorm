@@ -146,6 +146,18 @@ export class UserService extends BaseService<UserEntity> {
     return { data: serialize(data, { populate: ["department", "createdBy", "updatedBy"], forceObject: true }), total };
   }
 
+  /**
+   * Thông tin hiển thị tối thiểu của nhiều user một lần (tên, email, avatar) — cho các nơi chỉ lưu { id, name }
+   * như trường người dùng trong form tờ trình. Không trả thông tin khác; user đã xóa không có trong kết quả.
+   */
+  async getBriefs(ids: string[]) {
+    const users = await this.repo.find(
+      { id: { $in: [...new Set(ids)] }, deleted: { $ne: true } },
+      { fields: ["id", "fullName", "loginName", "workEmail", "avatar"] },
+    );
+    return users.map((u) => ({ id: u.id, fullName: u.fullName, loginName: u.loginName, workEmail: u.workEmail, avatar: u.avatar }));
+  }
+
   async getDetail(id: string) {
     const user = await this.findOne(
       { id, deleted: { $ne: true } },

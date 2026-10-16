@@ -77,6 +77,11 @@ export const updateUserActiveValidation = z.object({
   isActive: z.boolean(),
 });
 
+/** Danh sách id cần lấy thông tin hiển thị (một trang tờ trình hiếm khi quá vài chục người) */
+export const userBriefsValidation = z.object({
+  ids: z.array(z.string().trim().min(1).max(64)).min(1).max(200),
+});
+
 export const updateProfileValidation = z.object({
   fullName: z
     .string()
