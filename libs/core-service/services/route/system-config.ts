@@ -19,6 +19,7 @@ export class SystemConfigRouteService {
 
     const canViewAppSetting = currentUser.canAccess([PermissionType.MenuAppSetting]);
     const canManageEmailTemplates = currentUser.canAccess([PermissionType.MenuEmailTemplate]);
+    const canManageI18n = currentUser.canAccess([PermissionType.MenuI18n]);
 
     const children = [];
 
@@ -46,6 +47,21 @@ export class SystemConfigRouteService {
           icon: "MailOutlined",
           title: "common.menu.emailTemplate",
           roles: [PermissionType.MenuEmailTemplate],
+          permissions: [],
+        },
+      });
+    }
+
+    // Bản dịch dữ liệu do người dùng nhập (nhãn trường biểu mẫu…)
+    if (canManageI18n) {
+      children.push({
+        path: "/system-config/i18n",
+        component: "/system-config/i18n/index.tsx",
+        handle: {
+          keepAlive: false,
+          icon: "TranslationOutlined",
+          title: "common.menu.i18n",
+          roles: [PermissionType.MenuI18n],
           permissions: [],
         },
       });

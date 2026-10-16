@@ -113,6 +113,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       prefix: t.prefix,
       description: t.description,
       category: t.category ? { id: t.category.id, name: t.category.name } : null,
+      formId: t.form.id,
       formSchema: t.form.formSchema ?? [],
       attachmentConfig: resolveAttachmentConfig(t.attachmentConfig),
       hasWorkflow: withWorkflow.has(t.id),
@@ -467,6 +468,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         code: request.requestTypeVersion.code,
         name: request.requestTypeVersion.name,
         // Form và cấu hình tệp gắn lúc tạo phiếu, không phải bản hiện hành của loại tờ trình
+        formId: request.formVersion.form.id,
         formSchema: request.formVersion.formSchema ?? [],
         attachmentConfig: resolveAttachmentConfig(request.requestTypeVersion.attachmentConfig),
       },
