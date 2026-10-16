@@ -52,7 +52,7 @@ describe("form-schema", () => {
     expect(v.safeParse({ handover: { id: "u1", name: "An" }, depts: { id: "d1", name: "IT" } }).success).toBe(false);
   });
 
-  it("enforces minDate / maxDate, including \"today\"", () => {
+  it('enforces minDate / maxDate, including "today"', () => {
     const fields = formSchemaSchema.parse([
       { key: "from", label: "Từ", type: FormFieldType.Date, required: true, minDate: "2026-01-10", maxDate: "2026-01-20" },
       { key: "future", label: "Tương lai", type: FormFieldType.Date, minDate: "today" },
@@ -63,7 +63,9 @@ describe("form-schema", () => {
     expect(v.safeParse({ from: "2026-01-21" }).success).toBe(false);
     expect(v.safeParse({ from: "2026-01-15", future: "2000-01-01" }).success).toBe(false);
     expect(v.safeParse({ from: "2026-01-15", future: "2999-01-01" }).success).toBe(true);
-    expect(formSchemaSchema.safeParse([{ key: "a", label: "A", type: "date", minDate: "2026-02-01", maxDate: "2026-01-01" }]).success).toBe(false);
+    expect(formSchemaSchema.safeParse([{ key: "a", label: "A", type: "date", minDate: "2026-02-01", maxDate: "2026-01-01" }]).success).toBe(
+      false,
+    );
   });
 
   it("rejects span outside the 12-column grid", () => {
