@@ -27,6 +27,13 @@ export function formatPayloadField(type: FormFieldType | undefined, value: unkno
       return options?.find((o) => o.value === value)?.label ?? String(value);
     case FormFieldType.Switch:
       return value ? "Có" : "Không";
+    case FormFieldType.User:
+    case FormFieldType.Department:
+    case FormFieldType.Principal:
+      return (Array.isArray(value) ? value : [value])
+        .map((v) => (v as { name?: string })?.name ?? "")
+        .filter(Boolean)
+        .join(", ");
     default:
       return Array.isArray(value) ? value.join(", ") : String(value);
   }
