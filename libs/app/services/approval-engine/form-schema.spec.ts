@@ -71,4 +71,17 @@ describe("form-schema", () => {
   it("rejects span outside the 12-column grid", () => {
     expect(formSchemaSchema.safeParse([{ key: "a", label: "A", type: "text", span: 13 }]).success).toBe(false);
   });
+
+  it("keeps the principal type and user id, and still accepts old { id, name } values", () => {
+    const principals = buildPayloadValidator(
+      formSchemaSchema.parse([{ key: "to", label: "Gửi tới", type: FormFieldType.Principal, multiple: true }]),
+    );
+    const value = [
+      { id: "p1", name: "Nguyễn Văn A", type: "user", userId: "u1" },
+      { id: "p2", name: "Nhóm kế toán", type: "group" },
+      { id: "p3", name: "Phiếu cũ" },
+    ];
+    expect(principals.parse({ to: value })).toEqual({ to: value });
+    expect(principals.safeParse({ to: [{ id: "p1", name: "A", type: "department" }] }).success).toBe(false);
+  });
 });

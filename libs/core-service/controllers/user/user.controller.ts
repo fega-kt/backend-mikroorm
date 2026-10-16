@@ -29,6 +29,7 @@ import {
   updateProfileValidation,
   updateUserActiveValidation,
   updateUserValidation,
+  userBriefsValidation,
   UserListFilterDto,
   userListFilterValidation,
 } from "./user.validation";
@@ -49,6 +50,12 @@ export class UserController {
     data: z.infer<typeof updateProfileValidation>,
   ) {
     return this.userService.updateProfile(user.id, data);
+  }
+
+  /** Tên / email / avatar của nhiều user theo id — mọi người đã đăng nhập (như ô chọn người), không đòi quyền quản trị */
+  @Post("briefs")
+  briefs(@Body(new ZodValidationPipe(userBriefsValidation)) data: z.infer<typeof userBriefsValidation>) {
+    return this.userService.getBriefs(data.ids);
   }
 
   @Post()

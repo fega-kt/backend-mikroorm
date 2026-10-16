@@ -1,4 +1,5 @@
 import { todayVn } from "@common/utils/vn-date.util";
+import { PrincipalType } from "@core-service/entities/principal";
 import { z } from "zod";
 
 /** Kiểu trường trong form của loại đơn — FE map sang valueType của BetaSchemaForm */
@@ -75,6 +76,23 @@ export type FormSchema = z.infer<typeof formSchemaSchema>;
 
 const referenceValue = z.object({ id: z.string().min(1).max(64), name: z.string().max(255) });
 
+/**
+ * Người / nhóm: thêm loại để hiển thị đúng (avatar người hay icon nhóm) và id user của principal là người
+ * (tra avatar / email mới nhất). Không bắt buộc: payload cũ chỉ có { id, name } vẫn hợp lệ.
+ */
+const principalValue = referenceValue.extend({
+  type: z.enum(PrincipalType).optional(),
+  userId: z.string().min(1).max(64).optional(),
+});
+
+const referenceList = (item: z.ZodType, field: FormField) =>
+  field.multiple
+    ? z
+        .array(item)
+        .min(field.required ? 1 : 0)
+        .max(100)
+    : item;
+
 const resolveBound = (bound: string | undefined) => (bound === "today" ? todayVn() : bound);
 
 /** Giới hạn ngày được tính lúc validate (để "today" luôn là hôm nay) */
@@ -109,13 +127,9 @@ function fieldValidator(field: FormField): z.ZodType {
       return z.boolean();
     case FormFieldType.User:
     case FormFieldType.Department:
+      return referenceList(referenceValue, field);
     case FormFieldType.Principal:
-      return field.multiple
-        ? z
-            .array(referenceValue)
-            .min(field.required ? 1 : 0)
-            .max(100)
-        : referenceValue;
+      return referenceList(principalValue, field);
     case FormFieldType.Textarea:
       return z
         .string()
