@@ -24,7 +24,9 @@ import { ApprovalShareEntity } from "../../entities/approval-share";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-version";
+import { CategoryEntity } from "../../entities/category";
 import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
+import { RequestTypeVersionEntity } from "../../entities/request-type-version";
 import { ensureLatestFormVersion } from "../form/form-version";
 import { ensureLatestTypeVersion } from "../request-type/request-type-version";
 import { buildChange, diffFiles, diffPayload, type FieldChange, type FileChangeItem } from "./request-change-log";
@@ -36,6 +38,7 @@ import { NodeType, workflowDefinitionSchema, type WaitNode } from "../approval-e
 import { buildTaskAccess, canActOnTask, holderUserId, isGroupTask, type TaskAccess } from "../approval-engine/task-access";
 
 const userBrief = (u?: UserEntity | null) => (u ? { id: u.id, fullName: u.fullName, avatar: u.avatar } : null);
+const categoryBrief = (c?: CategoryEntity | null) => (c ? { id: c.id, name: c.name } : null);
 /** Người hoặc nhóm (principal) — cần populate user / group */
 const principalBrief = (p?: PrincipalEntity | null) =>
   p
@@ -106,6 +109,14 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       { fields: ["id", "requestType"] },
     );
     const withWorkflow = new Set(workflows.map((w) => w.requestType.id));
+    // Phiên bản hiện hành của từng loại (= bản phiếu mới sẽ gắn); loại chưa có phiên bản nào thì phiếu đầu tiên tạo v1
+    const versions = await this.em.find(
+      RequestTypeVersionEntity,
+      { requestType: { $in: types.map((t) => t.id) } },
+      { fields: ["version", "requestType"] },
+    );
+    const latestVersion = new Map<string, number>();
+    for (const v of versions) latestVersion.set(v.requestType.id, Math.max(latestVersion.get(v.requestType.id) ?? 0, v.version));
     return types.map((t) => ({
       id: t.id,
       code: t.code,
@@ -117,6 +128,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       formSchema: t.form.formSchema ?? [],
       attachmentConfig: resolveAttachmentConfig(t.attachmentConfig),
       hasWorkflow: withWorkflow.has(t.id),
+      version: latestVersion.get(t.id) ?? 1,
     }));
   }
 
@@ -147,9 +159,13 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         status: RequestTypeStatus.Published,
         deleted: { $ne: true },
       },
-      { populate: ["form"] },
+      { populate: ["form", "category"] },
     );
     if (!requestType) throw new BadRequestException("Request type is not available");
+    // Loại tờ trình phải thuộc nhóm đã chọn (danh sách nhóm / loại ở client có thể đã cũ): lệch thì báo lỗi, không lưu
+    if (requestType.category?.id !== data.category) {
+      throw new BadRequestException("Request type does not belong to the selected category");
+    }
     const departmentId = await this.resolveSubmitUnit(data.department);
 
     // Id do client sinh sẵn (để tệp đã upload nằm đúng thư mục của phiếu): không được trùng phiếu có sẵn
@@ -164,6 +180,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       ...(data.id ? { id: data.id } : {}),
       title: data.title,
       requestType,
+      category: this.em.getReference(CategoryEntity, data.category),
       requestTypeVersion,
       formVersion,
       requester: this.em.getReference(UserEntity, user.id),
@@ -184,6 +201,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       changes: [
         buildChange("title", null, data.title),
         buildChange("priority", null, data.priority),
+        { field: "category", from: null, to: categoryBrief(requestType.category) },
         { field: "department", from: null, to: departments.get(departmentId) ?? null },
         ...diffPayload({}, data.payload),
       ],
@@ -381,6 +399,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       { id, deleted: { $ne: true } },
       {
         populate: [
+          "category",
           "requestTypeVersion",
           "formVersion",
           "requester",
@@ -472,6 +491,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         formSchema: request.formVersion.formSchema ?? [],
         attachmentConfig: resolveAttachmentConfig(request.requestTypeVersion.attachmentConfig),
       },
+      category: categoryBrief(request.category),
       requester: userBrief(request.requester),
       department: { id: request.department.id, name: request.department.name },
       documents: request.documents.getItems().map(fileBrief),

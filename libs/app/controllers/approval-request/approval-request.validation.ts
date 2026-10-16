@@ -8,6 +8,8 @@ export const createApprovalRequestValidation = z.object({
   /** Id do client sinh sẵn: để tệp upload trước khi tạo phiếu nằm đúng thư mục Attachments/{id}/... */
   id: z.uuid().optional(),
   requestType: z.string().trim().min(1, "Request type is required"),
+  /** Nhóm tờ trình đã chọn — bắt buộc, loại tờ trình phải thuộc nhóm này */
+  category: z.string().trim().min(1, "Category is required"),
   title: z.string().trim().min(1, "Title is required").max(255),
   payload: z.record(z.string(), z.unknown()).default({}),
   priority: z.enum(ApprovalPriority).default(ApprovalPriority.Normal),

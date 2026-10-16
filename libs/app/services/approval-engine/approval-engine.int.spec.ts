@@ -508,6 +508,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     const request = e.create(ApprovalRequestEntity, {
       title: `Nghỉ ${String(payload.days)} ngày`,
       requestType: type,
+      category: type.category,
       requestTypeVersion,
       formVersion,
       requester: e.getReference(UserEntity, requester),

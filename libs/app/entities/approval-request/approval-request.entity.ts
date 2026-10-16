@@ -4,6 +4,7 @@ import { DepartmentEntity } from "@core-service/entities/department";
 import { UserEntity } from "@core-service/entities/user";
 import { Collection, Entity, Enum, Index, ManyToMany, ManyToOne, Property, types } from "@mikro-orm/core";
 import { ApprovalWorkflowVersionEntity } from "../approval-workflow-version/approval-workflow-version.entity";
+import { CategoryEntity } from "../category/category.entity";
 import { RequestTypeEntity } from "../request-type/request-type.entity";
 import { RequestTypeVersionEntity } from "../request-type-version/request-type-version.entity";
 import { FormVersionEntity } from "../form-version/form-version.entity";
@@ -39,6 +40,14 @@ export class ApprovalRequestEntity extends BaseEntity {
   @Index()
   @ManyToOne({ cascade: [], entity: () => RequestTypeEntity })
   requestType!: RequestTypeEntity;
+
+  /**
+   * Nhóm tờ trình người tạo đã chọn (= nhóm của loại tờ trình lúc tạo); lọc / thống kê theo nhóm không cần join qua loại.
+   * Phiếu tạo trước khi có cột này: điền bằng scripts/sql/migrate-request-category.sql trước khi deploy.
+   */
+  @Index()
+  @ManyToOne({ cascade: [], entity: () => CategoryEntity })
+  category!: CategoryEntity;
 
   /**
    * Phiên bản cấu hình của loại tờ trình (tên, tiền tố, cấu hình tệp…) gắn cứng lúc tạo phiếu: loại bị sửa hay xóa sau đó
