@@ -207,6 +207,8 @@ export class ApprovalEmailConsumer implements OnModuleInit {
     let attempts = previous;
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       attempts++;
+      // Ghi số lần thử trước khi gửi: job dừng giữa chừng (deploy, crash) vẫn đếm đúng các lần đã gửi đi
+      await this.queue.update(queueId, { attempts, lastAttemptAt: new Date() });
       try {
         await this.send(to, subject, html);
         return this.queue.markCompleted(queueId, { attempts });
