@@ -75,6 +75,7 @@ export const APP_SETTING_META: Record<AppSettingType, AppSettingMeta> = {
     isShow: true,
     rule: { min: 0, max: 3650, integer: true },
   },
+  [AppSettingType.WORK_EMAIL_FALLBACK_TO_LOGIN_NAME]: { type: AppSettingValueType.BOOLEAN, isShow: true },
 
   /** Bật/tắt viền focus đen quanh vùng nội dung chính ở FE */
   [AppSettingType.CONTENT_FOCUS_OUTLINE_ENABLED]: { type: AppSettingValueType.BOOLEAN, isShow: true, clientVisible: true },

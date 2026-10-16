@@ -7,6 +7,13 @@ export enum AppSettingType {
   INACTIVE_EMAIL_ALLOWED_LIST = "inactive_email_allowed_list",
   /** Số ngày giữ event outbox đã đẩy xong; 0 / chưa cấu hình → giữ vĩnh viễn */
   OUTBOX_RETENTION_DAYS = "outbox_retention_days",
+  /**
+   * Người chưa có workEmail có được nhận mail công việc (phê duyệt, nhắc duyệt…) qua loginName không.
+   * - Bật: gửi tới loginName.
+   * - Tắt / chưa cấu hình: không gửi cho người đó.
+   * Người có workEmail luôn nhận qua workEmail. Mail tài khoản (OTP, mật khẩu) luôn gửi tới loginName, không phụ thuộc setting này.
+   */
+  WORK_EMAIL_FALLBACK_TO_LOGIN_NAME = "work_email_fallback_to_login_name",
 
   // ===== UI (client) =====
   CONTENT_FOCUS_OUTLINE_ENABLED = "content_focus_outline_enabled",

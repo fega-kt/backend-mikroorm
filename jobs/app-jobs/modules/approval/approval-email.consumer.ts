@@ -6,7 +6,9 @@ import { buildRequestVariables } from "@app-domain/services/email-template/email
 import { FrontendPath, frontendUrl } from "@common/constants/frontend-path.constant";
 import { ENV } from "@config/env.config";
 import { type EmailTemplateBody, renderEmail } from "@core-service/services/email-template/email-template.render";
+import { parseValueBoolean } from "@common/utils/parse-value.util";
 import { ActivityLogQueueStatus } from "@core-service/entities/activity-log-queue";
+import { AppSettingEntity, AppSettingType } from "@core-service/entities/app-setting";
 import { NotificationType } from "@core-service/entities/notification";
 import { UserEntity } from "@core-service/entities/user";
 import { ActivityLogQueueService } from "@core-service/services/activity-log-queue/activity-log-queue.service";
@@ -45,6 +47,18 @@ interface EmailContext {
   template: EmailTemplateBody;
   vars: Record<string, string>;
   users: Map<string, Recipient>;
+  /** Setting WORK_EMAIL_FALLBACK_TO_LOGIN_NAME: người chưa có email công việc thì gửi qua email đăng nhập */
+  fallbackToLoginName: boolean;
+}
+
+const asEmail = (value?: string | null) => {
+  const email = value?.trim();
+  return email?.includes("@") ? email : undefined;
+};
+
+/** Địa chỉ nhận mail công việc: email công việc; chỉ khi bật setting mới dùng email đăng nhập cho người chưa có */
+export function recipientAddress(user: Pick<Recipient, "workEmail" | "loginName">, fallbackToLoginName: boolean) {
+  return asEmail(user.workEmail) ?? (fallbackToLoginName ? asEmail(user.loginName) : undefined);
 }
 
 class SendError extends Error {
@@ -137,9 +151,14 @@ export class ApprovalEmailConsumer implements OnModuleInit {
       { id: event.requestId },
       { populate: ["requestTypeVersion", "formVersion", "requester", "department"] },
     );
-    const [users, actor] = await Promise.all([
+    const [users, actor, fallbackSetting] = await Promise.all([
       em.find(UserEntity, { id: { $in: userIds }, deleted: { $ne: true } }, { fields: ["id", "fullName", "workEmail", "loginName"] }),
       event.actorId ? em.findOne(UserEntity, { id: event.actorId }, { fields: ["id", "fullName"] }) : Promise.resolve(null),
+      em.findOne(
+        AppSettingEntity,
+        { key: AppSettingType.WORK_EMAIL_FALLBACK_TO_LOGIN_NAME, deleted: { $ne: true } },
+        { fields: ["value"] },
+      ),
     ]);
 
     const link = frontendUrl(FrontendPath.ApprovalRequests, event.requestId);
@@ -158,15 +177,25 @@ export class ApprovalEmailConsumer implements OnModuleInit {
       comment: event.comment,
       message: event.message,
     });
-    return { template, vars, users: new Map(users.map((user) => [user.id, user])) };
+    return {
+      template,
+      vars,
+      users: new Map(users.map((user) => [user.id, user])),
+      fallbackToLoginName: parseValueBoolean(fallbackSetting?.value),
+    };
   }
 
   /** Gửi cho một người nhận và ghi kết quả vào dòng hàng đợi `queueId` */
   private async deliver(context: EmailContext, userId: string, queueId: string) {
     const user = context.users.get(userId);
     if (!user) return this.queue.markSkipped(queueId, "User not found");
-    const to = user.workEmail || user.loginName;
-    if (!to?.includes("@")) return this.queue.markSkipped(queueId, "Recipient has no email address");
+    // Mail công việc gửi tới email công việc; chỉ khi bật setting mới dùng email đăng nhập cho người chưa có
+    const to = recipientAddress(user, context.fallbackToLoginName);
+    if (!to)
+      return this.queue.markSkipped(
+        queueId,
+        context.fallbackToLoginName ? "Recipient has no email address" : "Recipient has no work email",
+      );
 
     const personal = { ...context.vars, "recipient.name": user.fullName };
     const { subject, html } = renderEmail(context.template, personal);
