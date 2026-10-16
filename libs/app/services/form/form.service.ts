@@ -7,19 +7,35 @@ import { createFormValidation, formFilterValidation, updateFormValidation } from
 import { FormEntity } from "../../entities/form";
 import { FormVersionEntity } from "../../entities/form-version";
 import { RequestTypeEntity } from "../../entities/request-type";
-import { ensureLatestFormVersion, recordFormVersionIfChanged } from "./form-version";
+import type { FormSchema } from "../approval-engine/form-schema";
+import { I18nService } from "../i18n/i18n.service";
+import { formI18nNamespace, formTranslationSources } from "./form-i18n";
+import { ensureLatestFormVersion, recordFormVersionIfChanged, sameFormSchema } from "./form-version";
 
 @Injectable({ scope: Scope.REQUEST })
 export class FormService extends BaseService<FormEntity> {
   constructor(
     @InjectRepository(FormEntity)
     protected readonly repo: EntityRepository<FormEntity>,
+    private readonly i18nService: I18nService,
   ) {
     super();
   }
 
   private get em() {
     return this.repo.getEntityManager();
+  }
+
+  /**
+   * Mỗi chuỗi cần dịch của form (định nghĩa hiện tại + các phiên bản cũ mà phiếu còn trỏ tới) có một dòng trong bảng bản dịch:
+   * chuỗi mới được thêm (chờ dịch), chuỗi gốc đổi thì cập nhật cột vi (trừ khi vi đã được sửa tay), chuỗi không còn ở phiên bản nào thì xóa.
+   */
+  private async syncTranslations(formId: string, currentSchema?: FormSchema | null) {
+    const versions = await this.em.find(FormVersionEntity, { form: formId }, { fields: ["formSchema"], orderBy: { version: "DESC" } });
+    const sources = formTranslationSources([currentSchema, ...versions.map((v) => v.formSchema)]);
+    // Chuỗi gốc trước lần sửa này = các phiên bản khác định nghĩa hiện tại (mới nhất trước)
+    const previous = formTranslationSources(versions.filter((v) => !sameFormSchema(v.formSchema, currentSchema)).map((v) => v.formSchema));
+    await this.i18nService.syncSources(formI18nNamespace(formId), sources, previous);
   }
 
   async createForm(data: z.infer<typeof createFormValidation>) {
@@ -35,6 +51,7 @@ export class FormService extends BaseService<FormEntity> {
     // v1: các phiếu tạo sau đó gắn với phiên bản này
     await ensureLatestFormVersion(this.em, created, this.getDefaultValuesForCreate());
     await this.em.flush();
+    await this.syncTranslations(created.id, created.formSchema);
     return created;
   }
 
@@ -71,6 +88,8 @@ export class FormService extends BaseService<FormEntity> {
     });
     // Đổi trường → phiên bản mới, chỉ áp dụng cho phiếu tạo từ giờ
     if (await recordFormVersionIfChanged(this.em, updated, this.getDefaultValuesForCreate())) await this.em.flush();
+    // Chạy cả khi trường không đổi để form có từ trước tính năng này cũng được đồng bộ ở lần lưu kế tiếp
+    await this.syncTranslations(id, updated.formSchema);
     return updated;
   }
 

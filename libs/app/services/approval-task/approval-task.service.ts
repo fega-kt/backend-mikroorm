@@ -104,6 +104,7 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
         requestType: {
           id: t.request.requestType.id,
           name: t.request.requestTypeVersion.name,
+          formId: t.request.formVersion.form.id,
           formSchema: t.request.formVersion.formSchema ?? [],
         },
         requester: { id: t.request.requester.id, fullName: t.request.requester.fullName, avatar: t.request.requester.avatar },
