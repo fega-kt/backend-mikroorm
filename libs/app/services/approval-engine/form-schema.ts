@@ -10,7 +10,18 @@ export enum FormFieldType {
   DateRange = "dateRange",
   Select = "select",
   Switch = "switch",
+  /** Người dùng / phòng ban / người-nhóm: giá trị là { id, name } (hoặc mảng khi `multiple`) */
+  User = "user",
+  Department = "department",
+  Principal = "principal",
 }
+
+/** Các kiểu trường chọn thực thể: payload lưu { id, name } để hiển thị lại không cần tra cứu */
+export const REFERENCE_FIELD_TYPES: ReadonlySet<FormFieldType> = new Set([
+  FormFieldType.User,
+  FormFieldType.Department,
+  FormFieldType.Principal,
+]);
 
 export const formFieldSchema = z.object({
   /** Tên trường trong payload, dùng trong điều kiện: { var: "payload.<key>" } */
@@ -27,6 +38,10 @@ export const formFieldSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   placeholder: z.string().max(255).optional(),
+  /** Cho chọn nhiều (chỉ dùng với user / department / principal) */
+  multiple: z.boolean().optional(),
+  /** Độ rộng trên lưới 12 cột của form; bỏ trống = cả hàng */
+  span: z.number().int().min(1).max(12).optional(),
 });
 
 export const formSchemaSchema = z
@@ -48,6 +63,8 @@ export const formSchemaSchema = z
 export type FormField = z.infer<typeof formFieldSchema>;
 export type FormSchema = z.infer<typeof formSchemaSchema>;
 
+const referenceValue = z.object({ id: z.string().min(1).max(64), name: z.string().max(255) });
+
 const isoDate = z.iso.datetime({ offset: true }).or(z.iso.date());
 
 function fieldValidator(field: FormField): z.ZodType {
@@ -67,6 +84,10 @@ function fieldValidator(field: FormField): z.ZodType {
       return z.enum((field.options ?? []).map((o) => o.value) as [string, ...string[]]);
     case FormFieldType.Switch:
       return z.boolean();
+    case FormFieldType.User:
+    case FormFieldType.Department:
+    case FormFieldType.Principal:
+      return field.multiple ? z.array(referenceValue).min(field.required ? 1 : 0).max(100) : referenceValue;
     case FormFieldType.Textarea:
       return z
         .string()

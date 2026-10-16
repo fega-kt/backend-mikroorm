@@ -40,4 +40,19 @@ describe("form-schema", () => {
     expect(result.success).toBe(false);
     expect(result.error.issues).toHaveLength(2);
   });
+
+  it("validates user / department fields as { id, name } and honours multiple", () => {
+    const fields = formSchemaSchema.parse([
+      { key: "handover", label: "Bàn giao", type: FormFieldType.User, required: true, span: 6 },
+      { key: "depts", label: "Phòng ban", type: FormFieldType.Department, multiple: true },
+    ]);
+    const v = buildPayloadValidator(fields);
+    expect(v.safeParse({ handover: { id: "u1", name: "An" }, depts: [{ id: "d1", name: "IT" }] }).success).toBe(true);
+    expect(v.safeParse({ handover: "u1" }).success).toBe(false);
+    expect(v.safeParse({ handover: { id: "u1", name: "An" }, depts: { id: "d1", name: "IT" } }).success).toBe(false);
+  });
+
+  it("rejects span outside the 12-column grid", () => {
+    expect(formSchemaSchema.safeParse([{ key: "a", label: "A", type: "text", span: 13 }]).success).toBe(false);
+  });
 });
