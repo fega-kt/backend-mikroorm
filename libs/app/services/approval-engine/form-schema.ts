@@ -1,3 +1,4 @@
+import { todayVn } from "@common/utils/vn-date.util";
 import { z } from "zod";
 
 /** Kiểu trường trong form của loại đơn — FE map sang valueType của BetaSchemaForm */
@@ -23,7 +24,7 @@ export const REFERENCE_FIELD_TYPES: ReadonlySet<FormFieldType> = new Set([
   FormFieldType.Principal,
 ]);
 
-const dateBound = z.string().regex(/^(today|\d{4}-\d{2}-\d{2})$/, "Use YYYY-MM-DD or \"today\"");
+const dateBound = z.string().regex(/^(today|\d{4}-\d{2}-\d{2})$/, 'Use YYYY-MM-DD or "today"');
 
 export const formFieldSchema = z.object({
   /** Tên trường trong payload, dùng trong điều kiện: { var: "payload.<key>" } */
@@ -74,11 +75,6 @@ export type FormSchema = z.infer<typeof formSchemaSchema>;
 
 const referenceValue = z.object({ id: z.string().min(1).max(64), name: z.string().max(255) });
 
-/** Hôm nay theo giờ Việt Nam (YYYY-MM-DD) */
-function todayVn() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
-}
-
 const resolveBound = (bound: string | undefined) => (bound === "today" ? todayVn() : bound);
 
 /** Giới hạn ngày được tính lúc validate (để "today" luôn là hôm nay) */
@@ -114,7 +110,12 @@ function fieldValidator(field: FormField): z.ZodType {
     case FormFieldType.User:
     case FormFieldType.Department:
     case FormFieldType.Principal:
-      return field.multiple ? z.array(referenceValue).min(field.required ? 1 : 0).max(100) : referenceValue;
+      return field.multiple
+        ? z
+            .array(referenceValue)
+            .min(field.required ? 1 : 0)
+            .max(100)
+        : referenceValue;
     case FormFieldType.Textarea:
       return z
         .string()

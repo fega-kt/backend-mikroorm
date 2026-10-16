@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { type DateRange, monthRangeVn } from "@common/utils/vn-date.util";
 import { PrincipalEntity } from "@core-service/entities/principal";
 import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
@@ -7,6 +8,20 @@ import type { InboxFilterDto } from "../../controllers/approval-task/approval-ta
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalAction, ApprovalEngineService } from "../approval-engine/approval-engine.service";
 import { actionableTaskFilter } from "../approval-engine/task-access";
+
+/** Thẻ "Tôi đã duyệt tháng này" ở trang chủ */
+export interface ApprovedStats {
+  thisMonth: number;
+  lastMonth: number;
+}
+
+/** Thẻ "Tỷ lệ duyệt" ở trang chủ: `rate` là phần trăm (0–100) */
+export interface ApprovalRateStats {
+  approved: number;
+  rejected: number;
+  returned: number;
+  rate: number;
+}
 
 /** Người hoặc nhóm (principal) — cần populate user / group */
 const principalBrief = (p?: PrincipalEntity | null) =>
@@ -102,6 +117,40 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
     const filter = await this.pendingFilter(this.getCurrentUser().id);
     const total = await this.repo.count({ $and: [filter, { request: { deleted: { $ne: true } } }] });
     return { total };
+  }
+
+  /** Số task tôi đã xử lý với trạng thái `status` trong khoảng [from, to) */
+  private countActed(userId: string, status: ApprovalTaskStatus, range: DateRange): Promise<number> {
+    return this.repo.count({
+      actedBy: userId,
+      status,
+      actedAt: { $gte: range.from, $lt: range.to },
+      deleted: { $ne: true },
+      request: { deleted: { $ne: true } },
+    });
+  }
+
+  /** Số tờ trình tôi đã duyệt tháng này và tháng trước (giờ Việt Nam) */
+  async getApprovedStats(): Promise<ApprovedStats> {
+    const userId = this.getCurrentUser().id;
+    const [thisMonth, lastMonth] = await Promise.all([
+      this.countActed(userId, ApprovalTaskStatus.Approved, monthRangeVn(0)),
+      this.countActed(userId, ApprovalTaskStatus.Approved, monthRangeVn(-1)),
+    ]);
+    return { thisMonth, lastMonth };
+  }
+
+  /** Tỷ lệ duyệt tháng này = duyệt / (duyệt + từ chối + trả lại) trong số tờ trình tôi đã xử lý */
+  async getApprovalRateStats(): Promise<ApprovalRateStats> {
+    const userId = this.getCurrentUser().id;
+    const range = monthRangeVn(0);
+    const [approved, rejected, returned] = await Promise.all([
+      this.countActed(userId, ApprovalTaskStatus.Approved, range),
+      this.countActed(userId, ApprovalTaskStatus.Rejected, range),
+      this.countActed(userId, ApprovalTaskStatus.Returned, range),
+    ]);
+    const decided = approved + rejected + returned;
+    return { approved, rejected, returned, rate: decided ? Math.round((approved / decided) * 100) : 0 };
   }
 
   /** Task đang chờ tôi xử lý: tôi giữ, của nhóm tôi đang ở, hoặc tôi được ủy quyền xử lý thay */
