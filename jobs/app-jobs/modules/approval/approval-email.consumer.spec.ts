@@ -3,7 +3,7 @@ import { ApprovalEventType } from "@app-domain/services/approval-engine/approval
 import { ActivityLogQueueStatus } from "@core-service/entities/activity-log-queue";
 import { NotificationType } from "@core-service/entities/notification";
 import { describe, expect, it, vi } from "vitest";
-import { ApprovalEmailConsumer } from "./approval-email.consumer";
+import { ApprovalEmailConsumer, recipientAddress } from "./approval-email.consumer";
 
 /** Hàng đợi giả: lưu trạng thái từng dòng trong bộ nhớ */
 function fakeQueue() {
@@ -34,11 +34,12 @@ function fakeQueue() {
 
 const users = {
   a: { id: "a", fullName: "An", workEmail: "an@corp.vn", loginName: "an" },
-  b: { id: "b", fullName: "Bình", workEmail: null, loginName: "binh" },
+  // Có email đăng nhập nhưng không có email công việc: mail công việc không được gửi sang email đăng nhập
+  b: { id: "b", fullName: "Bình", workEmail: null, loginName: "binh@corp.vn" },
   c: { id: "c", fullName: "Chi", workEmail: "chi@corp.vn", loginName: "chi" },
 };
 
-function setup(send: (to: string) => { error: { name: string; message: string } | null }) {
+function setup(send: (to: string) => { error: { name: string; message: string } | null }, fallbackToLoginName = false) {
   const queue = fakeQueue();
   const consumer = new ApprovalEmailConsumer({} as never, {} as never, queue as never);
   const internals = consumer as unknown as Record<string, unknown>;
@@ -48,6 +49,7 @@ function setup(send: (to: string) => { error: { name: string; message: string } 
     template: { subject: "Tờ trình {{request.code}}", body: "<p>{{recipient.name}}</p>" },
     vars: { "request.code": "TT-1" },
     users: new Map(Object.values(users).map((user) => [user.id, user])),
+    fallbackToLoginName,
   }));
   const handle = (body: object) =>
     new Promise<"ack" | "nack">((resolve) => {
@@ -85,7 +87,7 @@ describe("ApprovalEmailConsumer", () => {
       recipient: "an@corp.vn",
       subject: "Tờ trình TT-1",
     });
-    expect(rows[1]).toMatchObject({ status: ActivityLogQueueStatus.SKIPPED, error: "Recipient has no email address" });
+    expect(rows[1]).toMatchObject({ status: ActivityLogQueueStatus.SKIPPED, error: "Recipient has no work email" });
     expect(rows[2]).toMatchObject({ status: ActivityLogQueueStatus.COMPLETED, attempts: 2 });
   });
 
@@ -113,5 +115,17 @@ describe("ApprovalEmailConsumer", () => {
     await handle(message);
     expect(queue.rows.size).toBe(2);
     expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends to the login email only when the fallback setting is on", async () => {
+    const { queue, handle } = setup(() => ({ error: null }), true);
+    await handle({ ...event, recipientIds: ["b"] });
+    expect([...queue.rows.values()][0]).toMatchObject({ status: ActivityLogQueueStatus.COMPLETED, recipient: "binh@corp.vn" });
+  });
+
+  it("prefers the work email and ignores login names that are not emails", () => {
+    expect(recipientAddress({ workEmail: " an@corp.vn ", loginName: "an@login.vn" }, true)).toBe("an@corp.vn");
+    expect(recipientAddress({ workEmail: null, loginName: "binh@corp.vn" }, false)).toBeUndefined();
+    expect(recipientAddress({ workEmail: "", loginName: "chi" }, true)).toBeUndefined();
   });
 });
