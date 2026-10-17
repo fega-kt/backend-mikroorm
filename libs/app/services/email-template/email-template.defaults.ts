@@ -26,6 +26,14 @@ const requestLayout = (tone: EmailTone, icon?: string, title?: string): EmailLay
   button: { label: "Xem tờ trình", link: "{{request.link}}" },
 });
 
+/**
+ * Thông tin chung của tờ trình, mỗi thông tin một dòng (dễ đọc trên điện thoại); `extra` là các dòng thêm ở cuối
+ */
+const requestDetails = (...extra: string[]) =>
+  `<p>${["Loại tờ trình: {{request.type}}", "Người trình: {{request.requester}}", "Đơn vị: {{request.department}}", ...extra].join("<br>")}</p>`;
+
+const REQUEST_DETAILS = requestDetails();
+
 /** Nội dung khởi đầu khi tạo mẫu tùy chỉnh (bước Thông báo của quy trình) */
 export const CUSTOM_TEMPLATE_STARTER = buildEmailBody(
   "<p>Xin chào {{recipient.name}},</p>" +
@@ -44,7 +52,10 @@ export const SYSTEM_EMAIL_TEMPLATES: Record<SystemEmailTemplate, EmailTemplateCo
     name: "Tờ trình chờ duyệt",
     subject: "[Phê duyệt] {{request.code}} – {{request.title}} đang chờ bạn duyệt",
     body: buildEmailBody(
-      "<p>Xin chào {{recipient.name}},</p><p>Bạn có một tờ trình cần duyệt ở bước <strong>{{step.name}}</strong>.</p><p><strong>{{request.code}}</strong> {{request.title}} · {{request.type}}<br>Người trình: {{request.requester}} ({{request.department}}) · Độ ưu tiên: {{request.priority}}</p>",
+      "<p>Xin chào {{recipient.name}},</p>" +
+        "<p>Bạn có một tờ trình cần duyệt ở bước <strong>{{step.name}}</strong>.</p>" +
+        "<p><strong>{{request.code}}</strong> {{request.title}}</p>" +
+        requestDetails("Độ ưu tiên: {{request.priority}}"),
       requestLayout("brand", "📄", "Tờ trình chờ bạn duyệt"),
     ),
   },
@@ -65,7 +76,7 @@ export const SYSTEM_EMAIL_TEMPLATES: Record<SystemEmailTemplate, EmailTemplateCo
       "<p>Xin chào {{recipient.name}},</p>" +
         "<p>Bước <strong>{{step.name}}</strong> của tờ trình <strong>{{request.code}}</strong> {{request.title}} đã được {{actor.name}} duyệt.</p>" +
         "<p>Ý kiến: {{comment}}</p><p>{{message}}</p>" +
-        "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
+        REQUEST_DETAILS,
       requestLayout("success", "✓", "Một bước đã được duyệt"),
     ),
   },
@@ -122,7 +133,7 @@ export const SYSTEM_EMAIL_TEMPLATES: Record<SystemEmailTemplate, EmailTemplateCo
       "<p>Xin chào {{recipient.name}},</p>" +
         "<p>{{actor.name}} đã chia sẻ với bạn tờ trình <strong>{{request.code}}</strong> {{request.title}}. Bạn có thể xem nhưng không duyệt hay sửa được.</p>" +
         "<p>Lời nhắn: {{message}}</p>" +
-        "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
+        REQUEST_DETAILS,
       requestLayout("brand", "✉️", "Tờ trình được chia sẻ với bạn"),
     ),
   },
@@ -134,7 +145,7 @@ export const SYSTEM_EMAIL_TEMPLATES: Record<SystemEmailTemplate, EmailTemplateCo
       "<p>Xin chào {{recipient.name}},</p>" +
         "<p>Bạn nhận được thông báo về tờ trình <strong>{{request.code}}</strong> {{request.title}}.</p>" +
         "<p><strong>Nội dung:</strong> {{message}}</p>" +
-        "<p>Loại: {{request.type}} · Người trình: {{request.requester}} · Đơn vị: {{request.department}}</p>",
+        REQUEST_DETAILS,
       requestLayout("brand", "🔔", "Thông báo về tờ trình"),
     ),
   },

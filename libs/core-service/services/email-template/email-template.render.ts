@@ -180,6 +180,34 @@ export function renderEmail(template: EmailTemplateBody, vars: Record<string, st
   const body = isFullEmailBody(template.body) ? template.body : buildEmailBody(template.body);
   return {
     subject: renderTemplate(template.subject, all, { html: false }),
-    html: wrapEmailDocument(renderTemplate(body, all, { html: true })),
+    html: wrapEmailDocument(renderTemplate(dropEmptyLabelLines(body, all), all, { html: true })),
   };
+}
+
+const LINE_BREAK = /<br\s*\/?>/i;
+
+/** Chữ còn lại của một dòng (bỏ thẻ, &nbsp;, khoảng trắng) */
+const visibleText = (html: string) =>
+  html
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .trim();
+
+/**
+ * Dòng chỉ còn nhãn khi biến của nó trống thì bỏ cả dòng, vd "Lời nhắn: {{message}}" khi không có lời nhắn
+ * (không để "Lời nhắn:" trơ trọi). Một dòng = một đoạn <p> hoặc một phần của <p> ngăn bằng <br>.
+ * Chỉ bỏ dòng có biến, mọi biến đều trống và phần chữ còn lại kết thúc bằng ":"; mẫu không đổi, chỉ áp dụng lúc gửi.
+ */
+export function dropEmptyLabelLines(html: string, vars: Record<string, string | undefined>) {
+  const isEmptyLabel = (line: string) => {
+    const keys = usedVariables(line);
+    if (!keys.length || keys.some((key) => (vars[key] ?? "").trim())) return false;
+    return visibleText(line.replace(VARIABLE_PATTERN, "")).endsWith(":");
+  };
+  return html.replace(/(<p\b[^>]*>)([\s\S]*?)(<\/p>)/gi, (paragraph, open: string, inner: string, close: string) => {
+    const lines = inner.split(LINE_BREAK);
+    const kept = lines.filter((line) => !isEmptyLabel(line));
+    if (kept.length === lines.length) return paragraph;
+    return kept.length ? `${open}${kept.join("<br>")}${close}` : "";
+  });
 }
