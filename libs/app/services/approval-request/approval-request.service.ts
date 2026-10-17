@@ -79,6 +79,9 @@ const LIST_FIELDS = [
   "requester.avatar",
   "department.id",
   "department.name",
+  "category.id",
+  "category.name",
+  "category.icon",
 ] as const;
 
 @Injectable({ scope: Scope.REQUEST })
@@ -567,10 +570,10 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       page,
       limit,
       fields: [...LIST_FIELDS],
-      populate: ["requestTypeVersion", "requester", "department"],
+      populate: ["requestTypeVersion", "requester", "department", "category"],
       sort: { updatedAt: "DESC" },
     });
-    const rows = serialize(result.data, { populate: ["requestTypeVersion", "requester", "department"], forceObject: true });
+    const rows = serialize(result.data, { populate: ["requestTypeVersion", "requester", "department", "category"], forceObject: true });
     return { ...result, data: rows.map((row) => this.withRequestTypeBrief(row as unknown as Record<string, unknown>)) };
   }
 

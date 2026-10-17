@@ -65,6 +65,7 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
         "request.formVersion",
         "request.requester",
         "request.department",
+        "request.category",
         "approver",
         "approver.user",
         "approver.group",
@@ -109,6 +110,7 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
         },
         requester: { id: t.request.requester.id, fullName: t.request.requester.fullName, avatar: t.request.requester.avatar },
         department: { id: t.request.department.id, name: t.request.department.name },
+        category: { id: t.request.category.id, name: t.request.category.name, icon: t.request.category.icon ?? null },
       },
     }));
     return { data, total, page, limit };
