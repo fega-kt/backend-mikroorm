@@ -46,6 +46,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
             });
             await this.setupTopology(this.publishChannel);
             await this.setupApprovalTopology(this.publishChannel);
+            await this.setupAttachmentTopology(this.publishChannel);
             this._isConnected = true;
 
             for (const { queue, handler } of this.registeredConsumers) {
@@ -122,6 +123,25 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     await ch.bindQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL, RABBITMQ_EXCHANGE.NOTIFICATION, RABBITMQ_QUEUES.APPROVAL_EMAIL);
     await ch.assertQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ, { durable: true });
     await ch.bindQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ, RABBITMQ_EXCHANGE.NOTIFICATION_DLX, RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ);
+  }
+
+  private async setupAttachmentTopology(ch: amqp.Channel) {
+    await ch.assertExchange(RABBITMQ_EXCHANGE.ATTACHMENT, "direct", { durable: true });
+    await ch.assertExchange(RABBITMQ_EXCHANGE.NOTIFICATION_DLX, "direct", { durable: true });
+    await ch.assertQueue(RABBITMQ_QUEUES.ATTACHMENT_PDF_PREVIEW, {
+      durable: true,
+      arguments: {
+        "x-dead-letter-exchange": RABBITMQ_EXCHANGE.NOTIFICATION_DLX,
+        "x-dead-letter-routing-key": RABBITMQ_QUEUES.ATTACHMENT_PDF_PREVIEW_DLQ,
+      },
+    });
+    await ch.bindQueue(RABBITMQ_QUEUES.ATTACHMENT_PDF_PREVIEW, RABBITMQ_EXCHANGE.ATTACHMENT, RABBITMQ_QUEUES.ATTACHMENT_PDF_PREVIEW);
+    await ch.assertQueue(RABBITMQ_QUEUES.ATTACHMENT_PDF_PREVIEW_DLQ, { durable: true });
+    await ch.bindQueue(
+      RABBITMQ_QUEUES.ATTACHMENT_PDF_PREVIEW_DLQ,
+      RABBITMQ_EXCHANGE.NOTIFICATION_DLX,
+      RABBITMQ_QUEUES.ATTACHMENT_PDF_PREVIEW_DLQ,
+    );
   }
 
   async publish(exchange: string, routingKey: string, message: unknown): Promise<boolean> {

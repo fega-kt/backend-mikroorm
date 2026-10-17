@@ -35,6 +35,12 @@ export const UPLOAD_URL_TTL_SECONDS = 30 * 60;
 /** Thời hạn link tải (giây): trình duyệt mở link ngay sau khi nhận, chỉ cần đủ để bắt đầu tải */
 export const DOWNLOAD_URL_TTL_SECONDS = 60;
 
+/** Folder lưu bản xem của tệp (vd PDF đã sắp xếp lại): Previews/<key gốc>, tách khỏi file gốc */
+export const PREVIEW_FOLDER = "Previews";
+
+/** Key bản xem tương ứng với key file gốc */
+export const previewKeyOf = (key: string) => `${PREVIEW_FOLDER}/${key}`;
+
 /** Số byte đầu file đọc để nhận dạng loại nội dung thật */
 export const SNIFF_BYTES = 4100;
 

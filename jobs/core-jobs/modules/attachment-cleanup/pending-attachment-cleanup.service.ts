@@ -59,7 +59,7 @@ export class PendingAttachmentCleanupService {
       for (const attachment of stale) {
         try {
           // Xóa object chưa tồn tại vẫn thành công, nên an toàn với lượt chưa kịp upload
-          await this.uploadService.deleteObject(attachment.key);
+          await this.uploadService.deleteAttachmentObjects(attachment);
           attachment.deleted = true;
           removed++;
         } catch (error) {

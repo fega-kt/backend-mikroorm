@@ -14,7 +14,7 @@ import {
 } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import type { Request } from "express";
-import { AttachmentEntity, AttachmentStatus, AttachmentVisibility } from "../../entities/attachment";
+import { AttachmentEntity, AttachmentPreviewStatus, AttachmentStatus, AttachmentVisibility } from "../../entities/attachment";
 import { UploadService } from "../upload/upload.service";
 import { FILE_ACCESS_POLICIES, type FileAccessPolicy } from "./file-access-policy";
 import { FileViewKind, NATIVE_FILE_TOKEN_TTL_SECONDS, OFFICE_FILE_TOKEN_TTL_SECONDS, resolveFileViewTarget } from "./file-view.constants";
@@ -55,7 +55,7 @@ export class FileViewService {
   }
 
   /**
-   * Tệp xem được bằng cách nào: OnlyOffice (kèm cấu hình đã ký), ảnh/video/âm thanh (kèm đường dẫn stream), hoặc không xem được.
+   * Tệp xem được bằng cách nào: OnlyOffice (kèm cấu hình đã ký), PDF/ảnh/video/âm thanh (kèm đường dẫn stream), hoặc không xem được.
    * Chỉ cần id tệp: ngữ cảnh chủ sở hữu đọc từ bản ghi tệp, rồi policy của ngữ cảnh đó kiểm quyền.
    */
   async describe(fileId: string) {
@@ -163,6 +163,8 @@ export class FileViewService {
 
     const file = await this.attachments.findOne({ id: payload.fileId, deleted: { $ne: true }, status: AttachmentStatus.Ready });
     if (file?.visibility !== AttachmentVisibility.Private) throw new NotFoundException("File not found");
-    return { file, object: await this.uploadService.getObject(file.key, range) };
+    // PDF đã có bản xem (object sắp xếp gọn) thì stream bản xem; tải xuống vẫn luôn là tệp gốc
+    const key = file.previewStatus === AttachmentPreviewStatus.Ready && file.previewKey ? file.previewKey : file.key;
+    return { file, object: await this.uploadService.getObject(key, range) };
   }
 }

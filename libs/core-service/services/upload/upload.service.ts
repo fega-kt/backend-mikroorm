@@ -318,6 +318,24 @@ export class UploadService {
     await this.s3.send(new DeleteObjectCommand({ Bucket: this.privateBucket, Key: key }));
   }
 
+  /** Xóa mọi object của một tệp private: file gốc và bản xem (nếu có) */
+  async deleteAttachmentObjects(attachment: { key: string; previewKey?: string | null }) {
+    await Promise.all([attachment.key, attachment.previewKey].filter((key): key is string => !!key).map((key) => this.deleteObject(key)));
+  }
+
+  /** Ghi object vào bucket private từ server (vd bản xem do job tạo) */
+  async putPrivateObject(key: string, body: Uint8Array, contentType: string) {
+    await this.s3.send(new PutObjectCommand({ Bucket: this.privateBucket, Key: key, Body: body, ContentType: contentType }));
+  }
+
+  /** Đọc trọn một object ở bucket private vào bộ nhớ (job xử lý file; không dùng cho file quá lớn) */
+  async getObjectBuffer(key: string): Promise<Buffer> {
+    const { body } = await this.getObject(key);
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+    return Buffer.concat(chunks);
+  }
+
   /**
    * Đọc object ở bucket private dạng stream (hỗ trợ Range để tua video).
    * Backend là bên duy nhất chạm vào bucket khi xem file: người xem không bao giờ nhận link tải tới R2.

@@ -22,7 +22,8 @@ async function bootstrap() {
     origin: ENV.CORS_ORIGINS ? ENV.CORS_ORIGINS.split(",") : [],
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true,
-    exposedHeaders: [REQUEST_ID_HEADER, DEVICE_ID_HEADER],
+    // Range: trình xem PDF tải file stream theo từng đoạn, cần đọc được các header này
+    exposedHeaders: [REQUEST_ID_HEADER, DEVICE_ID_HEADER, "Accept-Ranges", "Content-Range", "Content-Length"],
   });
 
   const orm = app.get(MikroORM);

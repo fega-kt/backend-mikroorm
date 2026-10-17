@@ -12,6 +12,21 @@ export enum AttachmentStatus {
   Ready = "ready",
 }
 
+/**
+ * Bản xem tối ưu của PDF (lưu riêng ở folder Previews, file gốc giữ nguyên):
+ * - none: không áp dụng (tệp không phải PDF / tệp public)
+ * - pending: chờ job xử lý (tệp mới, PDF cũ chạy bù, hoặc chờ thử lại sau lỗi)
+ * - ready: có bản xem (previewKey) · skipped: không cần / không được tạo (mã hóa, ký số, bố cục đã gọn)
+ * - failed: lỗi đủ số lần thử, trình xem dùng tệp gốc
+ */
+export enum AttachmentPreviewStatus {
+  None = "none",
+  Pending = "pending",
+  Ready = "ready",
+  Skipped = "skipped",
+  Failed = "failed",
+}
+
 @Entity({ tableName: "attachments" })
 export class AttachmentEntity extends BaseEntity {
   /** Tên file gốc khi upload */
@@ -53,4 +68,16 @@ export class AttachmentEntity extends BaseEntity {
   /** Thư mục lưu trữ trên R2 (phải thuộc STORAGE_PATH) */
   @Property({ type: types.string })
   storagePath!: string;
+
+  /** Key bản xem trên R2 (folder Previews): PDF được sắp xếp lại để trình xem chỉ tải trang đang xem */
+  @Property({ type: types.string, nullable: true })
+  previewKey?: string | null;
+
+  /** Trạng thái tạo bản xem (AttachmentPreviewStatus) */
+  @Property({ type: types.string, default: AttachmentPreviewStatus.None })
+  previewStatus: AttachmentPreviewStatus = AttachmentPreviewStatus.None;
+
+  /** Số lần tạo bản xem bị lỗi: dưới mức tối đa thì quay về pending để thử lại (giãn dần), đủ thì failed */
+  @Property({ type: types.integer, default: 0 })
+  previewAttempts: number = 0;
 }

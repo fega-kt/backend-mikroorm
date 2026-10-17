@@ -1,1 +1,1 @@
-export { AttachmentEntity, AttachmentStatus, AttachmentVisibility } from "./attachment.entity";
+export { AttachmentEntity, AttachmentPreviewStatus, AttachmentStatus, AttachmentVisibility } from "./attachment.entity";

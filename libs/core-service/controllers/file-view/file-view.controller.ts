@@ -13,7 +13,7 @@ export class FileViewController {
 
   constructor(private readonly fileViewService: FileViewService) {}
 
-  /** Cách xem tệp: kind = office | image | video | audio | unsupported kèm dữ liệu cần để hiển thị */
+  /** Cách xem tệp: kind = office | pdf | image | video | audio | unsupported kèm dữ liệu cần để hiển thị */
   @Get(":fileId")
   describe(@Param("fileId", ParseUUIDPipe) fileId: string) {
     return this.fileViewService.describe(fileId);
@@ -25,7 +25,7 @@ export class FileViewController {
     return this.fileViewService.createDownloadUrl(fileId);
   }
 
-  /** Stream nội dung tệp cho URL có token ngắn hạn (Document Server, thẻ img/video/audio) */
+  /** Stream nội dung tệp cho URL có token ngắn hạn (Document Server, trình xem PDF, thẻ img/video/audio) */
   @Public()
   @Get("stream/:token")
   async stream(
