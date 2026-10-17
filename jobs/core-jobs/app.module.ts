@@ -11,6 +11,7 @@ import { HealthModule } from "@modules/health/health.module";
 import { CoreServiceJobModule } from "@core-service/core-service-job.module";
 import { AttachmentCleanupModule } from "./modules/attachment-cleanup/attachment-cleanup.module";
 import { InactiveReminderModule } from "./modules/inactive-reminder/inactive-reminder.module";
+import { PdfPreviewModule } from "./modules/pdf-preview/pdf-preview.module";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { InactiveReminderModule } from "./modules/inactive-reminder/inactive-rem
     CoreServiceJobModule,
     InactiveReminderModule,
     AttachmentCleanupModule,
+    PdfPreviewModule,
   ],
 })
 export class CoreJobAppModule {}

@@ -3,11 +3,14 @@ import { FileViewKind, resolveFileViewTarget } from "./file-view.constants";
 import { signEditorConfig, signFileViewToken, verifyDocumentServerJwt, verifyFileViewToken } from "./file-view.token";
 
 describe("resolveFileViewTarget", () => {
+  it("pdf xem bằng pdf.js ở client, không qua OnlyOffice", () => {
+    expect(resolveFileViewTarget("scan.PDF")).toEqual({ kind: FileViewKind.Pdf, ext: "pdf" });
+  });
+
   it("file văn phòng xem bằng OnlyOffice theo đúng documentType", () => {
     expect(resolveFileViewTarget("hop-dong.DOCX")).toMatchObject({ kind: FileViewKind.Office, documentType: "word", ext: "docx" });
     expect(resolveFileViewTarget("bang-luong.xlsx")).toMatchObject({ kind: FileViewKind.Office, documentType: "cell" });
     expect(resolveFileViewTarget("trinh-bay.pptx")).toMatchObject({ kind: FileViewKind.Office, documentType: "slide" });
-    expect(resolveFileViewTarget("scan.pdf")).toMatchObject({ kind: FileViewKind.Office, documentType: "pdf" });
   });
 
   it("ảnh, video, âm thanh xem bằng thẻ gốc của trình duyệt", () => {

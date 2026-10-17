@@ -1,10 +1,13 @@
 import { BaseService } from "@common/base/base.service";
 import { isPrivateStoragePath } from "@common/constants/storage.constant";
 import { describeError } from "@common/utils/describe-error.util";
-import { EntityRepository } from "@mikro-orm/core";
+import { RABBITMQ_EXCHANGE, RABBITMQ_QUEUES } from "@modules/rabbitmq/rabbitmq.constants";
+import { RabbitMQService } from "@modules/rabbitmq/rabbitmq.service";
+import { EntityData, EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ForbiddenException, Injectable, Logger, Scope } from "@nestjs/common";
-import { AttachmentEntity, AttachmentStatus } from "../../entities/attachment";
+import { AttachmentEntity, AttachmentPreviewStatus, AttachmentStatus, AttachmentVisibility } from "../../entities/attachment";
+import { isPdfAttachment } from "../pdf-preview/attachment-preview.service";
 import { UploadService } from "./upload.service";
 
 export interface CompleteMultipart {
@@ -20,6 +23,7 @@ export class AttachmentService extends BaseService<AttachmentEntity> {
     @InjectRepository(AttachmentEntity)
     protected readonly repo: EntityRepository<AttachmentEntity>,
     private readonly uploadService: UploadService,
+    private readonly rabbitmq: RabbitMQService,
   ) {
     super();
   }
@@ -67,6 +71,16 @@ export class AttachmentService extends BaseService<AttachmentEntity> {
       await this.remove(id);
       throw error;
     }
-    return this.updateOne(id, { status: AttachmentStatus.Ready });
+    // PDF private: tạo bản xem tối ưu ở job (mất message thì cron của job chạy bù các tệp còn pending)
+    const needsPreview = attachment.visibility === AttachmentVisibility.Private && isPdfAttachment(attachment);
+    const update: EntityData<AttachmentEntity> = { status: AttachmentStatus.Ready };
+    if (needsPreview) update.previewStatus = AttachmentPreviewStatus.Pending;
+    const ready = await this.updateOne(id, update);
+    if (needsPreview) {
+      this.rabbitmq
+        .publish(RABBITMQ_EXCHANGE.ATTACHMENT, RABBITMQ_QUEUES.ATTACHMENT_PDF_PREVIEW, { attachmentId: id })
+        .catch((error) => this.logger.warn(`Cannot queue PDF preview for attachment ${id}: ${describeError(error)}`));
+    }
+    return ready;
   }
 }

@@ -2,6 +2,8 @@
 export enum FileViewKind {
   /** Xem bằng OnlyOffice Document Server (iframe) */
   Office = "office",
+  /** PDF: trình xem pdf.js ở client, tải theo từng đoạn (Range) nên trang đầu hiện ngay */
+  Pdf = "pdf",
   /** Ảnh: thẻ <img> */
   Image = "image",
   /** Video: thẻ <video> không có nút tải */
@@ -13,7 +15,7 @@ export enum FileViewKind {
 }
 
 /** documentType của OnlyOffice theo đuôi file */
-export type OfficeDocumentType = "word" | "cell" | "slide" | "pdf";
+export type OfficeDocumentType = "word" | "cell" | "slide";
 
 const OFFICE_EXTENSIONS: Record<string, OfficeDocumentType> = {
   doc: "word",
@@ -24,7 +26,6 @@ const OFFICE_EXTENSIONS: Record<string, OfficeDocumentType> = {
   csv: "cell",
   ppt: "slide",
   pptx: "slide",
-  pdf: "pdf",
 };
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp"];
@@ -45,6 +46,7 @@ export function resolveFileViewTarget(filename: string): FileViewTarget {
   const ext = filename.includes(".") ? (filename.split(".").pop() ?? "").toLowerCase() : "";
   const documentType = OFFICE_EXTENSIONS[ext];
   if (documentType) return { kind: FileViewKind.Office, ext, documentType };
+  if (ext === "pdf") return { kind: FileViewKind.Pdf, ext };
   if (IMAGE_EXTENSIONS.includes(ext)) return { kind: FileViewKind.Image, ext };
   if (VIDEO_EXTENSIONS.includes(ext)) return { kind: FileViewKind.Video, ext };
   if (AUDIO_EXTENSIONS.includes(ext)) return { kind: FileViewKind.Audio, ext };
@@ -53,5 +55,5 @@ export function resolveFileViewTarget(filename: string): FileViewTarget {
 
 /** Thời hạn token cho Document Server tải file (giây): chỉ cần đủ cho một lần tải */
 export const OFFICE_FILE_TOKEN_TTL_SECONDS = 180;
-/** Thời hạn token cho ảnh/video/âm thanh (giây): phải đủ để phát và tua */
+/** Thời hạn token cho PDF/ảnh/video/âm thanh (giây): phải đủ để đọc, cuộn và tua */
 export const NATIVE_FILE_TOKEN_TTL_SECONDS = 30 * 60;
