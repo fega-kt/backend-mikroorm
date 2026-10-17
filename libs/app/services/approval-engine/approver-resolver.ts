@@ -19,6 +19,18 @@ export interface SlotTarget {
 /** Số cấp phòng ban tối đa khi leo lên tìm trưởng phòng — chặn dữ liệu cây bị vòng */
 const MAX_DEPTH = 20;
 
+/**
+ * Ứng viên nhận chuyển cấp trong một phòng, theo thứ tự ưu tiên phó phòng → trưởng phòng (lấy người đầu tiên còn hoạt động).
+ * `ownDepartment`: phòng của chính người duyệt — chỉ lấy người xếp trên họ (phó phòng chỉ lên trưởng phòng,
+ * trưởng phòng không chuyển xuống phó mà lên phòng cấp cha). Chưa lọc người bị khóa.
+ */
+export function escalationCandidates(userId: string, dept: { deputyId?: string; managerId?: string }, ownDepartment: boolean): string[] {
+  const { deputyId, managerId } = dept;
+  if (ownDepartment && userId === managerId) return [];
+  if (ownDepartment && userId === deputyId) return managerId && managerId !== userId ? [managerId] : [];
+  return [...new Set([deputyId, managerId].filter((id): id is string => !!id && id !== userId))];
+}
+
 /** Đổi cấu hình người duyệt trong quy trình thành user cụ thể, dựa trên trưởng/phó phòng ở bảng departments */
 export class ApproverResolver {
   private readonly deptCache = new Map<string, DepartmentEntity | null>();
@@ -128,11 +140,54 @@ export class ApproverResolver {
     return undefined;
   }
 
-  /** Cấp trên của một người duyệt (dùng khi chuyển cấp do quá hạn) */
-  async findManagerOf(userId: string): Promise<string | undefined> {
+  /**
+   * Người nhận chuyển cấp lần 1: người kế trên gần nhất của người duyệt.
+   * Nhân viên → phó phòng (không có thì trưởng phòng); phó phòng → trưởng phòng; trưởng phòng → phòng cấp trên.
+   * Phòng không có ai phù hợp (trống / bị khóa / trùng chính người đó hoặc người trong `skip`, vd người trình)
+   * thì "nhảy cóc" lên phòng cấp cha, cứ thế đi lên. Không tìm được ai → undefined (chỉ nhắc).
+   */
+  async escalationTarget(userId: string, skip: string[] = []): Promise<string | undefined> {
     const user = await this.em.findOne(UserEntity, { id: userId }, { fields: ["id", "department"] });
     if (!user?.department) return undefined;
-    return this.findDeptHead(user.department.id, userId);
+    return this.escalateFrom(user.department.id, userId, new Set(skip), true);
+  }
+
+  /**
+   * Người nhận chuyển cấp lần 2: người đang giữ là phó phòng của một phòng → trưởng phòng của chính phòng đó.
+   * Lần 2 chỉ là "phó → trưởng cùng phòng", không lên phòng trên: phòng chỉ có một người (phó kiêm trưởng),
+   * chưa có trưởng, trưởng bị khóa hoặc trưởng là người trong `skip` (vd người trình) → undefined (không chuyển nữa, chỉ nhắc).
+   * Là phó ở nhiều phòng thì ưu tiên phòng ghi trong hồ sơ của họ.
+   */
+  async deputyEscalationTarget(userId: string, skip: string[] = []): Promise<string | undefined> {
+    const [user, departments] = await Promise.all([
+      this.em.findOne(UserEntity, { id: userId }, { fields: ["id", "department"] }),
+      this.em.find(DepartmentEntity, { deputy: userId, deleted: { $ne: true } }, { fields: ["id", "manager"] }),
+    ]);
+    const ownFirst = [...departments].sort((a, b) => Number(b.id === user?.department?.id) - Number(a.id === user?.department?.id));
+    for (const dept of ownFirst) {
+      const managerId = dept.manager?.id;
+      if (managerId && managerId !== userId && !skip.includes(managerId) && (await this.isActive(managerId))) return managerId;
+    }
+    return undefined;
+  }
+
+  /** Đi từ phòng `departmentId` lên gốc, lấy ứng viên đầu tiên còn hoạt động và không trùng người duyệt / người trong `skip` */
+  private async escalateFrom(departmentId: string, userId: string, skip: Set<string>, ownDepartment: boolean) {
+    let dept = await this.getDepartment(departmentId);
+    const visited = new Set<string>();
+    for (let depth = 0; dept && depth < MAX_DEPTH && !visited.has(dept.id); depth++) {
+      visited.add(dept.id);
+      const candidates = escalationCandidates(
+        userId,
+        { deputyId: dept.deputy?.id, managerId: dept.manager?.id },
+        ownDepartment && depth === 0,
+      );
+      for (const id of candidates) {
+        if (!skip.has(id) && (await this.isActive(id))) return id;
+      }
+      dept = dept.parent ? await this.getDepartment(dept.parent.id) : null;
+    }
+    return undefined;
   }
 
   /** Chuỗi phòng ban từ phòng hiện tại lên gốc: [phòng, cha, ông, ...] */

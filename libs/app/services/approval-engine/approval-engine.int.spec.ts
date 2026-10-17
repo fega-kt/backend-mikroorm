@@ -760,6 +760,27 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     await approve(id, U.director);
   });
 
+  it("escalates a deputy to their department head, then only reminds", async () => {
+    const id = await createRequest(U.staff, D.it, { days: 1 });
+    await engine.submit(id, U.staff);
+    const [task] = await pendingTasks(id);
+    await engine.reassign(task.id, U.itDeputy, U.admin);
+
+    // Quá hạn → nhắc phó phòng; trễ thêm một chu kỳ → chuyển lên trưởng phòng IT
+    await em().nativeUpdate(ApprovalTaskEntity, { id: task.id }, { dueAt: new Date(Date.now() - 60_000) });
+    expect(await engine.handleOverdue(task.id)).toBe("reminded");
+    await em().nativeUpdate(ApprovalTaskEntity, { id: task.id }, { dueAt: new Date(Date.now() - 25 * 3_600_000) });
+    expect(await engine.handleOverdue(task.id)).toBe("escalated");
+    expect(who(await loadTask(task.id))).toBe(U.itHead);
+
+    // Trưởng phòng không phải phó phòng nên không chuyển tiếp: quá hạn tiếp chỉ được nhắc
+    await em().nativeUpdate(ApprovalTaskEntity, { id: task.id }, { dueAt: new Date(Date.now() - 60_000), remindedAt: null });
+    expect(await engine.handleOverdue(task.id)).toBe("reminded");
+    await em().nativeUpdate(ApprovalTaskEntity, { id: task.id }, { dueAt: new Date(Date.now() - 25 * 3_600_000) });
+    expect(await engine.handleOverdue(task.id)).not.toBe("escalated");
+    expect(who(await loadTask(task.id))).toBe(U.itHead);
+  });
+
   it("generates sequential codes", async () => {
     const ids = [await createRequest(U.staff, D.it, { days: 1 }), await createRequest(U.staff, D.it, { days: 1 })];
     await Promise.all(ids.map((id) => engine.submit(id, U.staff)));

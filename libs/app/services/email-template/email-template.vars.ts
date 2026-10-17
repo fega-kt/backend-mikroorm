@@ -39,6 +39,12 @@ export function formatPayloadField(type: FormFieldType | undefined, value: unkno
   }
 }
 
+/**
+ * Tên người thực hiện ({{actor.name}}) khi việc do hệ thống làm (tự động duyệt / từ chối do quá hạn…):
+ * lịch sử ghi actor = null, FE hiện "Hệ thống" — email dùng cùng chữ này
+ */
+export const SYSTEM_ACTOR_NAME = "Hệ thống";
+
 export interface RequestVariableInput {
   code?: string;
   title: string;

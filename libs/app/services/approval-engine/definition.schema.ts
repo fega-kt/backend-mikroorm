@@ -16,6 +16,8 @@ export enum OverdueAction {
   Remind = "REMIND",
   RemindThenEscalate = "REMIND_THEN_ESCALATE",
   AutoApprove = "AUTO_APPROVE",
+  /** Quá hạn: nhắc trước, vẫn trễ thêm một chu kỳ SLA thì hệ thống từ chối tờ trình (lý do: quá hạn xử lý) */
+  AutoReject = "AUTO_REJECT",
 }
 
 /** Người duyệt là nhóm: cả nhóm cùng xử lý, hay hệ thống chia cho một thành viên */

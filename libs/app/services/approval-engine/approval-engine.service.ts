@@ -90,6 +90,8 @@ const notifyNodeItem = (node: NotifyNode): PendingNotify => ({
 });
 
 const HOUR_MS = 60 * 60 * 1000;
+/** Chuyển cấp do quá hạn tối đa: lần 1 lên người kế trên, lần 2 (từ phó phòng) lên trưởng phòng */
+const MAX_ESCALATIONS = 2;
 
 /** Chọn ngẫu nhiên một phần tử (chia task nhóm cho một thành viên) */
 const pickRandom = <T>(items: T[]) => items[Math.floor(Math.random() * items.length)];
@@ -235,7 +237,12 @@ export class ApprovalEngineService {
         close(ApprovalTaskStatus.Rejected);
         skipOthers();
         this.finish(request, ApprovalRequestStatus.Rejected);
-        this.history(tx, request, ApprovalHistoryAction.Reject, { node, comment, data: actData });
+        // Hệ thống từ chối do quá hạn (gọi kèm taskId, không có người thực hiện) → dòng lịch sử riêng như tự động duyệt
+        this.history(tx, request, opts.taskId ? ApprovalHistoryAction.AutoReject : ApprovalHistoryAction.Reject, {
+          node,
+          comment,
+          data: actData,
+        });
         await this.stepEventNotify(tx, request, node, "rejected", comment);
         return request;
       }
@@ -447,7 +454,7 @@ export class ApprovalEngineService {
   }
 
   /** Cron SLA: xử lý một task quá hạn theo cấu hình onOverdue của bước */
-  async handleOverdue(taskId: string): Promise<"reminded" | "escalated" | "auto_approved" | "none"> {
+  async handleOverdue(taskId: string): Promise<"reminded" | "escalated" | "auto_approved" | "auto_rejected" | "none"> {
     const outcome = await this.run(null, async (tx) => {
       const task = await tx.em.findOne(ApprovalTaskEntity, { id: taskId }, { populate: ["approver"] });
       if (task?.status !== ApprovalTaskStatus.Pending) return "none" as const;
@@ -461,6 +468,10 @@ export class ApprovalEngineService {
       const now = Date.now();
 
       if (node.onOverdue === OverdueAction.AutoApprove) return "auto_approve" as const;
+      // Tự động từ chối: nhắc trước (nhánh nhắc bên dưới), đã nhắc mà vẫn trễ thêm một chu kỳ SLA thì từ chối
+      if (node.onOverdue === OverdueAction.AutoReject && task.remindedAt && now >= task.dueAt.getTime() + slaMs) {
+        return "auto_reject" as const;
+      }
       const remindDue = !task.remindedAt || now - task.remindedAt.getTime() >= slaMs;
       const holder = holderUserId(task);
 
@@ -481,18 +492,28 @@ export class ApprovalEngineService {
         return "reminded" as const;
       }
 
-      const shouldEscalate =
-        node.onOverdue === OverdueAction.RemindThenEscalate && task.remindedAt && !task.escalatedAt && now >= task.dueAt.getTime() + slaMs;
-      if (shouldEscalate) {
-        const managerId = await new ApproverResolver(tx.em).findManagerOf(holder);
-        if (managerId && managerId !== holder) {
+      // Chuyển cấp tối đa 2 lần, lần nào cũng nhắc trước rồi quá thêm một chu kỳ SLA mới chuyển:
+      // lần 1 → người kế trên gần nhất (nhân viên → phó phòng / trưởng phòng; phó phòng → trưởng phòng; trưởng phòng → phòng trên);
+      // lần 2 → chỉ khi người đang giữ là phó phòng: lên trưởng phòng của chính phòng đó. Không ai phù hợp → chỉ nhắc.
+      const wantsEscalation = node.onOverdue === OverdueAction.RemindThenEscalate && task.remindedAt && now >= task.dueAt.getTime() + slaMs;
+      const escalations = wantsEscalation ? await this.countEscalations(tx, request, task) : 0;
+      if (wantsEscalation && escalations < MAX_ESCALATIONS) {
+        const resolver = new ApproverResolver(tx.em);
+        // Không chuyển cho chính người trình (tự duyệt tờ trình của mình): bỏ qua, lấy người kế trên tiếp theo
+        const skip = [request.requester.id];
+        const next =
+          escalations === 0 ? await resolver.escalationTarget(holder, skip) : await resolver.deputyEscalationTarget(holder, skip);
+        if (next && next !== holder) {
           const fromId = holder;
-          await this.handOver(tx, request, task, managerId);
+          await this.handOver(tx, request, task, next);
           task.escalatedAt = new Date(now);
           task.dueAt = new Date(now + slaMs);
           task.remindedAt = undefined;
-          this.history(tx, request, ApprovalHistoryAction.Escalate, { node, data: { from: fromId, to: managerId } });
-          await this.notify(tx, request, [managerId], NotificationType.APPROVAL_ESCALATED, ApprovalEventType.Escalated, { node });
+          this.history(tx, request, ApprovalHistoryAction.Escalate, {
+            node,
+            data: { from: fromId, to: next, taskId: task.id, level: escalations + 1 },
+          });
+          await this.notify(tx, request, [next], NotificationType.APPROVAL_ESCALATED, ApprovalEventType.Escalated, { node });
           return "escalated" as const;
         }
       }
@@ -511,8 +532,12 @@ export class ApprovalEngineService {
       return "none" as const;
     });
 
-    if (outcome !== "auto_approve") return outcome;
+    if (outcome !== "auto_approve" && outcome !== "auto_reject") return outcome;
     const task = await this.orm.em.fork().findOne(ApprovalTaskEntity, { id: taskId }, { fields: ["id", "request"] });
+    if (outcome === "auto_reject") {
+      await this.act(task.request.id, ApprovalAction.Reject, { actorId: null, taskId, comment: "Từ chối do quá hạn xử lý" });
+      return "auto_rejected";
+    }
     await this.act(task.request.id, ApprovalAction.Approve, { actorId: null, taskId, comment: "Tự động duyệt do quá hạn" });
     return "auto_approved";
   }
@@ -967,6 +992,20 @@ export class ApprovalEngineService {
     request.status = status;
     request.closedAt = new Date();
     request.currentNodeIds = [];
+  }
+
+  /**
+   * Số lần task đã chuyển cấp, đếm từ lịch sử "Chuyển cấp" có `taskId` (không thêm cột cho task).
+   * Chuyển cấp ghi trước khi có `taskId` (chỉ biết qua escalatedAt) được tính là 1 lần.
+   */
+  private async countEscalations(tx: Tx, request: ApprovalRequestEntity, task: ApprovalTaskEntity) {
+    if (!task.escalatedAt) return 0;
+    const counted = await tx.em.count(ApprovalHistoryEntity, {
+      request: request.id,
+      action: ApprovalHistoryAction.Escalate,
+      data: { taskId: task.id },
+    });
+    return Math.max(1, counted);
   }
 
   private history(
