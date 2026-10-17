@@ -12,6 +12,8 @@ export enum ApprovalHistoryAction {
   Cancel = "cancel",
   Skip = "skip",
   AutoApprove = "auto_approve",
+  /** Hệ thống từ chối do quá hạn xử lý (bước chọn "Tự động từ chối") */
+  AutoReject = "auto_reject",
   Delegate = "delegate",
   Escalate = "escalate",
   Remind = "remind",

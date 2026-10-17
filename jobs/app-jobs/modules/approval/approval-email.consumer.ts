@@ -2,7 +2,7 @@ import { ApprovalRequestEntity } from "@app-domain/entities/approval-request";
 import { ApprovalEventType, type ApprovalEventMessage } from "@app-domain/services/approval-engine/approval-events";
 import { SystemEmailTemplate } from "@app-domain/services/email-template/email-template.defaults";
 import { resolveEmailTemplate } from "@app-domain/services/email-template/email-template.resolve";
-import { buildRequestVariables } from "@app-domain/services/email-template/email-template.vars";
+import { buildRequestVariables, SYSTEM_ACTOR_NAME } from "@app-domain/services/email-template/email-template.vars";
 import { FrontendPath, frontendUrl } from "@common/constants/frontend-path.constant";
 import { ENV } from "@config/env.config";
 import { type EmailTemplateBody, renderEmail } from "@core-service/services/email-template/email-template.render";
@@ -173,7 +173,8 @@ export class ApprovalEmailConsumer implements OnModuleInit {
       priority: request?.priority,
       link,
       stepName: event.nodeName,
-      actorName: actor?.fullName,
+      // Việc do hệ thống làm (tự động duyệt / từ chối do quá hạn) không có người thực hiện
+      actorName: actor?.fullName ?? (event.actorId ? undefined : SYSTEM_ACTOR_NAME),
       comment: event.comment,
       message: event.message,
     });
