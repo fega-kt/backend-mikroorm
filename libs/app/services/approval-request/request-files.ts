@@ -5,8 +5,9 @@ import { previewKeyOf } from "@core-service/services/upload/upload.constants";
 import type { UploadService } from "@core-service/services/upload/upload.service";
 import type { EntityManager } from "@mikro-orm/core";
 import type { ApprovalRequestEntity } from "../../entities/approval-request";
-import { ApprovalRequestFileEntity } from "../../entities/approval-request-file";
-import { buildRequestFileFolder, type RequestFileCategory } from "./request-file.constants";
+import { ApprovalRequestFileEntity, RequestFileConvertStatus } from "../../entities/approval-request-file";
+import { isConvertibleToPdf } from "@core-service/services/e-signature/office-converter";
+import { buildRequestFileFolder, RequestFileCategory } from "./request-file.constants";
 
 /** Vòng của bộ tệp người trình đang soạn (nháp: 1; bị trả lại ở vòng n: n + 1) */
 export const draftRound = (request: Pick<ApprovalRequestEntity, "round">) => request.round + 1;
@@ -97,6 +98,24 @@ export async function copyFilesToNextRound(
       current: copy,
       createdBy: owner,
       updatedBy: owner,
+    });
+  }
+}
+
+/**
+ * Tờ trình vừa tới bước bắt buộc ký: đánh dấu văn bản Word / Excel / PowerPoint của vòng hiện tại cần chuyển sang PDF,
+ * để job ở nền (app-jobs) chuyển sẵn — người duyệt mở hộp ký không phải chờ. Văn bản đã có bản PDF thì bỏ qua.
+ */
+export async function markDocumentsForConversion(em: EntityManager, request: ApprovalRequestEntity) {
+  const rows = await loadRequestFiles(em, request.id, request.round, RequestFileCategory.Documents);
+  const now = new Date();
+  for (const row of rows) {
+    if (!isConvertibleToPdf(row.current.filename) || row.convertStatus === RequestFileConvertStatus.Done) continue;
+    Object.assign(row, {
+      convertStatus: RequestFileConvertStatus.Pending,
+      convertAttempts: 0,
+      convertNextAt: now,
+      convertError: undefined,
     });
   }
 }

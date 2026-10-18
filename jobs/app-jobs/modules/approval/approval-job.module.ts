@@ -14,6 +14,10 @@ import { OutboxModule } from "@modules/outbox/outbox.module";
 import { RabbitMQModule } from "@modules/rabbitmq/rabbitmq.module";
 import { Module } from "@nestjs/common";
 import { ApprovalEmailConsumer } from "./approval-email.consumer";
+import { ApprovalFileConvertJob } from "./approval-file-convert.job";
+import { RequestPdfService } from "@app-domain/services/e-signature/request-pdf.service";
+import { OfficeConverter } from "@core-service/services/e-signature/office-converter";
+import { UploadService } from "@core-service/services/upload/upload.service";
 import { ApprovalSlaCron } from "./approval-sla.cron";
 import { OutboxRelayCron } from "./outbox-relay.cron";
 
@@ -33,6 +37,17 @@ import { OutboxRelayCron } from "./outbox-relay.cron";
       UserEntity,
     ]),
   ],
-  providers: [ApprovalEngineService, ApprovalSlaCron, ApprovalEmailConsumer, ActivityLogQueueService, OutboxRelayCron],
+  providers: [
+    ApprovalEngineService,
+    ApprovalSlaCron,
+    ApprovalEmailConsumer,
+    ActivityLogQueueService,
+    OutboxRelayCron,
+    // Chuyển sẵn văn bản sang PDF khi tờ trình tới bước bắt buộc ký
+    ApprovalFileConvertJob,
+    RequestPdfService,
+    OfficeConverter,
+    UploadService,
+  ],
 })
 export class ApprovalJobModule {}

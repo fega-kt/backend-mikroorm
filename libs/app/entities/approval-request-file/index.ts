@@ -1,1 +1,1 @@
-export { ApprovalRequestFileEntity } from "./approval-request-file.entity";
+export { ApprovalRequestFileEntity, RequestFileConvertStatus } from "./approval-request-file.entity";

@@ -4,6 +4,15 @@ import { Entity, Enum, Index, ManyToOne, Property, types, Unique } from "@mikro-
 import { RequestFileCategory } from "../../services/approval-request/request-file.constants";
 import { ApprovalRequestEntity } from "../approval-request/approval-request.entity";
 
+/** Chuyển văn bản Word / Excel / PowerPoint sang PDF trước khi ký (làm sẵn ở nền khi tờ trình tới bước ký) */
+export enum RequestFileConvertStatus {
+  /** Chờ job chuyển (lần đầu, hoặc thử lại sau lỗi tới convertNextAt) */
+  Pending = "pending",
+  Done = "done",
+  /** Hết lượt thử ở nền — người duyệt mở hộp ký sẽ chuyển lại */
+  Failed = "failed",
+}
+
 /**
  * Tệp của tờ trình theo vòng duyệt — nơi duy nhất lưu tệp của tờ trình.
  * - round <= request.round: bộ tệp đã đưa đi duyệt ở vòng đó (không sửa nữa, trừ bản hiện tại khi ký);
@@ -42,4 +51,19 @@ export class ApprovalRequestFileEntity extends BaseEntity {
   /** Số chữ ký số đã ký lên tệp trong vòng */
   @Property({ type: types.integer, default: 0 })
   signatureCount: number = 0;
+
+  /** Chuyển sang PDF ở nền; null = không cần (không phải văn bản ký / chưa tới bước ký) */
+  @Enum({ items: () => RequestFileConvertStatus, nullable: true })
+  convertStatus?: RequestFileConvertStatus;
+
+  @Property({ type: types.integer, default: 0 })
+  convertAttempts: number = 0;
+
+  /** Lần thử tiếp theo của job (pending) */
+  @Index()
+  @Property({ type: types.datetime, nullable: true })
+  convertNextAt?: Date;
+
+  @Property({ type: types.text, nullable: true })
+  convertError?: string;
 }
