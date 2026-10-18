@@ -10,6 +10,7 @@ export { NotificationEntity, NotificationType } from "./notification";
 export { AttachmentEntity } from "./attachment";
 export { UserDeviceEntity } from "./user-device";
 export { EmailTemplateEntity } from "./email-template";
+export { SigningCertificateEntity, SigningCertificateStatus } from "./signing-certificate";
 export type { AppRoute, RouteHandle } from "./route";
 
 import { UserEntity } from "./user";
@@ -24,6 +25,7 @@ import { NotificationEntity } from "./notification";
 import { AttachmentEntity } from "./attachment";
 import { UserDeviceEntity } from "./user-device";
 import { EmailTemplateEntity } from "./email-template";
+import { SigningCertificateEntity } from "./signing-certificate";
 
 export const coreEntities = [
   UserEntity,
@@ -38,4 +40,5 @@ export const coreEntities = [
   AttachmentEntity,
   UserDeviceEntity,
   EmailTemplateEntity,
+  SigningCertificateEntity,
 ];

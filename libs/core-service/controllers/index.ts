@@ -10,6 +10,7 @@ import { ActivityLogController } from "./activity-log";
 import { ActivityLogQueueController } from "./activity-log-queue";
 import { NotificationController } from "./notification";
 import { AttachmentController } from "./upload";
+import { SigningCertificateController } from "./signing-certificate";
 
 export {
   AuthController,
@@ -24,6 +25,7 @@ export {
   ActivityLogQueueController,
   NotificationController,
   AttachmentController,
+  SigningCertificateController,
 };
 
 export const coreControllers = [
@@ -39,4 +41,5 @@ export const coreControllers = [
   ActivityLogQueueController,
   NotificationController,
   AttachmentController,
+  SigningCertificateController,
 ];

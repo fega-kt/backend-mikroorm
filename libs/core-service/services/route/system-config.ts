@@ -20,6 +20,7 @@ export class SystemConfigRouteService {
     const canViewAppSetting = currentUser.canAccess([PermissionType.MenuAppSetting]);
     const canManageEmailTemplates = currentUser.canAccess([PermissionType.MenuEmailTemplate]);
     const canManageI18n = currentUser.canAccess([PermissionType.MenuI18n]);
+    const canManageSigningCertificates = currentUser.canAccess([PermissionType.ManageSigningCertificate]);
 
     const children = [];
 
@@ -47,6 +48,21 @@ export class SystemConfigRouteService {
           icon: "MailOutlined",
           title: "common.menu.emailTemplate",
           roles: [PermissionType.MenuEmailTemplate],
+          permissions: [],
+        },
+      });
+    }
+
+    // Duyệt cấp / thu hồi chứng thư ký số nội bộ
+    if (canManageSigningCertificates) {
+      children.push({
+        path: "/system-config/signing-certificate",
+        component: "/system-config/signing-certificate/index.tsx",
+        handle: {
+          keepAlive: false,
+          icon: "SafetyCertificateOutlined",
+          title: "common.menu.signingCertificate",
+          roles: [PermissionType.ManageSigningCertificate],
           permissions: [],
         },
       });

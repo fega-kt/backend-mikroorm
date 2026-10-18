@@ -1,6 +1,7 @@
 import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
+  CopyObjectCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
@@ -321,6 +322,29 @@ export class UploadService {
   /** Xóa mọi object của một tệp private: file gốc và bản xem (nếu có) */
   async deleteAttachmentObjects(attachment: { key: string; previewKey?: string | null }) {
     await Promise.all([attachment.key, attachment.previewKey].filter((key): key is string => !!key).map((key) => this.deleteObject(key)));
+  }
+
+  /**
+   * Sao chép một object trong bucket private sang thư mục khác (copy phía R2, không tải về); giữ tên file,
+   * trùng tên trong thư mục đích thì thêm hậu tố -2, -3… Trả về key mới.
+   */
+  async copyPrivateObject(sourceKey: string, folder: string, filename: string): Promise<string> {
+    const key = await this.buildUniqueKey(folder, filename.trim(), path.extname(filename).toLowerCase());
+    await this.copyPrivateObjectTo(sourceKey, key);
+    return key;
+  }
+
+  /** Sao chép object trong bucket private sang đúng key cho trước (vd bản xem đi kèm tệp đã sao chép) */
+  async copyPrivateObjectTo(sourceKey: string, targetKey: string) {
+    const source = `${this.privateBucket}/${sourceKey.split("/").map(encodeURIComponent).join("/")}`;
+    await this.s3.send(new CopyObjectCommand({ Bucket: this.privateBucket, Key: targetKey, CopySource: source }));
+  }
+
+  /** Ghi object mới vào thư mục của bucket private, giữ tên file (trùng thì thêm -2, -3…); trả về key */
+  async putPrivateObjectUnique(folder: string, filename: string, body: Uint8Array, contentType: string): Promise<string> {
+    const key = await this.buildUniqueKey(folder, filename.trim(), path.extname(filename).toLowerCase());
+    await this.putPrivateObject(key, body, contentType);
+    return key;
   }
 
   /** Ghi object vào bucket private từ server (vd bản xem do job tạo) */
