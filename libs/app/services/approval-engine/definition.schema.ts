@@ -10,6 +10,17 @@ export enum ApproverType {
   SpecificUser = "SPECIFIC_USER",
   /** Người dùng hoặc nhóm (principal). Nhóm: mọi thành viên nhận task, một người duyệt là đủ */
   Principal = "PRINCIPAL",
+  /** Lãnh đạo của một phòng cụ thể (vd trưởng / phó phòng Kế toán), không phụ thuộc phòng của tờ trình */
+  DepartmentLeader = "DEPARTMENT_LEADER",
+}
+
+/** Vai trò lãnh đạo khi chọn người duyệt theo phòng cụ thể */
+export enum LeaderRole {
+  Head = "HEAD",
+  /** Phó phòng; phòng không có phó → trưởng phòng */
+  Deputy = "DEPUTY",
+  /** Trưởng và phó cùng nhận việc, một người duyệt là đủ */
+  HeadOrDeputy = "HEAD_OR_DEPUTY",
 }
 
 export enum OverdueAction {
@@ -54,11 +65,26 @@ export const approverSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal(ApproverType.DeptDeputy) }),
   z.object({ type: z.literal(ApproverType.SpecificUser), userId: z.string().min(1) }),
   z.object({ type: z.literal(ApproverType.Principal), principalId: z.string().min(1) }),
+  z.object({
+    type: z.literal(ApproverType.DepartmentLeader),
+    departmentId: z.string().min(1),
+    /** Tên phòng lúc chọn: chỉ để hiển thị khi người xem không tra được tên hiện tại; engine không dùng */
+    departmentName: z.string().optional(),
+    role: z.nativeEnum(LeaderRole),
+    /** Phòng không có ai phù hợp: true → tìm ở phòng cấp cha, cứ thế đi lên; false (mặc định) → không có người duyệt */
+    climbIfEmpty: z.boolean().default(false),
+  }),
 ]);
 
 export const stepOptionsSchema = z.object({
   allowDelegation: z.boolean().default(true),
   skipIfRequester: z.boolean().default(false),
+  /**
+   * Quy tắc cũ: tìm trưởng / phó phòng theo phòng của tờ trình thì tự bỏ người trình và leo lên cấp trên (khi không bật skipIfRequester).
+   * Bước lưu trước khi có cờ này giữ quy tắc cũ (mặc định true); bước tạo mới ở màn thiết kế ghi false:
+   * người trình chỉ bị bỏ qua khi bật skipIfRequester, không thì vẫn được giao như mọi người khác.
+   */
+  autoExcludeRequester: z.boolean().default(true),
   /** Không tìm được người duyệt (phòng thiếu trưởng/phó, nhóm trống…) thì bỏ qua thay vì báo lỗi */
   skipIfNoApprover: z.boolean().default(false),
   requireRejectReason: z.boolean().default(true),

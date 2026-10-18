@@ -565,8 +565,7 @@ export class ApprovalEngineService {
       if (result.type === "end") return { path, steps, outcome: "approved" as const };
 
       const node = result.node;
-      // Bước bỏ qua người trình: giữ họ khi chính là trưởng / phó phòng để bước được bỏ qua (thay vì leo lên cấp trên)
-      const slots = await resolver.resolveSlots(this.nodeApprovers(node), { ...ctx, keepRequester: node.options.skipIfRequester });
+      const slots = await resolver.resolveSlots(this.nodeApprovers(node), { ...ctx, keepRequester: this.keepsRequester(node) });
       const blocked = (!slots.length || slots.some((users) => !users.length)) && !node.options.skipIfNoApprover;
       const resolved = blocked ? [] : [...new Set(slots.flat())];
       if (!blocked && !resolved.length) {
@@ -644,14 +643,22 @@ export class ApprovalEngineService {
       const node = result.node;
       // Mỗi người duyệt trong cấu hình là một suất, mỗi suất một task (giữ bởi principal người hoặc nhóm)
       const requesterId = request.requester.id;
-      // Bước bỏ qua người trình: giữ họ khi chính là trưởng / phó phòng để suất đó được bỏ qua (thay vì leo lên cấp trên)
-      const slotCtx = { ...ctx, keepRequester: node.options.skipIfRequester };
-      const slots = (await resolver.resolveSlotTargets(this.nodeApprovers(node), slotCtx)).map((target, slot) => ({
-        slot,
-        ...target,
-        // Nhóm: người trình không xử lý đơn của chính mình
-        users: target.group ? target.users.filter((id) => id !== requesterId) : target.users,
-      }));
+      const slotCtx = { ...ctx, keepRequester: this.keepsRequester(node) };
+      const slots = (await resolver.resolveSlotTargets(this.nodeApprovers(node), slotCtx)).map((target, slot) => {
+        // Suất nhiều người (trưởng hoặc phó) bật bỏ qua người trình: bỏ họ ra khi còn người khác;
+        // chỉ còn mỗi người trình thì để lại một mình họ để skipIfRequester quyết định như suất một người.
+        // Không bật: giao cho cả những người được chọn, kể cả người trình
+        const others = node.options.skipIfRequester ? target.members?.filter((m) => m.userId !== requesterId) : undefined;
+        const members = others?.length ? others : target.members;
+        return {
+          slot,
+          ...target,
+          members,
+          principalId: members?.length ? members[0].principalId : target.principalId,
+          // Nhóm: người trình không xử lý đơn của chính mình
+          users: target.group ? target.users.filter((id) => id !== requesterId) : members ? members.map((m) => m.userId) : target.users,
+        };
+      });
       // Nhóm không còn ai → luôn bỏ suất (không để treo). Người không xác định được → theo skipIfNoApprover
       if ((!slots.length || slots.some((item) => !item.group && !item.users.length)) && !node.options.skipIfNoApprover) {
         throw new BadRequestException(`No approver found for step "${node.name ?? node.id}"`);
@@ -696,6 +703,20 @@ export class ApprovalEngineService {
         assigned: boolean;
       }[] = [];
       for (const item of openSlots) {
+        // Suất nhiều người không phải nhóm (trưởng hoặc phó): mỗi người một task cùng suất, một người duyệt là đủ
+        if (!item.group && item.members && item.members.length > 1) {
+          for (const member of item.members) {
+            targets.push({
+              slot: item.slot,
+              origin: member.principalId,
+              approver: member.principalId,
+              holder: member.userId,
+              groupMembers: [],
+              assigned: false,
+            });
+          }
+          continue;
+        }
         if (item.group && !assign) {
           targets.push({
             slot: item.slot,
@@ -943,6 +964,15 @@ export class ApprovalEngineService {
     task.handoverDelegations.set(handovers);
     task.approver = tx.em.getReference(PrincipalEntity, principalId);
     task.assignedFromGroup = opts.assigned ?? false;
+  }
+
+  /**
+   * Giữ người trình khi họ chính là trưởng / phó phòng cần tìm: bước bật bỏ qua người trình (để bỏ qua đúng suất đó),
+   * hoặc bước theo quy tắc mới (autoExcludeRequester = false: không bật bỏ qua thì vẫn giao cho người trình).
+   * Quy tắc cũ: bỏ người trình ra và leo lên trưởng phòng cấp trên.
+   */
+  private keepsRequester(node: WaitNode) {
+    return node.options.skipIfRequester || !node.options.autoExcludeRequester;
   }
 
   /** Trong các task (cùng bước), những task mà `userId` là người DUY NHẤT xử lý được */

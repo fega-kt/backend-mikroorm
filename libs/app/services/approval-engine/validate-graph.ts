@@ -68,7 +68,9 @@ const approverKey = (a: Approver) =>
     ? `${a.type}:${a.userId}`
     : a.type === ApproverType.Principal
       ? `${a.type}:${a.principalId}`
-      : a.type;
+      : a.type === ApproverType.DepartmentLeader
+        ? `${a.type}:${a.departmentId}:${a.role}`
+        : a.type;
 
 /**
  * Kiểm tra graph trước khi xuất bản. Backend là nguồn chuẩn; FE có bản sao để báo lỗi tức thì trên canvas.

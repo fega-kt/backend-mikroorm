@@ -283,7 +283,7 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
     const formFields = (workflow.requestType.form.formSchema ?? []).map((f) => f.key);
     const errors = validateGraph(definition, formFields);
 
-    // Người cụ thể / nhóm phải còn ít nhất một người dùng đang hoạt động
+    // Người cụ thể / nhóm / lãnh đạo phòng cụ thể phải còn ít nhất một người dùng đang hoạt động
     const resolver = new ApproverResolver(this.em);
     const noDeptContext = { requesterId: "", departmentId: "" };
     for (const node of definition.nodes) {
@@ -299,7 +299,8 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
               : [];
       const skippable = (node.type === NodeType.Approval || node.type === NodeType.Parallel) && node.options.skipIfNoApprover;
       for (const approver of skippable ? [] : approvers) {
-        if (approver.type !== ApproverType.SpecificUser && approver.type !== ApproverType.Principal) continue;
+        const fixedTarget = [ApproverType.SpecificUser, ApproverType.Principal, ApproverType.DepartmentLeader].includes(approver.type);
+        if (!fixedTarget) continue;
         if (!(await resolver.resolve(approver, noDeptContext)).length) {
           errors.push({ code: GraphErrorCode.InactiveUser, message: "Approver has no active user", nodeId: node.id });
           break;
