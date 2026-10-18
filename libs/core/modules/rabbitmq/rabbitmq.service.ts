@@ -123,6 +123,22 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     await ch.bindQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL, RABBITMQ_EXCHANGE.NOTIFICATION, RABBITMQ_QUEUES.APPROVAL_EMAIL);
     await ch.assertQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ, { durable: true });
     await ch.bindQueue(RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ, RABBITMQ_EXCHANGE.NOTIFICATION_DLX, RABBITMQ_QUEUES.APPROVAL_EMAIL_DLQ);
+
+    // Chuyển sẵn văn bản sang PDF khi tờ trình tới một bước (consumer tự bỏ qua bước không bắt buộc ký)
+    await ch.assertQueue(RABBITMQ_QUEUES.APPROVAL_FILE_CONVERT, {
+      durable: true,
+      arguments: {
+        "x-dead-letter-exchange": RABBITMQ_EXCHANGE.NOTIFICATION_DLX,
+        "x-dead-letter-routing-key": RABBITMQ_QUEUES.APPROVAL_FILE_CONVERT_DLQ,
+      },
+    });
+    await ch.bindQueue(RABBITMQ_QUEUES.APPROVAL_FILE_CONVERT, RABBITMQ_EXCHANGE.APPROVAL, "approval.request.step_pending");
+    await ch.assertQueue(RABBITMQ_QUEUES.APPROVAL_FILE_CONVERT_DLQ, { durable: true });
+    await ch.bindQueue(
+      RABBITMQ_QUEUES.APPROVAL_FILE_CONVERT_DLQ,
+      RABBITMQ_EXCHANGE.NOTIFICATION_DLX,
+      RABBITMQ_QUEUES.APPROVAL_FILE_CONVERT_DLQ,
+    );
   }
 
   private async setupAttachmentTopology(ch: amqp.Channel) {

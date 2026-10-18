@@ -1,27 +1,17 @@
 import { BaseService } from "@common/base/base.service";
-import { AttachmentEntity, AttachmentPreviewStatus, AttachmentStatus, AttachmentVisibility } from "@core-service/entities/attachment";
+import { AttachmentEntity } from "@core-service/entities/attachment";
 import { UserEntity } from "@core-service/entities/user";
-import {
-  DocumentSigningService,
-  isConvertibleToPdf,
-  isPdf,
-  OfficeConverter,
-  pdfFilenameOf,
-  type SignaturePlacement,
-} from "@core-service/services/e-signature";
-import { FileContextType } from "@core-service/services/file-view/file-access-policy";
+import { DocumentSigningService, isPdf, pdfFilenameOf, type SignaturePlacement } from "@core-service/services/e-signature";
 import { UploadService } from "@core-service/services/upload/upload.service";
 import { EntityManager, EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, Injectable, Scope } from "@nestjs/common";
-import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalFileSignatureEntity } from "../../entities/approval-file-signature";
 import { ApprovalAction, ApprovalEngineService, type ActableStep } from "../approval-engine/approval-engine.service";
 import { ApprovalRequestService } from "../approval-request/approval-request.service";
-import { buildSignedFileFolder, RequestFileCategory } from "../approval-request/request-file.constants";
+import { RequestFileCategory } from "../approval-request/request-file.constants";
 import { loadRequestFiles } from "../approval-request/request-files";
-
-const PDF_MIME = "application/pdf";
+import { RequestPdfService } from "./request-pdf.service";
 
 const fileRef = (f: AttachmentEntity) => ({ id: f.id, filename: f.filename });
 
@@ -48,7 +38,7 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
     protected readonly repo: EntityRepository<AttachmentEntity>,
     private readonly engine: ApprovalEngineService,
     private readonly signing: DocumentSigningService,
-    private readonly converter: OfficeConverter,
+    private readonly pdf: RequestPdfService,
     private readonly uploadService: UploadService,
     private readonly requestService: ApprovalRequestService,
   ) {
@@ -116,7 +106,15 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
               });
               // Mỗi lần ký một file mới {taskId}-{tên}.pdf (không ghi đè, không xóa): file mới nhất là bản chung của văn bản
               const displayName = pdfFilenameOf(row.original.filename);
-              const output = await this.storePdf(step, `${step.task.id}-${displayName}`, displayName, signed.content, uploadedKeys);
+              const output = await this.pdf.storePdf(
+                step.em,
+                step.request,
+                `${step.task.id}-${displayName}`,
+                displayName,
+                signed.content,
+                uploadedKeys,
+                user.id,
+              );
               step.em.create(ApprovalFileSignatureEntity, {
                 request: step.request,
                 round: step.request.round,
@@ -164,59 +162,13 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
   }
 
   /**
-   * Văn bản tờ trình của vòng hiện tại, Word/Excel/PowerPoint đã chuyển sang PDF (một lần mỗi vòng, ghi lịch sử).
-   * Văn bản không chuyển được (ảnh, zip…) vẫn trả về để giao diện liệt kê, nhưng không ký.
+   * Văn bản tờ trình của vòng hiện tại, Word/Excel/PowerPoint đã chuyển sang PDF (thường job ở nền đã chuyển sẵn;
+   * chưa có / lỗi thì chuyển ngay, lỗi thì báo lỗi). Văn bản không chuyển được (ảnh, zip…) vẫn trả về nhưng không ký.
    */
   private async prepareDocuments(step: ActableStep, uploadedKeys: string[]) {
     const { em, request, node } = step;
-    // Bộ tệp của vòng hiện tại (đã chốt lúc gửi); chỉ văn bản tờ trình được ký
     const rows = await loadRequestFiles(em, request.id, request.round, RequestFileCategory.Documents);
-
-    const converted = [];
-    for (const row of rows) {
-      if (isPdf(row.current.filename) || !isConvertibleToPdf(row.current.filename)) continue;
-      const name = pdfFilenameOf(row.original.filename);
-      const copy = await this.storePdf(step, name, name, await this.converter.toPdf(row.current), uploadedKeys);
-      converted.push({ from: fileRef(row.current), to: fileRef(copy) });
-      Object.assign(row, { current: copy, updatedAt: new Date() });
-    }
-    if (converted.length) {
-      em.create(ApprovalHistoryEntity, {
-        request,
-        action: ApprovalHistoryAction.FileConvert,
-        actor: em.getReference(UserEntity, this.getCurrentUser().id),
-        nodeId: node.id,
-        nodeName: node.name,
-        data: { round: request.round, files: converted },
-        ...this.audit(em),
-      });
-    }
+    await this.pdf.convertDocuments(em, request, rows, { userId: this.getCurrentUser().id, node }, uploadedKeys);
     return rows;
-  }
-
-  /**
-   * Lưu một bản PDF vào thư mục của vòng Attachments/{requestId}/round-{n}/signed: bản chuyển đổi là {tên}.pdf,
-   * bản ký là {taskId}-{tên}.pdf (trùng thì thêm -2…). Tên hiển thị vẫn là tên văn bản.
-   */
-  private async storePdf({ em, request }: ActableStep, keyName: string, filename: string, content: Buffer, uploadedKeys: string[]) {
-    const folder = buildSignedFileFolder(request.id, request.round);
-    const key = await this.uploadService.putPrivateObjectUnique(folder, keyName, content, PDF_MIME);
-    uploadedKeys.push(key);
-
-    return em.create(AttachmentEntity, {
-      filename,
-      mimetype: PDF_MIME,
-      size: content.length,
-      key,
-      url: "",
-      visibility: AttachmentVisibility.Private,
-      status: AttachmentStatus.Ready,
-      storagePath: folder,
-      contextType: FileContextType.ApprovalRequest,
-      refId: request.id,
-      // PDF đã ký không được viết lại (sẽ hỏng chữ ký) → không tạo bản xem; bản chuyển đổi để ký cũng vậy
-      previewStatus: AttachmentPreviewStatus.Skipped,
-      ...this.audit(em),
-    });
   }
 }

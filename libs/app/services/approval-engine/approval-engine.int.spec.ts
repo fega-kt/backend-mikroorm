@@ -14,7 +14,7 @@ import { appEntities } from "../../entities";
 import { ApprovalDelegationEntity, ApprovalDelegationMode } from "../../entities/approval-delegation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
-import { ApprovalRequestFileEntity } from "../../entities/approval-request-file";
+import { ApprovalRequestFileEntity, RequestFileConvertStatus } from "../../entities/approval-request-file";
 import { setRequestFiles } from "../approval-request/request-files";
 import type { RequestFileCategory } from "../approval-request/request-file.constants";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
@@ -1150,6 +1150,19 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       await em().nativeUpdate(ApprovalTaskEntity, { id: task.id }, { dueAt: new Date(Date.now() - 60_000) });
       expect(await engine.handleOverdue(task.id)).toBe("reminded");
       expect((await load(id)).status).toBe(ApprovalRequestStatus.Pending);
+    });
+
+    it("marks Word documents for background PDF conversion when the signing step starts", async () => {
+      const id = await createRequest(U.staff, D.it, { days: 1 }, signRequestTypeId);
+      await setDraftFiles(id, { documents: ["to-trinh.docx", "phu-luc.pdf"], attachments: ["bang-gia.xlsx"] });
+      await engine.submit(id, U.staff);
+
+      const rows = await em().find(ApprovalRequestFileEntity, { request: id, round: 1 }, { populate: ["original"] });
+      const status = (name: string) => rows.find((r) => r.original.filename === name)?.convertStatus;
+      // Chỉ văn bản tờ trình cần chuyển; PDF và tài liệu đính kèm thì không
+      expect(status("to-trinh.docx")).toBe(RequestFileConvertStatus.Pending);
+      expect(status("phu-luc.pdf")).toBeFalsy();
+      expect(status("bang-gia.xlsx")).toBeFalsy();
     });
 
     it("lets only the current approver prepare signing", async () => {

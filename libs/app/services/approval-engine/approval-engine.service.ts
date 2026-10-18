@@ -30,7 +30,7 @@ import {
   type WaitNode,
   type WorkflowDefinition,
 } from "./definition.schema";
-import { draftRound, loadRequestFiles } from "../approval-request/request-files";
+import { draftRound, loadRequestFiles, markDocumentsForConversion } from "../approval-request/request-files";
 import { RequestFileCategory } from "../approval-request/request-file.constants";
 import { buildPayloadValidator, type FormSchema } from "./form-schema";
 import {
@@ -791,6 +791,8 @@ export class ApprovalEngineService {
       const groupMemberIds = [...new Set(targets.flatMap((t) => t.groupMembers))].filter((id) => !holderIds.includes(id));
 
       request.currentNodeIds = [node.id];
+      // Bước bắt buộc ký: đánh dấu văn bản cần chuyển sang PDF, job ở nền chuyển sẵn trước khi người duyệt mở hộp ký
+      if (node.options.requireSignature) await markDocumentsForConversion(tx.em, request);
       await this.flushNotifies(tx, request, pendingNotifies, resolver, ctx, [...new Set([...holderIds, ...groupMemberIds])]);
       await this.notify(
         tx,

@@ -13,6 +13,9 @@ export const RABBITMQ_QUEUES = {
   /** app-jobs: gửi email theo event phê duyệt */
   APPROVAL_EMAIL: "approval.email",
   APPROVAL_EMAIL_DLQ: "approval.email.dlq",
+  /** app-jobs: tờ trình tới bước bắt buộc ký → chuyển sẵn văn bản Word / Excel sang PDF */
+  APPROVAL_FILE_CONVERT: "approval.file-convert",
+  APPROVAL_FILE_CONVERT_DLQ: "approval.file-convert.dlq",
   /** core-jobs: tạo bản xem tối ưu cho PDF vừa upload */
   ATTACHMENT_PDF_PREVIEW: "attachment.pdf-preview",
   ATTACHMENT_PDF_PREVIEW_DLQ: "attachment.pdf-preview.dlq",
