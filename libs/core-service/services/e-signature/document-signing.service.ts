@@ -5,6 +5,7 @@ import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { SigningCertificateEntity, SigningCertificateStatus } from "../../entities/signing-certificate";
 import { ESignClient, type PdfPlacementInfo, type SignaturePlacement } from "./esign.client";
 import { PinGuard } from "./pin-guard";
+import { SignatureImageStore } from "./signature-image.store";
 
 /** Chứng thư đã được cấp (đang dùng): chắc chắn có nội dung chứng thư và serial */
 export type IssuedCertificate = SigningCertificateEntity & { certificatePem: string; serialNumber: string };
@@ -39,6 +40,7 @@ export class DocumentSigningService {
     private readonly em: EntityManager,
     private readonly esign: ESignClient,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
+    private readonly images: SignatureImageStore,
   ) {}
 
   /** Chứng thư đang dùng (còn hạn) của người dùng, kèm ảnh chữ ký; null nếu chưa có / hết hạn / bị thu hồi */
@@ -86,7 +88,7 @@ export class DocumentSigningService {
       pin,
       certificatePem: certificate.certificatePem,
       lines,
-      signatureImageBase64: certificate.signatureImage?.replace(/^data:image\/\w+;base64,/, ""),
+      signatureImageBase64: certificate.signatureImage ? await this.images.readBase64(certificate.signatureImage) : undefined,
       placement: options.placement,
       reason: options.reason,
     });
