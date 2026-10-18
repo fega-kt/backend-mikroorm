@@ -8,6 +8,9 @@ import { UserEntity } from "@core-service/entities/user";
 import { FileContextType } from "@core-service/services/file-view/file-access-policy";
 import { UploadService } from "@core-service/services/upload/upload.service";
 import { EntityRepository, FilterQuery, serialize } from "@mikro-orm/core";
+import type { Archiver } from "archiver";
+import { randomBytes } from "node:crypto";
+import { once } from "node:events";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import type {
@@ -34,6 +37,15 @@ import { buildRequestFileFolder, isRequestFileKey, RequestFileCategory } from ".
 import { ApprovalRequestFileEntity } from "../../entities/approval-request-file";
 import { ApprovalFileSignatureEntity } from "../../entities/approval-file-signature";
 import { draftRound, loadRequestFiles, setRequestFiles } from "./request-files";
+import {
+  ARCHIVE_TOKEN_TTL_SECONDS,
+  archiveFilename,
+  buildArchiveEntries,
+  MAX_ARCHIVE_BYTES,
+  MAX_ARCHIVE_FILES,
+  RequestArchiveKind,
+  type ArchiveEntry,
+} from "./request-files-archive";
 import { ApprovalEngineService } from "../approval-engine/approval-engine.service";
 import { ApproverResolver } from "../approval-engine/approver-resolver";
 import { resolveAttachmentConfig } from "../approval-engine/attachment-config";
@@ -71,6 +83,8 @@ function groupRoundFiles(rows: ApprovalRequestFileEntity[], signatures: Approval
     group[row.category].push({
       original: fileBrief(row.original),
       current: row.current.id === row.original.id ? null : fileBrief(row.current),
+      /** Chuyển sang PDF để ký: pending / done / failed; null = không cần chuyển (PDF sẵn, tài liệu đính kèm) */
+      convertStatus: row.convertStatus ?? null,
       signatureCount: row.signatureCount,
       signatures: signatures
         .filter((s) => s.requestFile.id === row.id)
@@ -87,6 +101,14 @@ function groupRoundFiles(rows: ApprovalRequestFileEntity[], signatures: Approval
   }
   return [...rounds.values()];
 }
+
+/** Vé tải zip lưu ở cache (dùng một lần): danh sách tệp đã kiểm quyền lúc cấp vé */
+export interface ArchiveTicket {
+  filename: string;
+  entries: ArchiveEntry[];
+}
+
+const archiveTicketKey = (token: string) => `approval:files-archive:${token}`;
 
 const LIST_FIELDS = [
   "id",
@@ -402,13 +424,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const request = await this.repo.findOne({ id: requestId, deleted: { $ne: true } }, { populate: ["requester"] });
 
     if (request) {
-      const tasks = await this.em.find(
-        ApprovalTaskEntity,
-        { request: requestId },
-        { populate: ["approver", "originApprover", "actedBy", "handoverDelegations"] },
-      );
-      const access = await buildTaskAccess(this.em, tasks, this.delegationScope(request), user.id);
-      this.assertCanView(request, tasks, user, access, await this.isSharedWith(request.id, user.id, access));
+      await this.assertViewable(request);
       // Tệp của phiếu ở mọi vòng (kể cả bản đang soạn): tệp gốc, bản PDF chuyển đổi, bản ký mới nhất
       const row = await this.em.findOne(
         ApprovalRequestFileEntity,
@@ -431,6 +447,77 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const ownUnsaved = file?.createdBy.id === user.id && file.key.startsWith(`${STORAGE_PATH.ATTACHMENTS}/${requestId}/`);
     if (!file || !ownUnsaved) throw new NotFoundException("File not found");
     return file;
+  }
+
+  /** Người dùng hiện tại xem được tờ trình (cần populate requester), không thì ForbiddenException */
+  private async assertViewable(request: ApprovalRequestEntity) {
+    const user = this.getCurrentUser();
+    const tasks = await this.em.find(
+      ApprovalTaskEntity,
+      { request: request.id },
+      { populate: ["approver", "originApprover", "actedBy", "handoverDelegations"] },
+    );
+    const access = await buildTaskAccess(this.em, tasks, this.delegationScope(request), user.id);
+    this.assertCanView(request, tasks, user, access, await this.isSharedWith(request.id, user.id, access));
+  }
+
+  /**
+   * "Tải về toàn bộ": cùng quyền với xem tờ trình. Chốt danh sách tệp của bộ tệp đang hiển thị (đang soạn / vòng hiện tại)
+   * rồi cấp link tải dùng một lần — trình duyệt mở link là tải zip như một tệp thường (không cần header đăng nhập).
+   */
+  async prepareFilesArchive(requestId: string, kind: RequestArchiveKind) {
+    const request = await this.repo.findOne({ id: requestId, deleted: { $ne: true } }, { populate: ["requester"] });
+    if (!request) throw new NotFoundException("Request not found");
+    await this.assertViewable(request);
+
+    const editing = [ApprovalRequestStatus.Draft, ApprovalRequestStatus.Returned].includes(request.status);
+    // Đang soạn chưa có bản ký số của vòng nào để tải
+    if (editing && kind === RequestArchiveKind.Signed) {
+      throw new BadRequestException({ code: "NO_SIGNED_FILES", message: "The request has no signed files yet" });
+    }
+    const rows = await loadRequestFiles(this.em, request.id, editing ? draftRound(request) : request.round);
+    const entries = buildArchiveEntries(rows, kind);
+    if (!entries.length) throw new BadRequestException({ code: "NO_FILES", message: "There is no file to download" });
+    const totalBytes = entries.reduce((sum, entry) => sum + entry.size, 0);
+    if (entries.length > MAX_ARCHIVE_FILES || totalBytes > MAX_ARCHIVE_BYTES) {
+      throw new BadRequestException({ code: "ARCHIVE_TOO_LARGE", message: "Too many files to download at once" });
+    }
+
+    const token = randomBytes(24).toString("base64url");
+    const ticket: ArchiveTicket = { filename: archiveFilename(request.code, kind), entries };
+    await this.cache.set(archiveTicketKey(token), ticket, ARCHIVE_TOKEN_TTL_SECONDS);
+    return { downloadPath: `/approval-request/files/archive/${token}`, filename: ticket.filename, count: entries.length, totalBytes };
+  }
+
+  /** Lấy (và hủy luôn) vé tải zip: link chỉ dùng được một lần */
+  async takeFilesArchive(token: string): Promise<ArchiveTicket> {
+    const key = archiveTicketKey(token);
+    const ticket = await this.cache.get<ArchiveTicket>(key);
+    if (!ticket) throw new NotFoundException("Download link is invalid or expired");
+    await this.cache.del(key);
+    return ticket;
+  }
+
+  /**
+   * Ghi các tệp của vé vào zip, đọc lần lượt từng tệp từ R2. Người tải ngắt giữa chừng (signal) thì dừng ngay,
+   * hủy luôn stream đang đọc để không tải tiếp từ R2.
+   */
+  async writeFilesArchive(ticket: ArchiveTicket, archive: Archiver, signal: AbortSignal) {
+    for (const entry of ticket.entries) {
+      signal.throwIfAborted();
+      const { body } = await this.uploadService.getObject(entry.key);
+      const destroy = () => body.destroy();
+      signal.addEventListener("abort", destroy, { once: true });
+      try {
+        // Mở tệp kế tiếp chỉ khi tệp này đã ghi xong: không mở cùng lúc hàng chục kết nối tới R2
+        const written = once(archive, "entry", { signal });
+        archive.append(body, { name: entry.name });
+        await written;
+      } finally {
+        signal.removeEventListener("abort", destroy);
+      }
+    }
+    await archive.finalize();
   }
 
   /** Chi tiết đơn: dữ liệu + định nghĩa quy trình (vẽ sơ đồ) + task + timeline + quyền của người xem */

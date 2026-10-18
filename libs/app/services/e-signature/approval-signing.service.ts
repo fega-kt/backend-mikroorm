@@ -8,6 +8,7 @@ import { EntityManager, EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, Injectable, Scope } from "@nestjs/common";
 import { ApprovalFileSignatureEntity } from "../../entities/approval-file-signature";
+import { ApprovalRequestEntity } from "../../entities/approval-request";
 import { ApprovalAction, ApprovalEngineService, type ActableStep } from "../approval-engine/approval-engine.service";
 import { ApprovalRequestService } from "../approval-request/approval-request.service";
 import { RequestFileCategory } from "../approval-request/request-file.constants";
@@ -15,6 +16,28 @@ import { loadRequestFiles } from "../approval-request/request-files";
 import { RequestPdfService } from "./request-pdf.service";
 
 const fileRef = (f: AttachmentEntity) => ({ id: f.id, filename: f.filename });
+
+type VerifiedSignature = Awaited<ReturnType<DocumentSigningService["verify"]>>[number];
+
+/** Hợp lệ = nội dung nguyên vẹn + chứng thư do CA nội bộ cấp; chứng thư thu hồi sau khi ký chỉ cảnh báo */
+const signatureStatus = (s: VerifiedSignature) =>
+  !s.integrityValid ? "tampered" : !s.certificateTrusted ? "untrusted" : s.revoked ? "revoked" : "valid";
+
+/** Một chữ ký cho giao diện; lý do ký trong PDF là "<mã tờ trình> - <tên bước>" nên chỉ giữ tên bước */
+function signatureBrief(s: VerifiedSignature, requestCode?: string) {
+  const prefix = requestCode ? `${requestCode} - ` : undefined;
+  const status = signatureStatus(s);
+  return {
+    id: s.fieldName,
+    signerName: s.signerName,
+    step: prefix && s.reason?.startsWith(prefix) ? s.reason.slice(prefix.length) : s.reason,
+    signedAt: s.signedAt,
+    status,
+    revokedAt: status === "revoked" ? s.revokedAt : null,
+    /** Lý do kiểm không đạt (văn bản bị sửa, chứng thư lạ) */
+    error: status === "tampered" || status === "untrusted" ? s.error : null,
+  };
+}
 
 /** Người ký in trong khung chữ ký: họ tên + phòng ban */
 const signerOf = (user: IUserResponse) => ({ userId: user.id, fullName: user.fullName, departmentName: user.department?.name });
@@ -149,11 +172,18 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
     return { id: requestId };
   }
 
-  /** Các chữ ký trên một văn bản PDF của tờ trình (ai ký, còn nguyên vẹn không, chứng thư đã thu hồi chưa) */
+  /**
+   * Tình trạng ký số của một văn bản PDF: ai ký, ở bước nào, lúc nào, chữ ký còn hợp lệ không.
+   * Chỉ trả phần giao diện cần; chi tiết kỹ thuật (serial, vị trí khung, revision…) giữ ở backend.
+   */
   async signatures(requestId: string, fileId: string) {
     const file = await this.requestService.resolveViewableFile(requestId, fileId);
     if (!isPdf(file.filename)) return [];
-    return this.signing.verify(await this.uploadService.getObjectBuffer(file.key));
+    const [request, signatures] = await Promise.all([
+      this.repo.getEntityManager().findOne(ApprovalRequestEntity, requestId, { fields: ["code"] }),
+      this.signing.verify(await this.uploadService.getObjectBuffer(file.key)),
+    ]);
+    return signatures.map((signature) => signatureBrief(signature, request?.code));
   }
 
   /* ================= HELPERS ================= */

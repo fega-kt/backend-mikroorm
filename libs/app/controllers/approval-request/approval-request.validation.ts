@@ -1,8 +1,14 @@
 import { z } from "zod";
 import { RequestFileCategory } from "../../services/approval-request/request-file.constants";
+import { RequestArchiveKind } from "../../services/approval-request/request-files-archive";
 import { ApprovalPriority, ApprovalRequestStatus } from "../../entities/approval-request";
 
 const fileIds = z.array(z.string().trim().min(1)).max(50);
+
+/** "Tải về toàn bộ": bản ký số (bản cuối của văn bản) hoặc tệp gốc (văn bản + tài liệu đính kèm) */
+export const filesArchiveValidation = z.object({
+  kind: z.enum(RequestArchiveKind),
+});
 
 export const createApprovalRequestValidation = z.object({
   /** Id do client sinh sẵn: để tệp upload trước khi tạo phiếu nằm đúng thư mục Attachments/{id}/... */
