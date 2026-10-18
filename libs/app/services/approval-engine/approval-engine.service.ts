@@ -565,7 +565,8 @@ export class ApprovalEngineService {
       if (result.type === "end") return { path, steps, outcome: "approved" as const };
 
       const node = result.node;
-      const slots = await resolver.resolveSlots(this.nodeApprovers(node), ctx);
+      // Bước bỏ qua người trình: giữ họ khi chính là trưởng / phó phòng để bước được bỏ qua (thay vì leo lên cấp trên)
+      const slots = await resolver.resolveSlots(this.nodeApprovers(node), { ...ctx, keepRequester: node.options.skipIfRequester });
       const blocked = (!slots.length || slots.some((users) => !users.length)) && !node.options.skipIfNoApprover;
       const resolved = blocked ? [] : [...new Set(slots.flat())];
       if (!blocked && !resolved.length) {
@@ -643,7 +644,9 @@ export class ApprovalEngineService {
       const node = result.node;
       // Mỗi người duyệt trong cấu hình là một suất, mỗi suất một task (giữ bởi principal người hoặc nhóm)
       const requesterId = request.requester.id;
-      const slots = (await resolver.resolveSlotTargets(this.nodeApprovers(node), ctx)).map((target, slot) => ({
+      // Bước bỏ qua người trình: giữ họ khi chính là trưởng / phó phòng để suất đó được bỏ qua (thay vì leo lên cấp trên)
+      const slotCtx = { ...ctx, keepRequester: node.options.skipIfRequester };
+      const slots = (await resolver.resolveSlotTargets(this.nodeApprovers(node), slotCtx)).map((target, slot) => ({
         slot,
         ...target,
         // Nhóm: người trình không xử lý đơn của chính mình

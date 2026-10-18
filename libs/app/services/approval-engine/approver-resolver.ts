@@ -7,6 +7,11 @@ import { ApproverType, type Approver } from "./definition.schema";
 export interface ResolveContext {
   requesterId: string;
   departmentId: string;
+  /**
+   * Giữ người trình khi họ chính là trưởng / phó phòng cần tìm (bước bật "bỏ qua nếu người duyệt là người tạo":
+   * engine tự bỏ qua suất đó). Mặc định bỏ người trình ra và leo lên trưởng phòng cấp trên để người khác duyệt.
+   */
+  keepRequester?: boolean;
 }
 
 /** Một suất duyệt sau khi giải cấu hình: principal theo quy trình + người dùng tương ứng */
@@ -41,14 +46,15 @@ export class ApproverResolver {
   /** Một cấu hình người duyệt → danh sách user (nhóm trả về các thành viên đang hoạt động) */
   async resolve(approver: Approver, ctx: ResolveContext): Promise<string[]> {
     const one = (id?: string) => (id ? [id] : []);
+    const exclude = ctx.keepRequester ? undefined : ctx.requesterId;
     switch (approver.type) {
       case ApproverType.DeptHead:
-        return one(await this.findDeptHead(ctx.departmentId, ctx.requesterId));
+        return one(await this.findDeptHead(ctx.departmentId, exclude));
       case ApproverType.DeptDeputy: {
         const dept = await this.getDepartment(ctx.departmentId);
         const deputyId = dept?.deputy?.id;
-        if (deputyId && deputyId !== ctx.requesterId && (await this.isActive(deputyId))) return [deputyId];
-        return one(await this.findDeptHead(ctx.departmentId, ctx.requesterId));
+        if (deputyId && deputyId !== exclude && (await this.isActive(deputyId))) return [deputyId];
+        return one(await this.findDeptHead(ctx.departmentId, exclude));
       }
       case ApproverType.SpecificUser:
         return (await this.isActive(approver.userId)) ? [approver.userId] : [];
