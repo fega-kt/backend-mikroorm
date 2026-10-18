@@ -60,6 +60,10 @@ export function buildAppSettingValueSchema(meta: AppSettingMeta): z.ZodType {
     }
     case AppSettingValueType.JSON:
       return z.union([z.record(z.string(), z.unknown()), z.array(z.unknown())]);
+    case AppSettingValueType.SELECT: {
+      const { options } = meta.rule;
+      return z.string().refine((v) => options.includes(v), `Value must be one of: ${options.join(", ")}`);
+    }
   }
 }
 

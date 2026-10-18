@@ -1,3 +1,4 @@
+import { parseValueString } from "@common/utils/parse-value.util";
 import { ENV } from "@config/env.config";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
@@ -14,6 +15,7 @@ import {
 } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import type { Request } from "express";
+import { AppSettingEntity, AppSettingType, PdfViewerEngine } from "../../entities/app-setting";
 import { AttachmentEntity, AttachmentPreviewStatus, AttachmentStatus, AttachmentVisibility } from "../../entities/attachment";
 import { UploadService } from "../upload/upload.service";
 import { FILE_ACCESS_POLICIES, type FileAccessPolicy } from "./file-access-policy";
@@ -62,7 +64,11 @@ export class FileViewService {
     const { user, file } = await this.resolveViewableFile(fileId);
     const lang = this.lang;
 
-    const target = resolveFileViewTarget(file.filename);
+    let target = resolveFileViewTarget(file.filename);
+    // Quản trị chọn xem PDF bằng OnlyOffice (dự phòng cho pdf.js)
+    if (target.kind === FileViewKind.Pdf && (await this.pdfViewer()) === PdfViewerEngine.OnlyOffice) {
+      target = { kind: FileViewKind.Office, ext: target.ext, documentType: "pdf" };
+    }
     const base = { fileId: file.id, filename: file.filename, mimetype: file.mimetype, size: file.size, kind: target.kind };
     if (target.kind === FileViewKind.Unsupported) return base;
 
@@ -115,6 +121,15 @@ export class FileViewService {
       documentServerUrl: trimSlash(ENV.ONLYOFFICE_URL),
       config: { ...config, token: await signEditorConfig(this.secret, config) },
     };
+  }
+
+  /** Trình xem PDF theo setting PDF_VIEWER; chưa cấu hình (hoặc chưa cấu hình OnlyOffice) thì pdf.js */
+  private async pdfViewer(): Promise<PdfViewerEngine> {
+    if (!ENV.ONLYOFFICE_URL || !ENV.ONLYOFFICE_FILE_BASE_URL) return PdfViewerEngine.PdfJs;
+    const setting = await this.attachments
+      .getEntityManager()
+      .findOne(AppSettingEntity, { key: AppSettingType.PDF_VIEWER, deleted: { $ne: true } }, { fields: ["value"] });
+    return parseValueString(setting?.value) === PdfViewerEngine.OnlyOffice ? PdfViewerEngine.OnlyOffice : PdfViewerEngine.PdfJs;
   }
 
   /** Link tải tệp (ký thẳng tới R2, sống DOWNLOAD_URL_TTL_SECONDS): cùng quyền với xem tệp */

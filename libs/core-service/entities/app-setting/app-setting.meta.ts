@@ -10,6 +10,16 @@ export enum AppSettingValueType {
   EMAILS = "emails",
   STRING_ARRAY = "string_array",
   JSON = "json",
+  /** Chọn một trong rule.options (FE hiện ô chọn, nhãn từng lựa chọn lấy theo i18n) */
+  SELECT = "select",
+}
+
+/** Trình xem PDF (setting PDF_VIEWER) */
+export enum PdfViewerEngine {
+  /** pdf.js: tải theo từng đoạn, trang đầu hiện ngay (mặc định) */
+  PdfJs = "pdfjs",
+  /** OnlyOffice: tải cả tệp mới hiển thị — dự phòng khi pdf.js hiển thị sai */
+  OnlyOffice = "onlyoffice",
 }
 
 export interface StringRule {
@@ -37,6 +47,11 @@ export interface DateRule {
   max?: DateBound;
 }
 
+export interface SelectRule {
+  /** Các giá trị được chọn (value lưu đúng một trong số này) */
+  options: string[];
+}
+
 export interface ArrayRule {
   minItems?: number;
   maxItems?: number;
@@ -59,6 +74,7 @@ export type AppSettingMeta = MetaBase &
     | { type: AppSettingValueType.NUMBER; rule?: NumberRule }
     | { type: AppSettingValueType.DATE; rule?: DateRule }
     | { type: AppSettingValueType.EMAILS | AppSettingValueType.STRING_ARRAY; rule?: ArrayRule }
+    | { type: AppSettingValueType.SELECT; rule: SelectRule }
     | { type: AppSettingValueType.BOOLEAN | AppSettingValueType.JSON; rule?: never }
   );
 
@@ -76,6 +92,11 @@ export const APP_SETTING_META: Record<AppSettingType, AppSettingMeta> = {
     rule: { min: 0, max: 3650, integer: true },
   },
   [AppSettingType.WORK_EMAIL_FALLBACK_TO_LOGIN_NAME]: { type: AppSettingValueType.BOOLEAN, isShow: true },
+  [AppSettingType.PDF_VIEWER]: {
+    type: AppSettingValueType.SELECT,
+    isShow: true,
+    rule: { options: Object.values(PdfViewerEngine) },
+  },
 
   /** Bật/tắt viền focus đen quanh vùng nội dung chính ở FE */
   [AppSettingType.CONTENT_FOCUS_OUTLINE_ENABLED]: { type: AppSettingValueType.BOOLEAN, isShow: true, clientVisible: true },

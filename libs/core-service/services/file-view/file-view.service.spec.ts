@@ -1,3 +1,4 @@
+import { ENV } from "@config/env.config";
 import { ForbiddenException, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { AttachmentVisibility, type AttachmentEntity } from "../../entities/attachment";
@@ -102,4 +103,54 @@ describe("FileViewService.createDownloadUrl — cùng quyền với xem tệp", 
     await expect(anonymous.service.createDownloadUrl("file-1")).rejects.toBeInstanceOf(UnauthorizedException);
     expect(anonymous.createDownloadUrl).not.toHaveBeenCalled();
   });
+});
+
+describe("FileViewService.describe — setting PDF_VIEWER", () => {
+  const pdf = file({ filename: "scan.pdf", mimetype: "application/pdf" });
+  const buildPdf = (settingValue: unknown) => {
+    const settingFind = vi.fn().mockResolvedValue(settingValue === undefined ? null : { value: settingValue });
+    return new FileViewService(
+      { findOne: vi.fn().mockResolvedValue(pdf), getEntityManager: () => ({ findOne: settingFind }) } as never,
+      {} as never,
+      { user: { id: "u1", fullName: "User" }, headers: {} } as never,
+      [{ contextType: FileContextType.ApprovalRequest, resolveFile: vi.fn().mockResolvedValue(pdf) }],
+    );
+  };
+  const withOnlyOffice = (configured: boolean, run: () => Promise<void>) => async () => {
+    const saved = { ...ENV };
+    Object.assign(ENV, {
+      ONLYOFFICE_JWT_SECRET: "test-secret-test-secret-test-secret",
+      ONLYOFFICE_URL: configured ? "https://office.test" : undefined,
+      ONLYOFFICE_FILE_BASE_URL: configured ? "https://api.test" : undefined,
+    });
+    try {
+      await run();
+    } finally {
+      Object.assign(ENV, saved);
+    }
+  };
+
+  it(
+    "chưa cấu hình / chọn pdfjs: xem bằng pdf.js",
+    withOnlyOffice(true, async () => {
+      expect((await buildPdf(undefined).describe("file-1")).kind).toBe(FileViewKind.Pdf);
+      expect((await buildPdf("pdfjs").describe("file-1")).kind).toBe(FileViewKind.Pdf);
+    }),
+  );
+
+  it(
+    "chọn onlyoffice: xem bằng OnlyOffice với documentType pdf",
+    withOnlyOffice(true, async () => {
+      const result = await buildPdf("onlyoffice").describe("file-1");
+      expect(result.kind).toBe(FileViewKind.Office);
+      expect((result as { config?: { documentType?: string } }).config?.documentType).toBe("pdf");
+    }),
+  );
+
+  it(
+    "chọn onlyoffice nhưng chưa cấu hình OnlyOffice: vẫn dùng pdf.js",
+    withOnlyOffice(false, async () => {
+      expect((await buildPdf("onlyoffice").describe("file-1")).kind).toBe(FileViewKind.Pdf);
+    }),
+  );
 });
