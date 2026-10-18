@@ -1,5 +1,4 @@
 import { BaseEntity } from "@common/base/base.entity";
-import { AttachmentEntity } from "../attachment";
 import { UserEntity } from "../user";
 import { Entity, Enum, Index, ManyToOne, Property, types } from "@mikro-orm/core";
 
@@ -43,9 +42,12 @@ export class SigningCertificateEntity extends BaseEntity {
   @Property({ type: types.datetime, nullable: true })
   notAfter?: Date;
 
-  /** Ảnh chữ ký tay (bucket private, SignatureImages/{userId}) đóng vào khung chữ ký; không có thì khung chỉ có chữ */
-  @ManyToOne({ cascade: [], entity: () => AttachmentEntity, nullable: true })
-  signatureImage?: AttachmentEntity;
+  /**
+   * Có ảnh chữ ký tay không. Ảnh do service ký số giữ (mã hóa bằng master key, bucket riêng của service), không lưu ở backend;
+   * lúc ký service tự đóng ảnh vào khung chữ ký, không có thì khung chỉ có chữ
+   */
+  @Property({ type: types.boolean, default: false })
+  hasSignatureImage: boolean = false;
 
   @ManyToOne({ cascade: [], entity: () => UserEntity, nullable: true })
   reviewedBy?: UserEntity;

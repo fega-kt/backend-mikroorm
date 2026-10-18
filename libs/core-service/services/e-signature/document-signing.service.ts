@@ -5,7 +5,6 @@ import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { SigningCertificateEntity, SigningCertificateStatus } from "../../entities/signing-certificate";
 import { ESignClient, type PdfPlacementInfo, type SignaturePlacement } from "./esign.client";
 import { PinGuard } from "./pin-guard";
-import { SignatureImageStore } from "./signature-image.store";
 
 /** Chứng thư đã được cấp (đang dùng): chắc chắn có nội dung chứng thư và serial */
 export type IssuedCertificate = SigningCertificateEntity & { certificatePem: string; serialNumber: string };
@@ -26,6 +25,10 @@ export interface SignDocumentOptions {
   signedAt?: Date;
 }
 
+/** Tên phòng ban dài quá thì cắt: khung chữ ký nhỏ, service ký số co chữ cho vừa nên chữ dài sẽ rất nhỏ */
+const MAX_DEPARTMENT_LENGTH = 40;
+const shorten = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+
 const signedAtText = (date: Date) =>
   new Intl.DateTimeFormat("vi-VN", { timeZone: VN_TIMEZONE, dateStyle: "short", timeStyle: "short" }).format(date);
 
@@ -40,18 +43,13 @@ export class DocumentSigningService {
     private readonly em: EntityManager,
     private readonly esign: ESignClient,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
-    private readonly images: SignatureImageStore,
   ) {}
 
   /** Chứng thư đang dùng (còn hạn) của người dùng, kèm ảnh chữ ký; null nếu chưa có / hết hạn / bị thu hồi */
   async activeCertificate(userId: string) {
     const certificate = await this.em
       .fork()
-      .findOne(
-        SigningCertificateEntity,
-        { user: userId, status: SigningCertificateStatus.Active, deleted: { $ne: true } },
-        { populate: ["signatureImage"] },
-      );
+      .findOne(SigningCertificateEntity, { user: userId, status: SigningCertificateStatus.Active, deleted: { $ne: true } });
     return certificate && (!certificate.notAfter || certificate.notAfter > new Date()) ? certificate : null;
   }
 
@@ -78,20 +76,23 @@ export class DocumentSigningService {
   async sign(pdf: Uint8Array, signer: Signer, certificate: SigningCertificateEntity, pin: string, options: SignDocumentOptions = {}) {
     if (!certificate.certificatePem)
       throw new BadRequestException({ code: "CERTIFICATE_REQUIRED", message: "Certificate is not issued yet" });
-    const lines = [
-      `Ký bởi: ${signer.fullName}`,
-      signer.departmentName,
-      `Thời gian: ${signedAtText(options.signedAt ?? new Date())}`,
-    ].filter((line): line is string => !!line);
     return this.esign.sign(pdf, {
       keyId: certificate.keyId,
       pin,
       certificatePem: certificate.certificatePem,
-      lines,
-      signatureImageBase64: certificate.signatureImage ? await this.images.readBase64(certificate.signatureImage) : undefined,
+      lines: this.signatureLines(signer, options.signedAt),
       placement: options.placement,
       reason: options.reason,
     });
+  }
+
+  /** Các dòng chữ in trong khung chữ ký — giao diện dùng lại để xem trước đúng như bản ký */
+  signatureLines(signer: Signer, signedAt = new Date()) {
+    return [
+      `Ký bởi: ${signer.fullName}`,
+      signer.departmentName && `Đơn vị: ${shorten(signer.departmentName, MAX_DEPARTMENT_LENGTH)}`,
+      `Thời gian: ${signedAtText(signedAt)}`,
+    ].filter((line): line is string => !!line);
   }
 
   /** Kích thước trang, khung chữ ký đã có và vị trí tự xếp — để giao diện cho kéo thả vị trí ký */

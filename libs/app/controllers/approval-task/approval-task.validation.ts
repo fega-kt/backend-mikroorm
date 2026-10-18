@@ -22,7 +22,7 @@ const placementSchema = z.object({
 });
 
 export const signApproveValidation = z.object({
-  pin: z.string().regex(/^d{6,12}$/),
+  pin: z.string().regex(/^\d{6}$/, "PIN must be 6 digits"),
   comment: z.string().trim().max(2000).optional(),
   /** Vị trí chữ ký theo id văn bản (điểm PDF, gốc góc dưới-trái); thiếu thì tự xếp ở chân trang cuối */
   placements: z.record(z.string(), placementSchema).optional(),

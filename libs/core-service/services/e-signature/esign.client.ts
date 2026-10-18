@@ -52,7 +52,6 @@ export interface SignPdfInput {
   pin: string;
   certificatePem: string;
   lines: string[];
-  signatureImageBase64?: string;
   placement?: SignaturePlacement;
   reason?: string;
   location?: string;
@@ -87,6 +86,16 @@ export class ESignClient {
 
   changePin(keyId: string, oldPin: string, newPin: string) {
     return this.json<void>("POST", `/keys/${encodeURIComponent(keyId)}/change-pin`, { oldPin, newPin });
+  }
+
+  /** Ảnh chữ ký tay (data URL PNG / JPEG) lưu mã hóa ở service ký số; null = xóa ảnh */
+  setSignatureImage(keyId: string, image: string | null) {
+    return this.json<void>("PUT", `/keys/${encodeURIComponent(keyId)}/signature-image`, { image });
+  }
+
+  async getSignatureImage(keyId: string): Promise<string | null> {
+    const res = await this.call(`/keys/${encodeURIComponent(keyId)}/signature-image`, { method: "GET" });
+    return ((await res.json()) as { image: string | null }).image;
   }
 
   deleteKey(keyId: string) {
@@ -144,6 +153,17 @@ export class ESignClient {
 
     const problem = (await res.json().catch(() => ({}))) as { code?: string; message?: string };
     if (problem.code === "INVALID_PIN") throw new InvalidPinError();
+    // Lỗi cấu hình: báo rõ để người vận hành sửa, thay vì lỗi chung
+    if (problem.code === "CA_NOT_INITIALIZED") {
+      throw new ServiceUnavailableException({
+        code: "CA_NOT_INITIALIZED",
+        message: "E-signature service has no CA yet — call POST /ca/init once",
+      });
+    }
+    if (res.status === HttpStatus.UNAUTHORIZED) {
+      this.logger.error("E-signature service rejected ESIGN_SERVICE_TOKEN (must equal Signing__ServiceToken of the service)");
+      throw new ServiceUnavailableException({ code: "ESIGN_TOKEN_MISMATCH", message: "E-signature service rejected the service token" });
+    }
     if (res.status === HttpStatus.NOT_FOUND) throw new NotFoundException("Signing key not found");
     if (res.status === HttpStatus.BAD_REQUEST) throw new BadRequestException(problem.message ?? "Invalid signing request");
     if (res.status === HttpStatus.UNPROCESSABLE_ENTITY) throw new UnprocessableEntityException("The PDF cannot be signed");
