@@ -30,7 +30,10 @@ import { RequestTypeVersionEntity } from "../../entities/request-type-version";
 import { ensureLatestFormVersion } from "../form/form-version";
 import { ensureLatestTypeVersion } from "../request-type/request-type-version";
 import { buildChange, diffFiles, diffPayload, type FieldChange, type FileChangeItem } from "./request-change-log";
-import { buildRequestFileFolder, RequestFileCategory } from "./request-file.constants";
+import { buildRequestFileFolder, isRequestFileKey, RequestFileCategory } from "./request-file.constants";
+import { ApprovalRequestFileEntity } from "../../entities/approval-request-file";
+import { ApprovalFileSignatureEntity } from "../../entities/approval-file-signature";
+import { draftRound, loadRequestFiles, setRequestFiles } from "./request-files";
 import { ApprovalEngineService } from "../approval-engine/approval-engine.service";
 import { ApproverResolver } from "../approval-engine/approver-resolver";
 import { resolveAttachmentConfig } from "../approval-engine/attachment-config";
@@ -58,6 +61,32 @@ const fileBrief = (a: AttachmentEntity) => ({
   size: a.size,
   mimetype: a.mimetype,
 });
+
+/** Bộ tệp từng vòng: mỗi tệp có tệp gốc + bản hiện tại (khác gốc khi đã chuyển PDF / đã ký) + các lần ký theo task */
+function groupRoundFiles(rows: ApprovalRequestFileEntity[], signatures: ApprovalFileSignatureEntity[]) {
+  const rounds = new Map<number, { round: number; documents: unknown[]; attachments: unknown[] }>();
+  for (const row of rows) {
+    const group = rounds.get(row.round) ?? { round: row.round, documents: [], attachments: [] };
+    rounds.set(row.round, group);
+    group[row.category].push({
+      original: fileBrief(row.original),
+      current: row.current.id === row.original.id ? null : fileBrief(row.current),
+      signatureCount: row.signatureCount,
+      signatures: signatures
+        .filter((s) => s.requestFile.id === row.id)
+        .map((s) => ({
+          id: s.id,
+          taskId: s.task.id,
+          nodeName: s.task.nodeName,
+          signer: { id: s.signer.id, fullName: s.signer.fullName, avatar: s.signer.avatar },
+          signedAt: s.createdAt,
+          status: s.status,
+          file: fileBrief(s.after),
+        })),
+    });
+  }
+  return [...rounds.values()];
+}
 
 const LIST_FIELDS = [
   "id",
@@ -193,13 +222,12 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       status: ApprovalRequestStatus.Draft,
       ...this.getDefaultValuesForCreate(),
     });
-    await this.setFiles(request, RequestFileCategory.Documents, data.documents);
-    await this.setFiles(request, RequestFileCategory.Attachments, data.attachments);
+    const initialFiles = [
+      ...(await this.setFiles(request, RequestFileCategory.Documents, data.documents)),
+      ...(await this.setFiles(request, RequestFileCategory.Attachments, data.attachments)),
+    ];
     // Dòng "tạo" ghi luôn thông tin ban đầu (giá trị đầu tiên của từng trường + tệp) để lịch sử cho thấy phiếu tạo với nội dung gì
     const departments = await this.departmentBriefs([departmentId]);
-    const initialFiles = [RequestFileCategory.Documents, RequestFileCategory.Attachments].flatMap((category) =>
-      this.fileChangeItems(request, category),
-    );
     this.recordHistory(request, ApprovalHistoryAction.Create, {
       changes: [
         buildChange("title", null, data.title),
@@ -246,9 +274,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       [RequestFileCategory.Attachments, data.attachments],
     ] as const) {
       if (!ids) continue;
-      const before = this.fileChangeItems(request, category);
-      await this.setFiles(request, category, ids);
-      const diff = diffFiles(before, this.fileChangeItems(request, category));
+      const before = await this.draftFileItems(request, category);
+      const diff = diffFiles(before, await this.setFiles(request, category, ids));
       files.added.push(...diff.added);
       files.removed.push(...diff.removed);
     }
@@ -372,10 +399,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
    */
   async resolveViewableFile(requestId: string, fileId: string): Promise<AttachmentEntity> {
     const user = this.getCurrentUser();
-    const request = await this.repo.findOne(
-      { id: requestId, deleted: { $ne: true } },
-      { populate: ["requester", "documents", "attachments"] },
-    );
+    const request = await this.repo.findOne({ id: requestId, deleted: { $ne: true } }, { populate: ["requester"] });
 
     if (request) {
       const tasks = await this.em.find(
@@ -385,8 +409,22 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       );
       const access = await buildTaskAccess(this.em, tasks, this.delegationScope(request), user.id);
       this.assertCanView(request, tasks, user, access, await this.isSharedWith(request.id, user.id, access));
-      const linked = [...request.documents.getItems(), ...request.attachments.getItems()].find((f) => f.id === fileId && !f.deleted);
-      if (linked) return linked;
+      // Tệp của phiếu ở mọi vòng (kể cả bản đang soạn): tệp gốc, bản PDF chuyển đổi, bản ký mới nhất
+      const row = await this.em.findOne(
+        ApprovalRequestFileEntity,
+        { request: requestId, $or: [{ original: fileId }, { current: fileId }] },
+        { populate: ["original", "current"] },
+      );
+      const inRequest = row && [row.current, row.original].find((f) => f.id === fileId && !f.deleted);
+      if (inRequest) return inRequest;
+      // Bản ký theo từng task (lịch sử ký) và bản trước khi ký
+      const signature = await this.em.findOne(
+        ApprovalFileSignatureEntity,
+        { request: requestId, $or: [{ after: fileId }, { before: fileId }] },
+        { populate: ["before", "after"] },
+      );
+      const signed = signature && [signature.after, signature.before].find((f) => f.id === fileId && !f.deleted);
+      if (signed) return signed;
     }
 
     const file = await this.em.findOne(AttachmentEntity, { id: fileId, deleted: { $ne: true }, status: AttachmentStatus.Ready });
@@ -407,8 +445,6 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
           "formVersion",
           "requester",
           "department",
-          "documents",
-          "attachments",
           "workflowVersion",
           "workflowVersion.workflow",
         ],
@@ -446,6 +482,21 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const delegateBriefs = new Map(delegateUsers.map((u) => [u.id, { id: u.id, fullName: u.fullName, avatar: u.avatar }]));
 
     const histories = await this.em.find(ApprovalHistoryEntity, { request: id }, { populate: ["actor"], orderBy: { createdAt: "ASC" } });
+    const requestFiles = await this.em.find(
+      ApprovalRequestFileEntity,
+      { request: id },
+      { populate: ["original", "current"], orderBy: { round: "DESC", category: "ASC", position: "ASC" } },
+    );
+    const signatures = await this.em.find(
+      ApprovalFileSignatureEntity,
+      { request: id },
+      { populate: ["task", "signer", "after"], orderBy: { createdAt: "ASC" } },
+    );
+    // documents / attachments: đang soạn / bị trả lại → bộ tệp đang soạn; còn lại → bộ tệp của vòng hiện tại
+    const editingFiles = [ApprovalRequestStatus.Draft, ApprovalRequestStatus.Returned].includes(request.status);
+    const shownRound = editingFiles ? draftRound(request) : request.round;
+    const shownFiles = (category: RequestFileCategory) =>
+      requestFiles.filter((f) => f.round === shownRound && f.category === category).map((f) => fileBrief(f.original));
     const shares = await this.em.find(
       ApprovalShareEntity,
       { request: id, deleted: { $ne: true } },
@@ -497,8 +548,13 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       category: categoryBrief(request.category),
       requester: userBrief(request.requester),
       department: { id: request.department.id, name: request.department.name },
-      documents: request.documents.getItems().map(fileBrief),
-      attachments: request.attachments.getItems().map(fileBrief),
+      documents: shownFiles(RequestFileCategory.Documents),
+      attachments: shownFiles(RequestFileCategory.Attachments),
+      /** Bộ tệp từng vòng duyệt (mới nhất trước); tờ trình gửi trước khi lưu theo vòng thì rỗng */
+      rounds: groupRoundFiles(
+        requestFiles.filter((f) => f.round <= request.round),
+        signatures,
+      ),
       workflow: version ? { id: version.workflow.id, name: version.workflow.name, versionId: version.id, version: version.version } : null,
       definition,
       tasks: tasks.map((t) => ({
@@ -550,6 +606,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         canReject: !!myTask,
         canReturn: !!myTask && (currentNode?.options.allowReturn ?? true),
         requireRejectReason: currentNode?.options.requireRejectReason ?? true,
+        /** Bước hiện tại bắt buộc ký số: chỉ duyệt bằng "Ký và duyệt" */
+        requireSignature: !!myTask && !!currentNode?.options.requireSignature,
         canReassign: isPending && user.canAccess([PermissionType.ReassignApprovalTask]),
         myTaskId: myTask?.id ?? null,
         isParallel: currentNode?.type === NodeType.Parallel,
@@ -591,7 +649,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
   }
 
   private async getOwnEditable(id: string) {
-    const request = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["documents", "attachments"] });
+    const request = await this.repo.findOne({ id, deleted: { $ne: true } });
     if (!request) throw new NotFoundException("Request not found");
     if (request.requester.id !== this.getCurrentUser().id) throw new ForbiddenException("Only the requester can edit this request");
     if (![ApprovalRequestStatus.Draft, ApprovalRequestStatus.Returned].includes(request.status)) {
@@ -611,8 +669,10 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     });
   }
 
-  private fileChangeItems(request: ApprovalRequestEntity, block: RequestFileCategory): FileChangeItem[] {
-    return request[block].getItems().map((f) => ({ id: f.id, filename: f.filename, block }));
+  /** Tệp đang soạn của một loại (vòng round + 1), dạng ghi lịch sử */
+  private async draftFileItems(request: ApprovalRequestEntity, block: RequestFileCategory): Promise<FileChangeItem[]> {
+    const rows = await loadRequestFiles(this.em, request.id, draftRound(request), block);
+    return rows.map((row) => ({ id: row.original.id, filename: row.original.filename, block }));
   }
 
   /** Tên phòng ban lúc ghi lịch sử: đổi tên phòng về sau thì dòng lịch sử cũ vẫn đọc đúng như thời điểm sửa */
@@ -621,18 +681,22 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     return new Map(departments.map((d) => [d.id, { id: d.id, name: d.name }]));
   }
 
-  private async setFiles(request: ApprovalRequestEntity, field: RequestFileCategory, ids: string[]) {
+  /** Đặt tệp đang soạn của một loại theo đúng thứ tự ids; trả về danh sách mới dạng ghi lịch sử */
+  private async setFiles(request: ApprovalRequestEntity, field: RequestFileCategory, rawIds: string[]): Promise<FileChangeItem[]> {
+    const ids = [...new Set(rawIds)];
     const files = ids.length
       ? await this.em.find(AttachmentEntity, { id: { $in: ids }, deleted: { $ne: true }, status: AttachmentStatus.Ready })
       : [];
     const userId = this.getCurrentUser().id;
-    const folder = `${buildRequestFileFolder(request.id, field)}/`;
-    // Chỉ gắn tệp do chính người dùng upload và nằm đúng thư mục của phiếu + loại tệp:
+    // Chỉ gắn tệp do chính người dùng upload và nằm đúng thư mục của phiếu + loại tệp (vòng nào cũng được):
     // chặn việc gắn tệp (private) của người khác hoặc của phiếu khác để xin link tải
-    if (files.length !== ids.length || files.some((f) => f.createdBy.id !== userId || !f.key.startsWith(folder))) {
+    if (files.length !== ids.length || files.some((f) => f.createdBy.id !== userId || !isRequestFileKey(f.key, request.id, field))) {
       throw new BadRequestException("Some files are invalid");
     }
-    request[field].set(files);
+    const ordered = ids.map((id) => files.find((f) => f.id === id));
+    const owner = this.em.getReference(UserEntity, userId);
+    await setRequestFiles(this.em, request, field, ordered, { createdBy: owner, updatedBy: owner });
+    return ordered.map((f) => ({ id: f.id, filename: f.filename, block: field }));
   }
 
   /**
@@ -649,7 +713,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       }
     }
 
-    const folder = buildRequestFileFolder(requestId, data.category);
+    // Tệp đang soạn thuộc vòng sắp gửi: phiếu mới / nháp → vòng 1, bị trả lại ở vòng n → vòng n + 1
+    const folder = buildRequestFileFolder(requestId, (existing?.round ?? 0) + 1, data.category);
     const { key, uploadUrl, headers, expiresAt, multipart } = await this.uploadService.createUploadUrl({
       folder,
       filename: data.filename,

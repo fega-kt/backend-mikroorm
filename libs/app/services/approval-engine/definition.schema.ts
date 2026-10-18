@@ -93,6 +93,11 @@ export const stepOptionsSchema = z.object({
   groupMode: z.enum(GroupMode).default(GroupMode.Shared),
   /** Nhóm "cùng xử lý": gửi email cho cả nhóm khi task tới (mặc định chỉ thông báo trong ứng dụng) */
   emailGroup: z.boolean().default(false),
+  /**
+   * Bắt buộc ký số vào "Văn bản tờ trình": chỉ duyệt được bằng "Ký và duyệt" (Word/Excel/PowerPoint được chuyển sang PDF trước).
+   * Bước này không tự động duyệt khi quá hạn và không duyệt hàng loạt được.
+   */
+  requireSignature: z.boolean().default(false),
 });
 
 /**

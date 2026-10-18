@@ -4,6 +4,7 @@ import { ZodValidationPipe } from "@common/pipes";
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from "@nestjs/common";
 import { z } from "zod";
 import { ApprovalRequestService } from "../../services/approval-request/approval-request.service";
+import { ApprovalSigningService } from "../../services/e-signature/approval-signing.service";
 import {
   approvalRequestFilterValidation,
   cancelApprovalRequestValidation,
@@ -17,7 +18,10 @@ import {
 /** Đơn đề nghị — mọi người dùng đăng nhập; quyền theo người tạo/người duyệt kiểm tra trong service */
 @Controller("approval-request")
 export class ApprovalRequestController {
-  constructor(private readonly requestService: ApprovalRequestService) {}
+  constructor(
+    private readonly requestService: ApprovalRequestService,
+    private readonly signingService: ApprovalSigningService,
+  ) {}
 
   @Get("request-types")
   requestTypes() {
@@ -53,6 +57,12 @@ export class ApprovalRequestController {
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.requestService.getRequestDetail(id);
+  }
+
+  /** Chữ ký số trên một văn bản PDF của tờ trình: người ký, toàn vẹn, chứng thư còn hiệu lực */
+  @Get(":id/files/:fileId/signatures")
+  signatures(@Param("id", ParseUUIDPipe) id: string, @Param("fileId", ParseUUIDPipe) fileId: string) {
+    return this.signingService.signatures(id, fileId);
   }
 
   /** Xin link upload thẳng lên R2 cho tệp của tờ trình (id có thể chưa tồn tại: tờ trình đang soạn ở client) */

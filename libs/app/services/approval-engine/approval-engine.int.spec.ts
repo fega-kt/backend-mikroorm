@@ -14,6 +14,9 @@ import { appEntities } from "../../entities";
 import { ApprovalDelegationEntity, ApprovalDelegationMode } from "../../entities/approval-delegation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
+import { ApprovalRequestFileEntity } from "../../entities/approval-request-file";
+import { setRequestFiles } from "../approval-request/request-files";
+import type { RequestFileCategory } from "../approval-request/request-file.constants";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity, ApprovalWorkflowVersionStatus } from "../../entities/approval-workflow-version";
@@ -22,7 +25,7 @@ import { FormEntity } from "../../entities/form";
 import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
 import { ensureLatestFormVersion } from "../form/form-version";
 import { ensureLatestTypeVersion, recordTypeVersionIfChanged } from "../request-type/request-type-version";
-import { ApprovalAction, ApprovalEngineService } from "./approval-engine.service";
+import { type ActableStep, ApprovalAction, ApprovalEngineService } from "./approval-engine.service";
 import { workflowDefinitionSchema } from "./definition.schema";
 import { formSchemaSchema } from "./form-schema";
 
@@ -82,6 +85,28 @@ const soloDefinition = () =>
     edges: [
       { from: "start", to: "p1" },
       { from: "p1", to: "end" },
+    ],
+  });
+
+/** Bước bắt buộc ký số (itHead duyệt), cấu hình tự duyệt khi quá hạn — bước ký không được tự duyệt */
+const signDefinition = () =>
+  workflowDefinitionSchema.parse({
+    nodes: [
+      { id: "start", type: "start" },
+      {
+        id: "s1",
+        type: "approval",
+        name: "Ký duyệt",
+        approver: { type: "PRINCIPAL", principalId: P.itHead },
+        slaHours: 1,
+        onOverdue: "AUTO_APPROVE",
+        options: { requireSignature: true },
+      },
+      { id: "end", type: "end" },
+    ],
+    edges: [
+      { from: "start", to: "s1" },
+      { from: "s1", to: "end" },
     ],
   });
 
@@ -247,6 +272,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
   let emptyRequestTypeId: string;
   let notifyRequestTypeId: string;
   let stepNotifyRequestTypeId: string;
+  let signRequestTypeId: string;
 
   const em = () => orm.em.fork();
 
@@ -491,6 +517,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       };
       assignRequestTypeId = await publish("GROUP_ASSIGN", "GA", groupDefinition("assign"));
       soloRequestTypeId = await publish("SOLO", "SO", soloDefinition());
+      signRequestTypeId = await publish("SIGN", "KS", signDefinition());
     });
   });
 
@@ -519,6 +546,29 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     });
     await e.flush();
     return request.id;
+  }
+
+  /** Đặt bộ tệp đang soạn (vòng round + 1) như khi người trình lưu phiếu */
+  async function setDraftFiles(id: string, files: Partial<Record<"documents" | "attachments", string[]>>) {
+    const e = em();
+    const request = await e.findOneOrFail(ApprovalRequestEntity, id);
+    const owner = e.getReference(UserEntity, request.requester.id);
+    for (const [category, names] of Object.entries(files)) {
+      const attachments = names.map((filename) =>
+        e.create(AttachmentEntity, {
+          filename,
+          mimetype: "application/octet-stream",
+          size: 1024,
+          key: `Attachments/${id}/${filename}`,
+          url: `https://files.local/${filename}`,
+          storagePath: "Attachments",
+          createdBy: owner,
+          updatedBy: owner,
+        }),
+      );
+      await setRequestFiles(e, request, category as RequestFileCategory, attachments, { createdBy: owner, updatedBy: owner });
+    }
+    await e.flush();
   }
 
   const load = (id: string) => em().findOneOrFail(ApprovalRequestEntity, id);
@@ -934,30 +984,39 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
       const id = await createRequest(U.staff, D.it, { days: 1 });
       await expect(engine.submit(id, U.staff)).rejects.toThrow("documents.MIN_FILES");
 
-      const e = em();
-      const file = (filename: string) =>
-        e.create(AttachmentEntity, {
-          filename,
-          mimetype: "application/octet-stream",
-          size: 1024,
-          key: filename,
-          url: `https://files.local/${filename}`,
-          storagePath: "Attachments",
-          createdBy: e.getReference(UserEntity, U.staff),
-          updatedBy: e.getReference(UserEntity, U.staff),
-        });
-      const request = await e.findOneOrFail(ApprovalRequestEntity, id, { populate: ["documents"] });
-      request.documents.set([file("to-trinh.png")]);
-      await e.flush();
+      await setDraftFiles(id, { documents: ["to-trinh.png"] });
       await expect(engine.submit(id, U.staff)).rejects.toThrow("documents.FILE_TYPE(to-trinh.png)");
 
-      request.documents.set([file("to-trinh.pdf")]);
-      await e.flush();
+      await setDraftFiles(id, { documents: ["to-trinh.pdf"] });
       await engine.submit(id, U.staff);
       expect((await load(id)).status).toBe(ApprovalRequestStatus.Pending);
     } finally {
       await em().nativeUpdate(RequestTypeEntity, { id: requestTypeId }, { attachmentConfig: null });
     }
+  });
+
+  it("keeps each round's files when the request is returned and resubmitted", async () => {
+    const id = await createRequest(U.staff, D.it, { days: 1 });
+    await setDraftFiles(id, { documents: ["to-trinh-v1.docx"], attachments: ["bang-gia.xlsx"] });
+    await engine.submit(id, U.staff);
+    // Trả lại qua engine trực tiếp (không có R2 để sao chép): tự tạo bộ tệp đang soạn của vòng 2
+    await engine.act(id, ApprovalAction.Return, { actorId: U.itHead, comment: "Sửa lại tờ trình" });
+    await setDraftFiles(id, { documents: ["to-trinh-v2.docx"], attachments: ["bang-gia-v2.xlsx"] });
+    await engine.submit(id, U.staff);
+
+    const rows = await em().find(
+      ApprovalRequestFileEntity,
+      { request: id },
+      { populate: ["original", "current"], orderBy: { round: "ASC", category: "ASC" } },
+    );
+    const names = (round: number, category: string) =>
+      rows.filter((r) => r.round === round && r.category === category).map((r) => r.original.filename);
+    expect(names(1, "documents")).toEqual(["to-trinh-v1.docx"]);
+    expect(names(2, "documents")).toEqual(["to-trinh-v2.docx"]);
+    expect(names(1, "attachments")).toEqual(["bang-gia.xlsx"]);
+    expect(names(2, "attachments")).toEqual(["bang-gia-v2.xlsx"]);
+    // Chưa ký / chuyển đổi: bản hiện tại chính là tệp gốc
+    expect(rows.every((r) => r.current.id === r.original.id && r.signatureCount === 0)).toBe(true);
   });
 
   it("sends notification steps to next approvers, fixed recipients and the requester", async () => {
@@ -1049,5 +1108,54 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     expect(result.path).toEqual(["start", "n1", "c1", "n2", "p1", "end"]);
     expect(result.steps.map((s) => s.approvers.map((a) => a.fullName))).toEqual([["itHead"], ["director"], ["hr", "admin"]]);
     expect(await em().count(ApprovalTaskEntity, {})).toBe(before);
+  });
+
+  describe("digital signature step", () => {
+    const submitSign = async () => {
+      const id = await createRequest(U.staff, D.it, { days: 1 }, signRequestTypeId);
+      await engine.submit(id, U.staff);
+      return id;
+    };
+    const histories = (id: string) => em().find(ApprovalHistoryEntity, { request: id }, { orderBy: { createdAt: "ASC" } });
+
+    it("blocks a plain approval and approves through the sign hook", async () => {
+      const id = await submitSign();
+      await expect(approve(id, U.itHead)).rejects.toThrow(/digital signature/);
+      expect((await load(id)).status).toBe(ApprovalRequestStatus.Pending);
+
+      const sign = vi.fn(async (_step: ActableStep) => ({ files: [], certificateSerial: "01" }));
+      await engine.act(id, ApprovalAction.Approve, { actorId: U.itHead, sign });
+      expect(sign).toHaveBeenCalledOnce();
+      expect(sign.mock.calls[0]?.[0].node.id).toBe("s1");
+      expect((await load(id)).status).toBe(ApprovalRequestStatus.Approved);
+      const actions = (await histories(id)).map((h) => h.action);
+      expect(actions.indexOf(ApprovalHistoryAction.Sign)).toBe(actions.indexOf(ApprovalHistoryAction.Approve) - 1);
+      expect((await histories(id)).find((h) => h.action === ApprovalHistoryAction.Sign)?.data).toMatchObject({ certificateSerial: "01" });
+    });
+
+    it("does not approve when signing fails", async () => {
+      const id = await submitSign();
+      const sign = vi.fn(async () => {
+        throw new Error("sign failed");
+      });
+      await expect(engine.act(id, ApprovalAction.Approve, { actorId: U.itHead, sign })).rejects.toThrow("sign failed");
+      expect((await load(id)).status).toBe(ApprovalRequestStatus.Pending);
+      expect(await pendingTasks(id)).toHaveLength(1);
+      expect((await histories(id)).some((h) => h.action === ApprovalHistoryAction.Sign)).toBe(false);
+    });
+
+    it("never auto-approves an overdue signing step", async () => {
+      const id = await submitSign();
+      const [task] = await pendingTasks(id);
+      await em().nativeUpdate(ApprovalTaskEntity, { id: task.id }, { dueAt: new Date(Date.now() - 60_000) });
+      expect(await engine.handleOverdue(task.id)).toBe("reminded");
+      expect((await load(id)).status).toBe(ApprovalRequestStatus.Pending);
+    });
+
+    it("lets only the current approver prepare signing", async () => {
+      const id = await submitSign();
+      await expect(engine.withActableStep(id, U.staff, async () => "x")).rejects.toThrow(/not an approver/);
+      expect(await engine.withActableStep(id, U.itHead, async ({ node }) => node.options.requireSignature)).toBe(true);
+    });
   });
 });

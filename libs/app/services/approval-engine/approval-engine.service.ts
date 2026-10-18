@@ -30,6 +30,8 @@ import {
   type WaitNode,
   type WorkflowDefinition,
 } from "./definition.schema";
+import { draftRound, loadRequestFiles } from "../approval-request/request-files";
+import { RequestFileCategory } from "../approval-request/request-file.constants";
 import { buildPayloadValidator, type FormSchema } from "./form-schema";
 import {
   activeDelegationsFrom,
@@ -47,6 +49,21 @@ export enum ApprovalAction {
   Reject = "reject",
   Return = "return",
 }
+
+/** Bước đang chờ mà người thao tác được xử lý — chạy trong transaction đã khóa dòng đơn */
+export interface ActableStep {
+  em: EntityManager;
+  request: ApprovalRequestEntity;
+  node: WaitNode;
+  /** Task người thao tác đang xử lý (song song "tất cả": suất của họ) */
+  task: ApprovalTaskEntity;
+}
+
+/**
+ * Ký số trước khi duyệt (bước bật requireSignature): chạy trong cùng transaction, sau khi đã kiểm quyền,
+ * trước khi đóng task. Ném lỗi → không duyệt, không ghi gì. Trả về dữ liệu ghi vào dòng lịch sử "sign".
+ */
+export type SignHook = (step: ActableStep) => Promise<Record<string, unknown>>;
 
 /** Ngữ cảnh một lần ghi: em của transaction + event chờ publish sau commit */
 interface Tx {
@@ -136,6 +153,7 @@ export class ApprovalEngineService {
       request.round += 1;
       request.status = ApprovalRequestStatus.Pending;
       request.submittedAt = new Date();
+      // Bộ tệp đang soạn (vòng round + 1) giờ chính là bộ tệp của vòng vừa gửi — không sửa được nữa
       request.closedAt = undefined;
       request.currentNodeIds = [];
 
@@ -151,29 +169,24 @@ export class ApprovalEngineService {
   }
 
   /** Duyệt / từ chối / trả lại. `taskId` chỉ dùng cho hệ thống (tự động duyệt khi quá hạn) */
-  async act(requestId: string, action: ApprovalAction, opts: { actorId: string | null; comment?: string; taskId?: string }) {
+  /**
+   * Duyệt / từ chối / trả lại. `taskId` chỉ dùng cho hệ thống (tự động duyệt khi quá hạn).
+   * Bước bắt buộc ký số: duyệt phải đi kèm `sign` (nút "Ký và duyệt"), duyệt thường / duyệt hàng loạt bị chặn.
+   */
+  async act(
+    requestId: string,
+    action: ApprovalAction,
+    opts: {
+      actorId: string | null;
+      comment?: string;
+      taskId?: string;
+      sign?: SignHook;
+      /** Trả lại: chạy trong cùng transaction sau khi đơn chuyển sang "bị trả lại" (vd sao chép tệp sang vòng sau) */
+      onReturn?: (step: ActableStep) => Promise<void>;
+    },
+  ) {
     return this.run(opts.actorId, async (tx) => {
-      const request = await this.lockRequest(tx, requestId);
-      if (request.status !== ApprovalRequestStatus.Pending) throw new ConflictException("Request is not waiting for approval");
-
-      const definition = await this.loadDefinition(tx.em, request);
-      const pending = await tx.em.find(
-        ApprovalTaskEntity,
-        {
-          request: request.id,
-          round: request.round,
-          nodeId: { $in: request.currentNodeIds },
-          status: ApprovalTaskStatus.Pending,
-        },
-        { populate: ["approver", "handoverDelegations"] },
-      );
-      const access = opts.taskId ? null : await buildTaskAccess(tx.em, pending, this.requestScope(request), opts.actorId ?? "");
-      const eligible = opts.taskId
-        ? pending.filter((t) => t.id === opts.taskId)
-        : pending.filter((t) => canActOnTask(t, opts.actorId ?? "", access));
-      if (!eligible.length) throw new ForbiddenException("You are not an approver of the current step");
-
-      const node = definition.nodes.find((n) => n.id === eligible[0].nodeId) as WaitNode;
+      const { request, definition, pending, access, eligible, node } = await this.actableStep(tx, requestId, opts.taskId);
       // Song song "tất cả": một lần bấm tính cho MỘT suất (ưu tiên suất mình giữ, rồi suất nhóm, rồi suất xử lý thay).
       // Bước khác: xử lý xong là xong cả bước.
       const isAllParallel = node.type === NodeType.Parallel && node.mode === ParallelMode.All;
@@ -197,6 +210,11 @@ export class ApprovalEngineService {
       };
 
       if (action === ApprovalAction.Approve) {
+        if (node.options.requireSignature && !opts.taskId) {
+          if (!opts.sign) throw new BadRequestException("This step requires a digital signature");
+          const signed = await opts.sign({ em: tx.em, request, node, task: pick });
+          this.history(tx, request, ApprovalHistoryAction.Sign, { node, data: { ...signed, ...actData } });
+        }
         close(ApprovalTaskStatus.Approved);
         this.history(tx, request, opts.taskId ? ApprovalHistoryAction.AutoApprove : ApprovalHistoryAction.Approve, {
           node,
@@ -253,9 +271,22 @@ export class ApprovalEngineService {
       skipOthers();
       request.status = ApprovalRequestStatus.Returned;
       request.currentNodeIds = [];
+      await opts.onReturn?.({ em: tx.em, request, node, task: pick });
       this.history(tx, request, ApprovalHistoryAction.Return, { node, comment, data: actData });
       await this.stepEventNotify(tx, request, node, "returned", comment);
       return request;
+    });
+  }
+
+  /**
+   * Chạy `fn` trên bước đang chờ mà người dùng được xử lý (cùng khóa dòng đơn như khi duyệt) — dùng để chuẩn bị ký:
+   * chuyển văn bản sang PDF trước khi người duyệt chọn vị trí chữ ký.
+   */
+  async withActableStep<T>(requestId: string, actorId: string, fn: (step: ActableStep) => Promise<T>): Promise<T> {
+    return this.run(actorId, async (tx) => {
+      const { request, node, eligible } = await this.actableStep(tx, requestId);
+      const task = eligible.find((t) => holderUserId(t) === actorId) ?? eligible[0];
+      return fn({ em: tx.em, request, node, task });
     });
   }
 
@@ -467,7 +498,8 @@ export class ApprovalEngineService {
       const slaMs = this.effectiveSlaHours(request, node.slaHours ?? 24) * HOUR_MS;
       const now = Date.now();
 
-      if (node.onOverdue === OverdueAction.AutoApprove) return "auto_approve" as const;
+      // Bước bắt buộc ký số: hệ thống không ký thay được → không tự duyệt, chỉ nhắc như bình thường
+      if (node.onOverdue === OverdueAction.AutoApprove && !node.options.requireSignature) return "auto_approve" as const;
       // Tự động từ chối: nhắc trước (nhánh nhắc bên dưới), đã nhắc mà vẫn trễ thêm một chu kỳ SLA thì từ chối
       if (node.onOverdue === OverdueAction.AutoReject && task.remindedAt && now >= task.dueAt.getTime() + slaMs) {
         return "auto_reject" as const;
@@ -874,6 +906,30 @@ export class ApprovalEngineService {
     return result;
   }
 
+  /** Đơn đang chờ + các task của bước hiện tại mà người thao tác được xử lý (`taskId`: hệ thống xử lý đúng task đó) */
+  private async actableStep(tx: Tx, requestId: string, taskId?: string) {
+    const request = await this.lockRequest(tx, requestId);
+    if (request.status !== ApprovalRequestStatus.Pending) throw new ConflictException("Request is not waiting for approval");
+
+    const definition = await this.loadDefinition(tx.em, request);
+    const pending = await tx.em.find(
+      ApprovalTaskEntity,
+      {
+        request: request.id,
+        round: request.round,
+        nodeId: { $in: request.currentNodeIds },
+        status: ApprovalTaskStatus.Pending,
+      },
+      { populate: ["approver", "handoverDelegations"] },
+    );
+    const access = taskId ? null : await buildTaskAccess(tx.em, pending, this.requestScope(request), tx.actorId ?? "");
+    const eligible = taskId ? pending.filter((t) => t.id === taskId) : pending.filter((t) => canActOnTask(t, tx.actorId ?? "", access));
+    if (!eligible.length) throw new ForbiddenException("You are not an approver of the current step");
+
+    const node = definition.nodes.find((n) => n.id === eligible[0].nodeId) as WaitNode;
+    return { request, definition, pending, access, eligible, node };
+  }
+
   private async lockRequest(tx: Tx, id: string) {
     const request = await tx.em.findOne(ApprovalRequestEntity, { id, deleted: { $ne: true } }, { lockMode: LockMode.PESSIMISTIC_WRITE });
     if (!request) throw new NotFoundException("Request not found");
@@ -894,11 +950,13 @@ export class ApprovalEngineService {
 
   /** Văn bản tờ trình + tài liệu đính kèm phải đúng cấu hình của loại tờ trình */
   private async validateFiles(em: EntityManager, request: ApprovalRequestEntity, attachmentConfig: AttachmentConfig | null | undefined) {
-    await em.populate(request, ["documents", "attachments"]);
+    // Kiểm bộ tệp đang soạn — sắp thành bộ tệp của vòng được gửi
+    const rows = await loadRequestFiles(em, request.id, draftRound(request));
+    const files = (category: RequestFileCategory) => rows.filter((r) => r.category === category).map((r) => r.original);
     const config = resolveAttachmentConfig(attachmentConfig);
     const errors = [
-      ...validateFileBlock(config.documents, request.documents.getItems()).map((e) => ({ block: "documents", ...e })),
-      ...validateFileBlock(config.attachments, request.attachments.getItems()).map((e) => ({ block: "attachments", ...e })),
+      ...validateFileBlock(config.documents, files(RequestFileCategory.Documents)).map((e) => ({ block: "documents", ...e })),
+      ...validateFileBlock(config.attachments, files(RequestFileCategory.Attachments)).map((e) => ({ block: "attachments", ...e })),
     ];
     if (errors.length) {
       const detail = errors.map((e) => `${e.block}.${e.code}${"filename" in e ? `(${e.filename})` : ""}`).join(", ");

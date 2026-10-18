@@ -1,8 +1,7 @@
 import { BaseEntity } from "@common/base/base.entity";
-import { AttachmentEntity } from "@core-service/entities/attachment";
 import { DepartmentEntity } from "@core-service/entities/department";
 import { UserEntity } from "@core-service/entities/user";
-import { Collection, Entity, Enum, Index, ManyToMany, ManyToOne, Property, types } from "@mikro-orm/core";
+import { Entity, Enum, Index, ManyToOne, Property, types } from "@mikro-orm/core";
 import { ApprovalWorkflowVersionEntity } from "../approval-workflow-version/approval-workflow-version.entity";
 import { CategoryEntity } from "../category/category.entity";
 import { RequestTypeEntity } from "../request-type/request-type.entity";
@@ -93,13 +92,7 @@ export class ApprovalRequestEntity extends BaseEntity {
   @Property({ type: types.integer, default: 0 })
   round: number = 0;
 
-  /** Văn bản tờ trình (file chính) */
-  @ManyToMany({ cascade: [], entity: () => AttachmentEntity, pivotTable: "approval_requests_documents" })
-  documents = new Collection<AttachmentEntity>(this);
-
-  /** Tài liệu đính kèm bổ sung */
-  @ManyToMany({ cascade: [], entity: () => AttachmentEntity })
-  attachments = new Collection<AttachmentEntity>(this);
+  // Tệp (văn bản tờ trình / tài liệu đính kèm) lưu ở ApprovalRequestFileEntity theo vòng; bản đang soạn là vòng round + 1
 
   @Property({ type: types.datetime, nullable: true })
   submittedAt?: Date;

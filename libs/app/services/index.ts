@@ -9,6 +9,7 @@ import { ApprovalTaskService } from "./approval-task";
 import { ApprovalDelegationService } from "./approval-delegation";
 import { EmailTemplateService } from "./email-template";
 import { I18nService } from "./i18n";
+import { ApprovalSigningService } from "./e-signature";
 
 export {
   CategoryService,
@@ -22,6 +23,7 @@ export {
   ApprovalDelegationService,
   EmailTemplateService,
   I18nService,
+  ApprovalSigningService,
 };
 
 export const appServices = [
@@ -36,4 +38,5 @@ export const appServices = [
   ApprovalDelegationService,
   EmailTemplateService,
   I18nService,
+  ApprovalSigningService,
 ];

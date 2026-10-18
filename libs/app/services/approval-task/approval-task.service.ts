@@ -8,6 +8,8 @@ import type { InboxFilterDto } from "../../controllers/approval-task/approval-ta
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalAction, ApprovalEngineService } from "../approval-engine/approval-engine.service";
 import { actionableTaskFilter } from "../approval-engine/task-access";
+import { copyFilesToNextRound } from "../approval-request/request-files";
+import { UploadService } from "@core-service/services/upload/upload.service";
 
 /** Thẻ "Tôi đã duyệt tháng này" ở trang chủ */
 export interface ApprovedStats {
@@ -39,6 +41,7 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
     @InjectRepository(ApprovalTaskEntity)
     protected readonly repo: EntityRepository<ApprovalTaskEntity>,
     private readonly engine: ApprovalEngineService,
+    private readonly uploadService: UploadService,
   ) {
     super();
   }
@@ -163,7 +166,19 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
   }
 
   async act(requestId: string, action: ApprovalAction, comment?: string) {
-    await this.engine.act(requestId, action, { actorId: this.getCurrentUser().id, comment });
+    const uploadedKeys: string[] = [];
+    try {
+      await this.engine.act(requestId, action, {
+        actorId: this.getCurrentUser().id,
+        comment,
+        // Trả lại: tệp đang soạn sao chép sang thư mục vòng sau, tệp của vòng vừa duyệt giữ nguyên
+        onReturn: ({ em, request }) => copyFilesToNextRound(em, request, this.uploadService, uploadedKeys),
+      });
+    } catch (error) {
+      // Transaction đã rollback: xóa các bản sao vừa tạo trên R2
+      await Promise.all(uploadedKeys.map((key) => this.uploadService.deleteObject(key).catch(() => undefined)));
+      throw error;
+    }
     return { id: requestId };
   }
 
