@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FileKind, fileBlockConfigSchema, resolveAttachmentConfig, validateFileBlock } from "./attachment-config";
+import { FileKind, fileBlockConfigSchema, requestFilesError, resolveAttachmentConfig, validateFileBlock } from "./attachment-config";
 
 const MB = 1024 * 1024;
 
@@ -45,5 +45,19 @@ describe("attachment-config", () => {
     const config = fileBlockConfigSchema.parse({ enabled: false });
     expect(validateFileBlock(config, [{ filename: "a.pdf", size: 1 }])).toEqual([{ code: "DISABLED" }]);
     expect(validateFileBlock(config, [])).toEqual([]);
+  });
+});
+
+describe("requestFilesError", () => {
+  const config = { documents: { required: true, fileTypes: [FileKind.Pdf] }, attachments: { required: false, maxFiles: 1 } };
+
+  it("báo lỗi của cả hai khối, kèm tên tệp sai loại", () => {
+    expect(requestFilesError(config, { documents: [], attachments: [{ filename: "a.exe", size: 1 }] })).toBe(
+      "documents.MIN_FILES, attachments.FILE_TYPE(a.exe)",
+    );
+  });
+
+  it("null khi bộ tệp hợp lệ", () => {
+    expect(requestFilesError(config, { documents: [{ filename: "to-trinh.pdf", size: 1 }], attachments: [] })).toBeNull();
   });
 });

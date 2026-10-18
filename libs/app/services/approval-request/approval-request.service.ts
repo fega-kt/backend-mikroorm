@@ -48,7 +48,7 @@ import {
 } from "./request-files-archive";
 import { ApprovalEngineService } from "../approval-engine/approval-engine.service";
 import { ApproverResolver } from "../approval-engine/approver-resolver";
-import { resolveAttachmentConfig } from "../approval-engine/attachment-config";
+import { requestFilesError, resolveAttachmentConfig } from "../approval-engine/attachment-config";
 import { NodeType, workflowDefinitionSchema, type WaitNode } from "../approval-engine/definition.schema";
 import { buildTaskAccess, canActOnTask, holderUserId, isGroupTask, type TaskAccess } from "../approval-engine/task-access";
 
@@ -244,10 +244,10 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       status: ApprovalRequestStatus.Draft,
       ...this.getDefaultValuesForCreate(),
     });
-    const initialFiles = [
-      ...(await this.setFiles(request, RequestFileCategory.Documents, data.documents)),
-      ...(await this.setFiles(request, RequestFileCategory.Attachments, data.attachments)),
-    ];
+    const documents = await this.setFiles(request, RequestFileCategory.Documents, data.documents);
+    const attachments = await this.setFiles(request, RequestFileCategory.Attachments, data.attachments);
+    this.assertDraftFiles(requestTypeVersion.attachmentConfig, { documents: documents.files, attachments: attachments.files });
+    const initialFiles = [...documents.items, ...attachments.items];
     // Dòng "tạo" ghi luôn thông tin ban đầu (giá trị đầu tiên của từng trường + tệp) để lịch sử cho thấy phiếu tạo với nội dung gì
     const departments = await this.departmentBriefs([departmentId]);
     this.recordHistory(request, ApprovalHistoryAction.Create, {
@@ -291,16 +291,31 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     }
 
     const files = { added: [] as FileChangeItem[], removed: [] as FileChangeItem[] };
+    // Bộ tệp sau khi lưu: loại có gửi lên thì là danh sách mới, không gửi thì giữ bộ đang có
+    const current: Record<RequestFileCategory, AttachmentEntity[]> = {
+      [RequestFileCategory.Documents]: [],
+      [RequestFileCategory.Attachments]: [],
+    };
     for (const [category, ids] of [
       [RequestFileCategory.Documents, data.documents],
       [RequestFileCategory.Attachments, data.attachments],
     ] as const) {
-      if (!ids) continue;
+      if (!ids) {
+        current[category] = (await loadRequestFiles(this.em, request.id, draftRound(request), category)).map((row) => row.original);
+        continue;
+      }
       const before = await this.draftFileItems(request, category);
-      const diff = diffFiles(before, await this.setFiles(request, category, ids));
+      const next = await this.setFiles(request, category, ids);
+      current[category] = next.files;
+      const diff = diffFiles(before, next.items);
       files.added.push(...diff.added);
       files.removed.push(...diff.removed);
     }
+    await this.em.populate(request, ["requestTypeVersion"]);
+    this.assertDraftFiles(request.requestTypeVersion.attachmentConfig, {
+      documents: current[RequestFileCategory.Documents],
+      attachments: current[RequestFileCategory.Attachments],
+    });
 
     if (changes.length) this.recordHistory(request, ApprovalHistoryAction.Update, { changes });
     if (files.added.length) this.recordHistory(request, ApprovalHistoryAction.FileAdd, { files: files.added });
@@ -768,8 +783,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     return new Map(departments.map((d) => [d.id, { id: d.id, name: d.name }]));
   }
 
-  /** Đặt tệp đang soạn của một loại theo đúng thứ tự ids; trả về danh sách mới dạng ghi lịch sử */
-  private async setFiles(request: ApprovalRequestEntity, field: RequestFileCategory, rawIds: string[]): Promise<FileChangeItem[]> {
+  /** Đặt tệp đang soạn của một loại theo đúng thứ tự ids; trả về danh sách mới (tệp + dạng ghi lịch sử) */
+  private async setFiles(request: ApprovalRequestEntity, field: RequestFileCategory, rawIds: string[]) {
     const ids = [...new Set(rawIds)];
     const files = ids.length
       ? await this.em.find(AttachmentEntity, { id: { $in: ids }, deleted: { $ne: true }, status: AttachmentStatus.Ready })
@@ -783,7 +798,17 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const ordered = ids.map((id) => files.find((f) => f.id === id));
     const owner = this.em.getReference(UserEntity, userId);
     await setRequestFiles(this.em, request, field, ordered, { createdBy: owner, updatedBy: owner });
-    return ordered.map((f) => ({ id: f.id, filename: f.filename, block: field }));
+    const items: FileChangeItem[] = ordered.map((f) => ({ id: f.id, filename: f.filename, block: field }));
+    return { files: ordered, items };
+  }
+
+  /**
+   * Bộ tệp đang soạn phải đúng cấu hình (bắt buộc, số tệp, loại, dung lượng) ngay cả khi chỉ lưu nháp,
+   * giống các trường bắt buộc của form; gửi đi vẫn kiểm lại. Gọi trước flush: lỗi thì không lưu gì.
+   */
+  private assertDraftFiles(attachmentConfig: unknown, files: { documents: AttachmentEntity[]; attachments: AttachmentEntity[] }) {
+    const error = requestFilesError(attachmentConfig, files);
+    if (error) throw new BadRequestException(`Invalid files: ${error}`);
   }
 
   /**
