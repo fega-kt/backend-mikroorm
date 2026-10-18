@@ -2,11 +2,18 @@ import { DepartmentEntity } from "@core-service/entities/department";
 import { PrincipalEntity } from "@core-service/entities/principal";
 import { UserEntity } from "@core-service/entities/user";
 import type { EntityManager } from "@mikro-orm/core";
-import { ApproverType, type Approver } from "./definition.schema";
+import { ApproverType, LeaderRole, type Approver } from "./definition.schema";
+
+type DepartmentLeaderApprover = Extract<Approver, { type: ApproverType.DepartmentLeader }>;
 
 export interface ResolveContext {
   requesterId: string;
   departmentId: string;
+  /**
+   * Giữ người trình khi họ chính là trưởng / phó phòng cần tìm (bước bật "bỏ qua nếu người duyệt là người tạo":
+   * engine tự bỏ qua suất đó). Mặc định bỏ người trình ra và leo lên trưởng phòng cấp trên để người khác duyệt.
+   */
+  keepRequester?: boolean;
 }
 
 /** Một suất duyệt sau khi giải cấu hình: principal theo quy trình + người dùng tương ứng */
@@ -14,6 +21,8 @@ export interface SlotTarget {
   principalId: string | null;
   group: boolean;
   users: string[];
+  /** Suất nhiều người không phải nhóm (lãnh đạo "trưởng hoặc phó"): mỗi người một task cùng suất, một người duyệt là đủ */
+  members?: { userId: string; principalId: string }[];
 }
 
 /** Số cấp phòng ban tối đa khi leo lên tìm trưởng phòng — chặn dữ liệu cây bị vòng */
@@ -41,19 +50,23 @@ export class ApproverResolver {
   /** Một cấu hình người duyệt → danh sách user (nhóm trả về các thành viên đang hoạt động) */
   async resolve(approver: Approver, ctx: ResolveContext): Promise<string[]> {
     const one = (id?: string) => (id ? [id] : []);
+    const exclude = ctx.keepRequester ? undefined : ctx.requesterId;
     switch (approver.type) {
       case ApproverType.DeptHead:
-        return one(await this.findDeptHead(ctx.departmentId, ctx.requesterId));
+        return one(await this.findDeptHead(ctx.departmentId, exclude));
       case ApproverType.DeptDeputy: {
         const dept = await this.getDepartment(ctx.departmentId);
         const deputyId = dept?.deputy?.id;
-        if (deputyId && deputyId !== ctx.requesterId && (await this.isActive(deputyId))) return [deputyId];
-        return one(await this.findDeptHead(ctx.departmentId, ctx.requesterId));
+        if (deputyId && deputyId !== exclude && (await this.isActive(deputyId))) return [deputyId];
+        return one(await this.findDeptHead(ctx.departmentId, exclude));
       }
       case ApproverType.SpecificUser:
         return (await this.isActive(approver.userId)) ? [approver.userId] : [];
       case ApproverType.Principal:
         return this.resolvePrincipal(approver.principalId);
+      // Chọn đích danh phòng + vai trò: giữ cả người trình, bỏ qua hay không do tùy chọn skipIfRequester của bước quyết định
+      case ApproverType.DepartmentLeader:
+        return this.departmentLeaders(approver);
       default:
         return [];
     }
@@ -83,6 +96,18 @@ export class ApproverResolver {
         );
         if (principal && !principal.user && principal.group) {
           slots.push({ principalId: principal.id, group: true, users: await this.resolvePrincipal(principal.id) });
+          continue;
+        }
+      }
+      if (approver.type === ApproverType.DepartmentLeader) {
+        const users = await this.resolve(approver, ctx);
+        if (users.length > 1) {
+          const members: { userId: string; principalId: string }[] = [];
+          for (const userId of users) {
+            const principalId = await this.principalOfUser(userId);
+            if (principalId) members.push({ userId, principalId });
+          }
+          slots.push({ principalId: members[0]?.principalId ?? null, group: false, users: members.map((m) => m.userId), members });
           continue;
         }
       }
@@ -188,6 +213,34 @@ export class ApproverResolver {
       dept = dept.parent ? await this.getDepartment(dept.parent.id) : null;
     }
     return undefined;
+  }
+
+  /**
+   * Lãnh đạo của phòng được chọn trong quy trình: trưởng phòng / phó phòng (không có phó thì trưởng) / cả hai.
+   * Bỏ người bị khóa; người trình vẫn được giữ (bước tự bỏ qua họ nếu bật skipIfRequester).
+   * Phòng không có ai phù hợp: chỉ tìm tiếp ở phòng cấp cha khi bật climbIfEmpty, mặc định không có người duyệt.
+   */
+  private async departmentLeaders(approver: DepartmentLeaderApprover): Promise<string[]> {
+    const usable = async (id?: string) => !!id && (await this.isActive(id));
+    let dept = await this.getDepartment(approver.departmentId);
+    const visited = new Set<string>();
+    for (let depth = 0; dept && depth < MAX_DEPTH && !visited.has(dept.id); depth++) {
+      visited.add(dept.id);
+      const headId = dept.manager?.id;
+      const deputyId = dept.deputy?.id;
+      const found: string[] = [];
+      if (approver.role === LeaderRole.Head) {
+        if (await usable(headId)) found.push(headId);
+      } else if (approver.role === LeaderRole.Deputy) {
+        if (await usable(deputyId)) found.push(deputyId);
+        else if (await usable(headId)) found.push(headId);
+      } else {
+        for (const id of new Set([headId, deputyId])) if (await usable(id)) found.push(id);
+      }
+      if (found.length || !approver.climbIfEmpty) return found;
+      dept = dept.parent ? await this.getDepartment(dept.parent.id) : null;
+    }
+    return [];
   }
 
   /** Chuỗi phòng ban từ phòng hiện tại lên gốc: [phòng, cha, ông, ...] */
