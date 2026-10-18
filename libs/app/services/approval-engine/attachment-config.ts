@@ -84,3 +84,16 @@ export function validateFileBlock(config: FileBlockConfig, files: FileInfo[]): F
   }
   return errors;
 }
+
+/**
+ * Hàm thuần: lỗi của cả bộ tệp (văn bản + đính kèm) theo cấu hình của tờ trình, dạng
+ * "documents.MIN_FILES, attachments.FILE_TYPE(a.exe)"; null nếu hợp lệ. Dùng chung lúc lưu nháp và lúc gửi.
+ */
+export function requestFilesError(attachmentConfig: unknown, files: { documents: FileInfo[]; attachments: FileInfo[] }): string | null {
+  const config = resolveAttachmentConfig(attachmentConfig);
+  const errors = [
+    ...validateFileBlock(config.documents, files.documents).map((e) => ({ block: "documents", ...e })),
+    ...validateFileBlock(config.attachments, files.attachments).map((e) => ({ block: "attachments", ...e })),
+  ];
+  return errors.length ? errors.map((e) => `${e.block}.${e.code}${"filename" in e ? `(${e.filename})` : ""}`).join(", ") : null;
+}

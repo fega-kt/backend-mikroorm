@@ -16,7 +16,7 @@ import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-version";
 import { ApprovalEventType, type ApprovalEventMessage } from "./approval-events";
 import { ApproverResolver } from "./approver-resolver";
-import { resolveAttachmentConfig, validateFileBlock, type AttachmentConfig } from "./attachment-config";
+import { requestFilesError, type AttachmentConfig } from "./attachment-config";
 import {
   GroupMode,
   NodeType,
@@ -955,15 +955,11 @@ export class ApprovalEngineService {
     // Kiểm bộ tệp đang soạn — sắp thành bộ tệp của vòng được gửi
     const rows = await loadRequestFiles(em, request.id, draftRound(request));
     const files = (category: RequestFileCategory) => rows.filter((r) => r.category === category).map((r) => r.original);
-    const config = resolveAttachmentConfig(attachmentConfig);
-    const errors = [
-      ...validateFileBlock(config.documents, files(RequestFileCategory.Documents)).map((e) => ({ block: "documents", ...e })),
-      ...validateFileBlock(config.attachments, files(RequestFileCategory.Attachments)).map((e) => ({ block: "attachments", ...e })),
-    ];
-    if (errors.length) {
-      const detail = errors.map((e) => `${e.block}.${e.code}${"filename" in e ? `(${e.filename})` : ""}`).join(", ");
-      throw new BadRequestException(`Invalid files: ${detail}`);
-    }
+    const error = requestFilesError(attachmentConfig, {
+      documents: files(RequestFileCategory.Documents),
+      attachments: files(RequestFileCategory.Attachments),
+    });
+    if (error) throw new BadRequestException(`Invalid files: ${error}`);
   }
 
   private validatePayload(formSchema: FormSchema | null | undefined, payload: Record<string, unknown>) {
