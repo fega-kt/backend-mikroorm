@@ -14,6 +14,11 @@ export enum AppSettingType {
    * Người có workEmail luôn nhận qua workEmail. Mail tài khoản (OTP, mật khẩu) luôn gửi tới loginName, không phụ thuộc setting này.
    */
   WORK_EMAIL_FALLBACK_TO_LOGIN_NAME = "work_email_fallback_to_login_name",
+  /**
+   * Trình xem PDF (PdfViewerEngine): pdfjs (mặc định khi chưa cấu hình) | onlyoffice (dự phòng khi pdf.js hiển thị sai).
+   * Chọn onlyoffice mà chưa cấu hình OnlyOffice thì vẫn dùng pdf.js.
+   */
+  PDF_VIEWER = "pdf_viewer",
 
   // ===== UI (client) =====
   CONTENT_FOCUS_OUTLINE_ENABLED = "content_focus_outline_enabled",

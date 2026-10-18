@@ -15,7 +15,7 @@ export enum FileViewKind {
 }
 
 /** documentType của OnlyOffice theo đuôi file */
-export type OfficeDocumentType = "word" | "cell" | "slide";
+export type OfficeDocumentType = "word" | "cell" | "slide" | "pdf";
 
 const OFFICE_EXTENSIONS: Record<string, OfficeDocumentType> = {
   doc: "word",
