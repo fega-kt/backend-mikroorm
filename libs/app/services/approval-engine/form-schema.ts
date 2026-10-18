@@ -16,7 +16,37 @@ export enum FormFieldType {
   User = "user",
   Department = "department",
   Principal = "principal",
+  /** Bảng nhiều dòng: giá trị là mảng các dòng { <mã cột>: giá trị } */
+  Table = "table",
+  /** Chỉ dùng làm cột của bảng: giá trị tính từ các cột số khác của dòng (server tự tính) */
+  Formula = "formula",
 }
+
+/** Kiểu được dùng làm cột của bảng (không lồng bảng, chưa hỗ trợ trường chọn thực thể) */
+export const TABLE_COLUMN_TYPES = [
+  FormFieldType.Text,
+  FormFieldType.Number,
+  FormFieldType.Money,
+  FormFieldType.Date,
+  FormFieldType.Select,
+  FormFieldType.Formula,
+] as const;
+
+/** Phép tính của cột công thức */
+export enum FormulaOperator {
+  Add = "+",
+  Subtract = "-",
+  Multiply = "*",
+  Divide = "/",
+}
+
+/** Kiểu cột làm toán hạng của công thức: số nhập tay (không lấy cột công thức khác để khỏi vòng lặp) */
+const FORMULA_OPERAND_TYPES = new Set<FormFieldType>([FormFieldType.Number, FormFieldType.Money]);
+
+/** Số cột tối đa của một bảng */
+export const TABLE_MAX_COLUMNS = 10;
+/** Số dòng tối đa của một bảng khi không cấu hình maxRows */
+export const TABLE_MAX_ROWS = 200;
 
 /** Các kiểu trường chọn thực thể: payload lưu { id, name } để hiển thị lại không cần tra cứu */
 export const REFERENCE_FIELD_TYPES: ReadonlySet<FormFieldType> = new Set([
@@ -27,18 +57,48 @@ export const REFERENCE_FIELD_TYPES: ReadonlySet<FormFieldType> = new Set([
 
 const dateBound = z.string().regex(/^(today|\d{4}-\d{2}-\d{2})$/, 'Use YYYY-MM-DD or "today"');
 
+const fieldKey = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, "Key must start with a letter and contain only letters, digits and underscores");
+
+const selectOptions = z.array(z.object({ label: z.string().min(1), value: z.string().min(1) }));
+
+/** Một cột của bảng: các thuộc tính của trường thường mà cột dùng được */
+export const tableColumnSchema = z.object({
+  key: fieldKey,
+  label: z.string().trim().min(1).max(255),
+  type: z.enum(TABLE_COLUMN_TYPES),
+  required: z.boolean().default(false),
+  options: selectOptions.optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  placeholder: z.string().max(255).optional(),
+  /** Cột số / số tiền / công thức: hiện tổng ở dòng cuối bảng */
+  showTotal: z.boolean().optional(),
+  /** Giá trị trong cột không được lặp lại giữa các dòng (ô trống không tính; văn bản so không phân biệt hoa thường) */
+  unique: z.boolean().optional(),
+  /** Cột công thức: <cột left> <op> <cột right | số cố định> */
+  formula: z
+    .object({
+      left: fieldKey,
+      op: z.enum(FormulaOperator),
+      right: z.union([fieldKey, z.number()]),
+    })
+    .optional(),
+  /** Cột công thức: hiển thị kết quả dạng số hay số tiền */
+  resultType: z.enum([FormFieldType.Number, FormFieldType.Money]).optional(),
+});
+
 export const formFieldSchema = z.object({
   /** Tên trường trong payload, dùng trong điều kiện: { var: "payload.<key>" } */
-  key: z
-    .string()
-    .trim()
-    .min(1)
-    .max(64)
-    .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, "Key must start with a letter and contain only letters, digits and underscores"),
+  key: fieldKey,
   label: z.string().trim().min(1).max(255),
   type: z.enum(FormFieldType),
   required: z.boolean().default(false),
-  options: z.array(z.object({ label: z.string().min(1), value: z.string().min(1) })).optional(),
+  options: selectOptions.optional(),
   min: z.number().optional(),
   max: z.number().optional(),
   placeholder: z.string().max(255).optional(),
@@ -49,6 +109,11 @@ export const formFieldSchema = z.object({
   multiple: z.boolean().optional(),
   /** Độ rộng trên lưới 12 cột của form; bỏ trống = cả hàng */
   span: z.number().int().min(1).max(12).optional(),
+  /** Bảng: các cột (theo thứ tự hiển thị) */
+  columns: z.array(tableColumnSchema).max(TABLE_MAX_COLUMNS).optional(),
+  /** Bảng: số dòng tối thiểu / tối đa (bỏ trống: bắt buộc thì ≥ 1, tối đa TABLE_MAX_ROWS) */
+  minRows: z.number().int().min(0).max(TABLE_MAX_ROWS).optional(),
+  maxRows: z.number().int().min(1).max(TABLE_MAX_ROWS).optional(),
 });
 
 export const formSchemaSchema = z
@@ -68,10 +133,41 @@ export const formSchemaSchema = z
       if (field.type === FormFieldType.Select && !field.options?.length) {
         ctx.addIssue({ code: "custom", path: [index, "options"], message: "Select field needs options" });
       }
+      if (field.type === FormFieldType.Table) checkTable(field, index, ctx);
+      if (field.type === FormFieldType.Formula) {
+        ctx.addIssue({ code: "custom", path: [index, "type"], message: "Formula is only allowed as a table column" });
+      }
     });
   });
 
+/** Bảng: phải có cột, mã cột không trùng, cột lựa chọn có lựa chọn, số dòng tối thiểu không vượt tối đa */
+function checkTable(field: z.infer<typeof formFieldSchema>, index: number, ctx: z.RefinementCtx) {
+  const columns = field.columns ?? [];
+  if (!columns.length) ctx.addIssue({ code: "custom", path: [index, "columns"], message: "Table field needs at least one column" });
+  const keys = new Set<string>();
+  columns.forEach((column, columnIndex) => {
+    if (keys.has(column.key)) {
+      ctx.addIssue({ code: "custom", path: [index, "columns", columnIndex, "key"], message: `Duplicate column key "${column.key}"` });
+    }
+    keys.add(column.key);
+    if (column.type === FormFieldType.Select && !column.options?.length) {
+      ctx.addIssue({ code: "custom", path: [index, "columns", columnIndex, "options"], message: "Select column needs options" });
+    }
+    if (column.type === FormFieldType.Formula && !formulaOperandsValid(column, columns)) {
+      ctx.addIssue({
+        code: "custom",
+        path: [index, "columns", columnIndex, "formula"],
+        message: "Formula column needs operands that are number / money columns of the same table",
+      });
+    }
+  });
+  if (field.minRows !== undefined && field.maxRows !== undefined && field.minRows > field.maxRows) {
+    ctx.addIssue({ code: "custom", path: [index, "minRows"], message: "minRows must not exceed maxRows" });
+  }
+}
+
 export type FormField = z.infer<typeof formFieldSchema>;
+export type TableColumn = z.infer<typeof tableColumnSchema>;
 export type FormSchema = z.infer<typeof formSchemaSchema>;
 
 const referenceValue = z.object({ id: z.string().min(1).max(64), name: z.string().max(255) });
@@ -130,6 +226,8 @@ function fieldValidator(field: FormField): z.ZodType {
       return referenceList(referenceValue, field);
     case FormFieldType.Principal:
       return referenceList(principalValue, field);
+    case FormFieldType.Table:
+      return tableValidator(field);
     case FormFieldType.Textarea:
       return z
         .string()
@@ -144,6 +242,101 @@ function fieldValidator(field: FormField): z.ZodType {
         .min(field.required ? 1 : 0)
         .max(field.max ?? 500);
   }
+}
+
+/** Bảng: mảng các dòng, mỗi dòng kiểm từng cột như một trường thường; ô không bắt buộc được để trống */
+function tableValidator(field: FormField): z.ZodType {
+  const columns = field.columns ?? [];
+  const shape: Record<string, z.ZodType> = {};
+  for (const column of columns) {
+    // Cột công thức không nhận giá trị từ client: tính lại sau khi kiểm các cột nhập tay
+    if (column.type === FormFieldType.Formula) continue;
+    const validator = fieldValidator(column);
+    shape[column.key] = column.required ? validator : validator.optional().nullable();
+  }
+  const formulas = columns.filter((column) => column.type === FormFieldType.Formula && column.formula);
+  const row = z
+    .object(shape)
+    .strip()
+    .transform((values) => {
+      const computed: Record<string, unknown> = { ...values };
+      for (const column of formulas) {
+        const result = computeFormula(values, column.formula);
+        if (result !== undefined) computed[column.key] = result;
+      }
+      return computed;
+    });
+  const minRows = field.minRows ?? (field.required ? 1 : 0);
+  const uniqueColumns = columns.filter((column) => column.unique && column.type !== FormFieldType.Formula);
+  return z
+    .array(row)
+    .min(minRows)
+    .max(field.maxRows ?? TABLE_MAX_ROWS)
+    .superRefine((rows, ctx) => {
+      for (const column of uniqueColumns) {
+        const seen = new Map<string, number>();
+        rows.forEach((values, index) => {
+          const key = uniqueKey(values[column.key]);
+          if (key === undefined) return;
+          const first = seen.get(key);
+          if (first === undefined) seen.set(key, index);
+          else
+            ctx.addIssue({
+              code: "custom",
+              path: [index, column.key],
+              message: `Row ${index + 1}: "${column.label}" duplicates row ${first + 1}`,
+            });
+        });
+      }
+    });
+}
+
+/** Khóa so trùng của một ô: ô trống không tính; văn bản bỏ khoảng trắng và không phân biệt hoa thường */
+export function uniqueKey(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase();
+    return text ? `s:${text}` : undefined;
+  }
+  return `${typeof value}:${String(value)}`;
+}
+
+/** Toán hạng của công thức hợp lệ: cột trái (và cột phải nếu không phải số cố định) là cột số / số tiền của cùng bảng */
+function formulaOperandsValid(column: TableColumn, columns: TableColumn[]) {
+  const formula = column.formula;
+  if (!formula) return false;
+  const isOperand = (key: string) => columns.some((c) => c.key === key && FORMULA_OPERAND_TYPES.has(c.type));
+  return isOperand(formula.left) && (typeof formula.right === "number" || isOperand(formula.right));
+}
+
+/**
+ * Giá trị cột công thức của một dòng; thiếu toán hạng / chia cho 0 thì không có giá trị.
+ * Làm tròn 2 chữ số thập phân để tránh sai số dấu phẩy động (0.1 + 0.2).
+ */
+export function computeFormula(row: Record<string, unknown>, formula: TableColumn["formula"]): number | undefined {
+  if (!formula) return undefined;
+  const left = row[formula.left];
+  const right = typeof formula.right === "number" ? formula.right : row[formula.right];
+  if (typeof left !== "number" || typeof right !== "number" || !Number.isFinite(left) || !Number.isFinite(right)) return undefined;
+  let result: number;
+  switch (formula.op) {
+    case FormulaOperator.Add:
+      result = left + right;
+      break;
+    case FormulaOperator.Subtract:
+      result = left - right;
+      break;
+    case FormulaOperator.Multiply:
+      result = left * right;
+      break;
+    case FormulaOperator.Divide:
+      if (right === 0) return undefined;
+      result = left / right;
+      break;
+    default:
+      return undefined;
+  }
+  return Math.round(result * 100) / 100;
 }
 
 /** Sinh zod validator cho payload của đơn từ formSchema của loại đơn */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FormFieldType, buildPayloadValidator, formSchemaSchema } from "./form-schema";
+import { FormFieldType, FormulaOperator, buildPayloadValidator, computeFormula, formSchemaSchema } from "./form-schema";
 
 const leaveForm = formSchemaSchema.parse([
   { key: "dates", label: "Thời gian nghỉ", type: FormFieldType.DateRange, required: true },
@@ -83,5 +83,146 @@ describe("form-schema", () => {
     ];
     expect(principals.parse({ to: value })).toEqual({ to: value });
     expect(principals.safeParse({ to: [{ id: "p1", name: "A", type: "department" }] }).success).toBe(false);
+  });
+});
+
+describe("form-schema — trường bảng", () => {
+  const equipmentForm = formSchemaSchema.parse([
+    {
+      key: "items",
+      label: "Danh sách thiết bị",
+      type: FormFieldType.Table,
+      required: true,
+      maxRows: 3,
+      columns: [
+        { key: "name", label: "Tên thiết bị", type: FormFieldType.Text, required: true },
+        { key: "kind", label: "Loại", type: FormFieldType.Select, options: [{ label: "Laptop", value: "laptop" }] },
+        { key: "qty", label: "Số lượng", type: FormFieldType.Number, required: true, min: 1 },
+        { key: "price", label: "Đơn giá", type: FormFieldType.Money },
+      ],
+    },
+  ]);
+  const validator = buildPayloadValidator(equipmentForm);
+
+  it("nhận các dòng hợp lệ, ô không bắt buộc được để trống, bỏ cột lạ", () => {
+    const parsed = validator.parse({
+      items: [
+        { name: "Laptop", kind: "laptop", qty: 2, price: 1000, extra: 1 },
+        { name: "Chuột", qty: 1 },
+      ],
+    });
+    expect(parsed).toEqual({
+      items: [
+        { name: "Laptop", kind: "laptop", qty: 2, price: 1000 },
+        { name: "Chuột", qty: 1 },
+      ],
+    });
+  });
+
+  it("kiểm từng ô theo cột và số dòng tối thiểu / tối đa", () => {
+    expect(validator.safeParse({ items: [{ name: "", qty: 1 }] }).success).toBe(false);
+    expect(validator.safeParse({ items: [{ name: "Laptop", qty: 0 }] }).success).toBe(false);
+    expect(validator.safeParse({ items: [{ name: "Laptop", qty: 1, kind: "phone" }] }).success).toBe(false);
+    expect(validator.safeParse({ items: [] }).success).toBe(false);
+    const row = { name: "Laptop", qty: 1 };
+    expect(validator.safeParse({ items: [row, row, row, row] }).success).toBe(false);
+  });
+
+  it("cấu hình bảng sai thì không lưu được biểu mẫu", () => {
+    const table = { key: "items", label: "Bảng", type: FormFieldType.Table };
+    expect(formSchemaSchema.safeParse([{ ...table, columns: [] }]).success).toBe(false);
+    const duplicated = [
+      { key: "a", label: "A", type: FormFieldType.Text },
+      { key: "a", label: "B", type: FormFieldType.Number },
+    ];
+    expect(formSchemaSchema.safeParse([{ ...table, columns: duplicated }]).success).toBe(false);
+    expect(formSchemaSchema.safeParse([{ ...table, columns: [{ key: "k", label: "K", type: FormFieldType.Select }] }]).success).toBe(false);
+    expect(formSchemaSchema.safeParse([{ ...table, columns: [{ key: "t", label: "T", type: FormFieldType.Table }] }]).success).toBe(false);
+    expect(
+      formSchemaSchema.safeParse([{ ...table, minRows: 5, maxRows: 2, columns: [{ key: "a", label: "A", type: FormFieldType.Text }] }])
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("form-schema — cột công thức", () => {
+  const columns = [
+    { key: "qty", label: "Số lượng", type: FormFieldType.Number, required: true },
+    { key: "price", label: "Đơn giá", type: FormFieldType.Money },
+    {
+      key: "amount",
+      label: "Thành tiền",
+      type: FormFieldType.Formula,
+      formula: { left: "qty", op: FormulaOperator.Multiply, right: "price" },
+      showTotal: true,
+    },
+    { key: "vat", label: "Thuế", type: FormFieldType.Formula, formula: { left: "price", op: FormulaOperator.Multiply, right: 0.1 } },
+  ];
+  const validator = buildPayloadValidator(
+    formSchemaSchema.parse([{ key: "items", label: "Thiết bị", type: FormFieldType.Table, columns }]),
+  );
+
+  it("server tự tính cột công thức, bỏ giá trị client gửi lên", () => {
+    const parsed = validator.parse({ items: [{ qty: 3, price: 1000, amount: 999999 }, { qty: 2 }] });
+    expect(parsed).toEqual({ items: [{ qty: 3, price: 1000, amount: 3000, vat: 100 }, { qty: 2 }] });
+  });
+
+  it("chia cho 0 hoặc thiếu toán hạng thì không có giá trị; làm tròn 2 chữ số", () => {
+    expect(computeFormula({ a: 1 }, { left: "a", op: FormulaOperator.Divide, right: 0 })).toBeUndefined();
+    expect(computeFormula({ a: 1 }, { left: "a", op: FormulaOperator.Add, right: "b" })).toBeUndefined();
+    expect(computeFormula({ a: 0.1, b: 0.2 }, { left: "a", op: FormulaOperator.Add, right: "b" })).toBe(0.3);
+  });
+
+  it("công thức phải tham chiếu cột số / số tiền của cùng bảng và chỉ dùng trong bảng", () => {
+    const table = (formula: unknown) => [
+      {
+        key: "items",
+        label: "Bảng",
+        type: FormFieldType.Table,
+        columns: [
+          { key: "name", label: "Tên", type: FormFieldType.Text },
+          { key: "x", label: "X", type: FormFieldType.Formula, formula },
+        ],
+      },
+    ];
+    expect(formSchemaSchema.safeParse(table({ left: "name", op: "*", right: 2 })).success).toBe(false);
+    expect(formSchemaSchema.safeParse(table({ left: "missing", op: "*", right: 2 })).success).toBe(false);
+    expect(formSchemaSchema.safeParse(table(undefined)).success).toBe(false);
+    expect(formSchemaSchema.safeParse([{ key: "f", label: "F", type: FormFieldType.Formula }]).success).toBe(false);
+  });
+});
+
+describe("form-schema — cột không được trùng", () => {
+  const validator = buildPayloadValidator(
+    formSchemaSchema.parse([
+      {
+        key: "items",
+        label: "Thiết bị",
+        type: FormFieldType.Table,
+        columns: [
+          { key: "name", label: "Tên", type: FormFieldType.Text, unique: true },
+          {
+            key: "kind",
+            label: "Loại",
+            type: FormFieldType.Select,
+            unique: true,
+            options: [
+              { label: "A", value: "a" },
+              { label: "B", value: "b" },
+            ],
+          },
+          { key: "qty", label: "SL", type: FormFieldType.Number },
+        ],
+      },
+    ]),
+  );
+
+  it("báo trùng ở cột bật unique (văn bản không phân biệt hoa thường, bỏ khoảng trắng)", () => {
+    expect(validator.safeParse({ items: [{ name: "Laptop" }, { name: " laptop " }] }).success).toBe(false);
+    expect(validator.safeParse({ items: [{ kind: "a" }, { kind: "a" }] }).success).toBe(false);
+  });
+
+  it("ô trống không tính trùng, cột không bật unique được lặp", () => {
+    expect(validator.safeParse({ items: [{ name: "A", qty: 1 }, { name: "B", qty: 1 }, { qty: 2 }, { qty: 3 }] }).success).toBe(true);
   });
 });
