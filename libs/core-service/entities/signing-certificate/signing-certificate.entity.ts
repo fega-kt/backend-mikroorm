@@ -1,4 +1,5 @@
 import { BaseEntity } from "@common/base/base.entity";
+import { AttachmentEntity } from "../attachment";
 import { UserEntity } from "../user";
 import { Entity, Enum, Index, ManyToOne, Property, types } from "@mikro-orm/core";
 
@@ -42,9 +43,9 @@ export class SigningCertificateEntity extends BaseEntity {
   @Property({ type: types.datetime, nullable: true })
   notAfter?: Date;
 
-  /** Ảnh chữ ký tay (data URL PNG/JPEG) đóng vào khung chữ ký; không có thì khung chỉ có chữ */
-  @Property({ type: types.text, nullable: true, lazy: true })
-  signatureImage?: string;
+  /** Ảnh chữ ký tay (bucket private, SignatureImages/{userId}) đóng vào khung chữ ký; không có thì khung chỉ có chữ */
+  @ManyToOne({ cascade: [], entity: () => AttachmentEntity, nullable: true })
+  signatureImage?: AttachmentEntity;
 
   @ManyToOne({ cascade: [], entity: () => UserEntity, nullable: true })
   reviewedBy?: UserEntity;

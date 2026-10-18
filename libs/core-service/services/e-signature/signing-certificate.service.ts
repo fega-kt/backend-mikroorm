@@ -7,6 +7,7 @@ import type { CertificateFilterDto, EnrollDto } from "../../controllers/signing-
 import { SigningCertificateEntity, SigningCertificateStatus } from "../../entities/signing-certificate";
 import { ESignClient } from "./esign.client";
 import { PinGuard } from "./pin-guard";
+import { SignatureImageStore } from "./signature-image.store";
 
 /** Chứng thư đang chiếm chỗ của người dùng: mỗi người tối đa một chứng thư chờ duyệt hoặc đang dùng */
 const OPEN_STATUSES = [SigningCertificateStatus.Pending, SigningCertificateStatus.Active];
@@ -46,6 +47,7 @@ export class SigningCertificateService extends BaseService<SigningCertificateEnt
     @InjectRepository(SigningCertificateEntity)
     protected readonly repo: EntityRepository<SigningCertificateEntity>,
     private readonly esign: ESignClient,
+    private readonly images: SignatureImageStore,
   ) {
     super();
   }
@@ -61,7 +63,8 @@ export class SigningCertificateService extends BaseService<SigningCertificateEnt
       { populate: ["user.department", "reviewedBy", "signatureImage"], orderBy: { createdAt: "DESC" } },
     );
     if (!certificate) return null;
-    return { ...certificateBrief(certificate), signatureImage: certificate.signatureImage ?? null };
+    const signatureImage = certificate.signatureImage ? await this.images.toDataUrl(certificate.signatureImage) : null;
+    return { ...certificateBrief(certificate), signatureImage };
   }
 
   /** Đăng ký chữ ký số: đặt PIN, tạo khóa ở service ký số, chờ quản trị duyệt */
@@ -74,11 +77,12 @@ export class SigningCertificateService extends BaseService<SigningCertificateEnt
     }
 
     const { keyId } = await this.esign.createKey(data.pin);
+    const signatureImage = data.signatureImage ? await this.images.save(this.em, userId, data.signatureImage) : undefined;
     const certificate = this.em.create(SigningCertificateEntity, {
       user: this.em.getReference(UserEntity, userId),
       keyId,
       status: SigningCertificateStatus.Pending,
-      signatureImage: data.signatureImage ?? undefined,
+      signatureImage,
       ...this.getDefaultValuesForCreate(),
     });
     await this.em.flush();
@@ -94,7 +98,10 @@ export class SigningCertificateService extends BaseService<SigningCertificateEnt
     });
     if (!certificate) throw new NotFoundException("No pending registration");
     await this.destroyKey(certificate);
-    Object.assign(certificate, { deleted: true, ...this.getDefaultValuesForUpdate() });
+    // Hủy đăng ký: không giữ ảnh chữ ký lại trên R2
+    await this.em.populate(certificate, ["signatureImage"]);
+    if (certificate.signatureImage) await this.images.remove(this.em, certificate.signatureImage);
+    Object.assign(certificate, { deleted: true, signatureImage: undefined, ...this.getDefaultValuesForUpdate() });
     await this.em.flush();
     return { id: certificate.id };
   }
@@ -105,9 +112,14 @@ export class SigningCertificateService extends BaseService<SigningCertificateEnt
     return { id: certificate.id };
   }
 
+  /** Đổi / xóa ảnh chữ ký: ảnh mới lưu thành tệp mới trên R2, ảnh cũ bị xóa */
   async updateSignatureImage(signatureImage: string | null) {
     const certificate = await this.mineOpen();
-    Object.assign(certificate, { signatureImage: signatureImage ?? undefined, ...this.getDefaultValuesForUpdate() });
+    await this.em.populate(certificate, ["signatureImage"]);
+    const previous = certificate.signatureImage;
+    const next = signatureImage ? await this.images.save(this.em, this.getCurrentUser().id, signatureImage) : undefined;
+    Object.assign(certificate, { signatureImage: next, ...this.getDefaultValuesForUpdate() });
+    if (previous) await this.images.remove(this.em, previous);
     await this.em.flush();
     return { id: certificate.id };
   }
