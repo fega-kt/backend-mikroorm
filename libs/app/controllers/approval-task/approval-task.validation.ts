@@ -13,6 +13,21 @@ export const actionValidation = z.object({
   comment: z.string().trim().max(2000).optional(),
 });
 
+const placementSchema = z.object({
+  page: z.number().int().min(1),
+  x: z.number().min(0),
+  y: z.number().min(0),
+  width: z.number().min(40).max(600),
+  height: z.number().min(20).max(400),
+});
+
+export const signApproveValidation = z.object({
+  pin: z.string().regex(/^d{6,12}$/),
+  comment: z.string().trim().max(2000).optional(),
+  /** Vị trí chữ ký theo id văn bản (điểm PDF, gốc góc dưới-trái); thiếu thì tự xếp ở chân trang cuối */
+  placements: z.record(z.string(), placementSchema).optional(),
+});
+
 export const bulkApproveValidation = z.object({
   requestIds: z.array(z.string().trim().min(1)).min(1).max(100),
   comment: z.string().trim().max(2000).optional(),

@@ -210,6 +210,14 @@ Errors handled by `HttpExceptionFilter` with `ResponseCode` enum (`src/common/ex
 - **ProjectEntity** — has `ProjectMemberEntity` (many), `owner`, `folderId` (UUID for R2 storage)
 - **TaskEntity** — belongs to `ProjectEntity`, optionally to `SectionEntity`, `SprintEntity`, `MilestoneEntity`
 
+### E-signature (ký số nội bộ)
+
+- Private keys and the internal CA live in the separate .NET service (repo `e-signature`, env `ESIGN_URL`, `ESIGN_SERVICE_TOKEN`). Backend only stores `keyId` + certificate in `SigningCertificateEntity` and forwards the user PIN — never persist PINs.
+- Shared (core) — `libs/core-service/services/e-signature/`: `SigningCertificateEntity` + `SigningCertificateService` / controller `signing-certificate` (enroll, admin approve / reject / revoke; all certificates are revoked when a user is deactivated or deleted), `DocumentSigningService` (certificate lookup, PIN with lockout via `PinGuard`, sign / placement / verify — reuse it for any new document type), `ESignClient` (HTTP), `OfficeConverter` (Word/Excel/PowerPoint → PDF via the FileConverter service, env `FILE_CONVERTER_URL`).
+- Approval-specific — `libs/app/services/e-signature/ApprovalSigningService` (prepare + sign & approve). The app domain module provides the core signing services itself, like `UploadService`.
+- Request files live only in `ApprovalRequestFileEntity` (`approval_request_files`), one row per file per round — the request has no `documents` / `attachments` collections. Rows with `round = request.round + 1` are the draft the requester edits; submitting increments `round`, so the draft becomes that round. R2 layout: `Attachments/{requestId}/round-{n}/{documents|attachments}/…`. Returning a request copies the round's original files into `round-{n+1}/…` as the new draft (`copyFilesToNextRound`). Originals are never modified: `current` points to the converted PDF (`round-{n}/signed/{name}.pdf`) or the latest signed copy (`round-{n}/signed/{taskId}-{name}.pdf`, never overwritten — viewers cache by attachment id). Each signing adds an `ApprovalFileSignatureEntity` row (task, signer, before → after) for history and future rollback. Legacy data: run `scripts/sql/2026-10-approval-request-files.sql` once after deploy.
+- Workflow step option `requireSignature`: plain approve / bulk approve are rejected, overdue auto-approve is skipped. Signing runs inside `engine.act` through the `sign` hook (same transaction + row lock); signed / converted PDFs are new attachments replacing the document in place, the previous version stays referenced from history (`sign`, `file_convert`).
+
 ## Checklist for new modules
 
 1. Create entity extending `BaseEntity`, use `@Entity({ tableName: '<plural>' })`

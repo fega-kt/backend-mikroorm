@@ -19,7 +19,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.logger.warn(message);
       this.logger.error((exception as Error).stack);
     }
+    // Lỗi nghiệp vụ có mã riêng (vd INVALID_PIN kèm remainingAttempts): trả kèm để client xử lý theo mã, không theo câu chữ
+    const body = exception instanceof HttpException ? exception.getResponse() : undefined;
+    const coded = body && typeof body === "object" && "code" in body ? (body as Record<string, unknown>) : undefined;
     response.status(status).json({
+      ...(coded ? { ...coded, statusCode: undefined, error: undefined } : {}),
       message,
     });
   }

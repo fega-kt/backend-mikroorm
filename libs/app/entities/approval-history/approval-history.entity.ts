@@ -27,6 +27,10 @@ export enum ApprovalHistoryAction {
   FileAdd = "file_add",
   /** Gỡ tệp — data.files: { id, filename, block }[] */
   FileRemove = "file_remove",
+  /** Chuyển văn bản sang PDF để ký — data.files: { from: { id, filename }, to: { id, filename } }[] */
+  FileConvert = "file_convert",
+  /** Ký số văn bản (ngay trước dòng duyệt) — data.files: { from, to }[] (bản trước / bản đã ký), data.certificateSerial */
+  Sign = "sign",
   /** Chia sẻ tờ trình (chỉ xem) — data.principals: { id, name }[]; comment: lời nhắn */
   Share = "share",
   /** Thu hồi chia sẻ — data.principals: { id, name }[] */

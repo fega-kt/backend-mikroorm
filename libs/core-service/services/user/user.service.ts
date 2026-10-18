@@ -17,6 +17,7 @@ import { CoreEmailTemplate } from "../email-template/core-email.templates";
 import { SystemMailService } from "../email-template/system-mail.service";
 import { AuthCacheKey } from "../auth/auth.constants";
 import { UploadService } from "../upload/upload.service";
+import { SigningCertificateService } from "../e-signature/signing-certificate.service";
 import {
   createUserValidation,
   updateProfileValidation,
@@ -33,6 +34,7 @@ export class UserService extends BaseService<UserEntity> {
     protected readonly repo: EntityRepository<UserEntity>,
     private readonly em: EntityManager,
     private readonly uploadService: UploadService,
+    private readonly signingCertificateService: SigningCertificateService,
     private readonly supabaseService: SupabaseService,
     private readonly systemMailService: SystemMailService,
     private readonly activityLogService: ActivityLogService,
@@ -249,6 +251,7 @@ export class UserService extends BaseService<UserEntity> {
   async remove(id: string) {
     const oldData = await this.loadLogData(id);
     const result = await super.remove(id);
+    await this.signingCertificateService.revokeAllForUser(id, "User deleted");
     await this.cache.del(AuthCacheKey.user(id));
     await this.writeLog(id, ActivityLogAction.DELETE, oldData);
     return result;
@@ -280,6 +283,8 @@ export class UserService extends BaseService<UserEntity> {
     const oldData = await this.loadLogData(id);
     const result = await this.updateOne(id, { isActive });
     await this.cache.del(AuthCacheKey.user(id));
+    // Nghỉ việc / khóa tài khoản: không để chữ ký số còn dùng được
+    if (!isActive) await this.signingCertificateService.revokeAllForUser(id, "User deactivated");
     await this.writeLog(id, ActivityLogAction.STATUS_CHANGE, oldData, await this.loadLogData(id));
     return result;
   }

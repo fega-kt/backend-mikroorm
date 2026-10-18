@@ -5,12 +5,22 @@ import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { z } from "zod";
 import { ApprovalAction } from "../../services/approval-engine/approval-engine.service";
 import { type ApprovalRateStats, type ApprovedStats, ApprovalTaskService } from "../../services/approval-task/approval-task.service";
-import { actionValidation, bulkApproveValidation, inboxFilterValidation, reassignValidation } from "./approval-task.validation";
+import { ApprovalSigningService } from "../../services/e-signature/approval-signing.service";
+import {
+  actionValidation,
+  bulkApproveValidation,
+  inboxFilterValidation,
+  reassignValidation,
+  signApproveValidation,
+} from "./approval-task.validation";
 
 /** Duyệt đơn — người thao tác phải là người duyệt của bước hiện tại (engine kiểm tra) */
 @Controller("approval-task")
 export class ApprovalTaskController {
-  constructor(private readonly taskService: ApprovalTaskService) {}
+  constructor(
+    private readonly taskService: ApprovalTaskService,
+    private readonly signingService: ApprovalSigningService,
+  ) {}
 
   @Get("inbox")
   inbox(@Query(new ZodValidationPipe(inboxFilterValidation)) query: z.infer<typeof inboxFilterValidation>) {
@@ -48,6 +58,21 @@ export class ApprovalTaskController {
   @Post(":requestId/approve")
   approve(@Param("requestId") requestId: string, @Body(new ZodValidationPipe(actionValidation)) data: z.infer<typeof actionValidation>) {
     return this.taskService.act(requestId, ApprovalAction.Approve, data.comment);
+  }
+
+  /** Mở hộp "Ký và duyệt": chuyển văn bản sang PDF nếu cần, trả vị trí ký gợi ý + khung chữ ký đã có */
+  @Get(":requestId/signing")
+  prepareSigning(@Param("requestId") requestId: string) {
+    return this.signingService.prepare(requestId);
+  }
+
+  /** Ký số văn bản tờ trình rồi duyệt (bước bắt buộc ký) */
+  @Post(":requestId/sign-approve")
+  signAndApprove(
+    @Param("requestId") requestId: string,
+    @Body(new ZodValidationPipe(signApproveValidation)) data: z.infer<typeof signApproveValidation>,
+  ) {
+    return this.signingService.signAndApprove(requestId, data);
   }
 
   @Post(":requestId/reject")

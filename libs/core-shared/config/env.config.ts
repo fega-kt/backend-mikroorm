@@ -37,6 +37,12 @@ export const ENV = {
   ONLYOFFICE_FILE_BASE_URL: process.env.ONLYOFFICE_FILE_BASE_URL,
   /** Bắt buộc request tải tệp của Document Server mang JWT hợp lệ; chỉ tắt (false) khi đã xác nhận bản DS không gửi kèm */
   ONLYOFFICE_VERIFY_DS_AUTH: process.env.ONLYOFFICE_VERIFY_DS_AUTH !== "false",
+  /** Service FileConverter (repo netcore) chuyển Word/Excel/PowerPoint sang PDF trước khi ký — vd http://fileconverter:8080 */
+  FILE_CONVERTER_URL: process.env.FILE_CONVERTER_URL,
+  /** Service ký số nội bộ (repo e-signature, .NET) — vd http://e-signature:8080 */
+  ESIGN_URL: process.env.ESIGN_URL,
+  /** Token dùng chung với service ký số (Signing__ServiceToken), ≥ 32 ký tự */
+  ESIGN_SERVICE_TOKEN: process.env.ESIGN_SERVICE_TOKEN,
   FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:3333",
 
   RESEND_API_KEY: process.env.RESEND_API_KEY,
