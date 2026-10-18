@@ -1,3 +1,4 @@
+import type { IUserResponse } from "@common/base/consts";
 import { BaseService } from "@common/base/base.service";
 import { AttachmentEntity } from "@core-service/entities/attachment";
 import { UserEntity } from "@core-service/entities/user";
@@ -14,6 +15,9 @@ import { loadRequestFiles } from "../approval-request/request-files";
 import { RequestPdfService } from "./request-pdf.service";
 
 const fileRef = (f: AttachmentEntity) => ({ id: f.id, filename: f.filename });
+
+/** Người ký in trong khung chữ ký: họ tên + phòng ban */
+const signerOf = (user: IUserResponse) => ({ userId: user.id, fullName: user.fullName, departmentName: user.department?.name });
 
 export interface SignAndApproveInput {
   pin: string;
@@ -50,7 +54,8 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
    * kích thước trang, khung chữ ký đã có và vị trí tự xếp. Chưa có chứng thư thì vẫn trả về để giao diện hướng dẫn đăng ký.
    */
   async prepare(requestId: string) {
-    const userId = this.getCurrentUser().id;
+    const user = this.getCurrentUser();
+    const userId = user.id;
     const certificate = await this.signing.activeCertificate(userId);
     const documents = await this.engine.withActableStep(requestId, userId, async (step) => {
       this.assertSigningStep(step);
@@ -70,8 +75,10 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
     );
     return {
       certificate: certificate
-        ? { id: certificate.id, notAfter: certificate.notAfter ?? null, hasSignatureImage: !!certificate.signatureImage }
+        ? { id: certificate.id, notAfter: certificate.notAfter ?? null, hasSignatureImage: certificate.hasSignatureImage }
         : null,
+      // Chữ trong khung chữ ký (thời gian xem trước = bây giờ, lúc ký sẽ là thời điểm ký)
+      signatureLines: this.signing.signatureLines(signerOf(user)),
       documents: items,
     };
   }
@@ -80,7 +87,7 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
   async signAndApprove(requestId: string, input: SignAndApproveInput) {
     const user = this.getCurrentUser();
     const certificate = await this.signing.requireCertificate(user.id);
-    const signer = { userId: user.id, fullName: user.fullName, departmentName: user.department?.name };
+    const signer = signerOf(user);
 
     const uploadedKeys: string[] = [];
     try {

@@ -2,7 +2,7 @@ import { MikroOrmModule } from "@mikro-orm/nestjs";
 import { Module } from "@nestjs/common";
 import { AttachmentEntity } from "@core-service/entities/attachment";
 import { SigningCertificateEntity } from "@core-service/entities/signing-certificate";
-import { DocumentSigningService, ESignClient, OfficeConverter, SignatureImageStore } from "@core-service/services/e-signature";
+import { DocumentSigningService, ESignClient, OfficeConverter } from "@core-service/services/e-signature";
 import { DepartmentEntity } from "@core-service/entities/department";
 import { EmailTemplateEntity } from "@core-service/entities/email-template";
 import { NotificationEntity } from "@core-service/entities/notification";
@@ -41,7 +41,6 @@ import { appEntities } from "./entities";
     DocumentSigningService,
     ESignClient,
     OfficeConverter,
-    SignatureImageStore,
     // Xem tệp (không tải được) theo ngữ cảnh; quyền xem tệp của tờ trình do ApprovalRequestFilePolicy quyết định.
     // Thêm ngữ cảnh mới: viết policy rồi liệt kê vào đây
     FileViewService,

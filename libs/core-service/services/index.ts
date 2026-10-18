@@ -18,7 +18,7 @@ import { ActivityLogQueueService } from "./activity-log-queue";
 import { NotificationService } from "./notification";
 import { UploadService, AttachmentService } from "./upload";
 import { SystemMailService } from "./email-template";
-import { DocumentSigningService, ESignClient, OfficeConverter, SignatureImageStore, SigningCertificateService } from "./e-signature";
+import { DocumentSigningService, ESignClient, OfficeConverter, SigningCertificateService } from "./e-signature";
 
 export {
   AuthService,
@@ -46,7 +46,6 @@ export {
   ESignClient,
   OfficeConverter,
   SigningCertificateService,
-  SignatureImageStore,
 };
 
 export const coreServices = [
@@ -75,5 +74,4 @@ export const coreServices = [
   ESignClient,
   OfficeConverter,
   SigningCertificateService,
-  SignatureImageStore,
 ];

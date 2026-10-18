@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { SigningCertificateStatus } from "../../entities/signing-certificate";
 
-export const pinSchema = z.string().regex(/^\d{6,12}$/, "PIN must be 6-12 digits");
+export const pinSchema = z.string().regex(/^\d{6}$/, "PIN must be 6 digits");
 
 /** Ảnh chữ ký tay: data URL PNG/JPEG, tối đa ~200KB */
 export const signatureImageSchema = z
