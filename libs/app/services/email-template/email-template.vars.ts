@@ -34,6 +34,9 @@ export function formatPayloadField(type: FormFieldType | undefined, value: unkno
         .map((v) => (v as { name?: string })?.name ?? "")
         .filter(Boolean)
         .join(", ");
+    // Bảng: tạm thời chỉ báo số dòng (bảng HTML trong email làm sau)
+    case FormFieldType.Table:
+      return Array.isArray(value) ? `${value.length} dòng` : "";
     default:
       return Array.isArray(value) ? value.join(", ") : String(value);
   }
