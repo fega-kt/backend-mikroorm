@@ -29,8 +29,17 @@ export interface SignDocumentOptions {
 const MAX_DEPARTMENT_LENGTH = 40;
 const shorten = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
+/** "19:27 19/10/2026": năm đủ 4 chữ số để văn bản lưu trữ lâu không đọc nhầm năm */
 const signedAtText = (date: Date) =>
-  new Intl.DateTimeFormat("vi-VN", { timeZone: VN_TIMEZONE, dateStyle: "short", timeStyle: "short" }).format(date);
+  new Intl.DateTimeFormat("vi-VN", {
+    timeZone: VN_TIMEZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
 
 /**
  * Ký số tài liệu PDF bằng chứng thư nội bộ của người dùng — dùng chung cho mọi nghiệp vụ (tờ trình, hợp đồng…).
