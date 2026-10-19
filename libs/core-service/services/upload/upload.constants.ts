@@ -41,6 +41,9 @@ export const PREVIEW_FOLDER = "Previews";
 /** Key bản xem tương ứng với key file gốc */
 export const previewKeyOf = (key: string) => `${PREVIEW_FOLDER}/${key}`;
 
+/** Key bản PDF để tải về của tệp Word / Excel / PowerPoint (chuyển lần đầu người dùng tải, lưu lại cho lần sau) */
+export const pdfDownloadKeyOf = (key: string) => `${PREVIEW_FOLDER}/${key}.pdf`;
+
 /** Số byte đầu file đọc để nhận dạng loại nội dung thật */
 export const SNIFF_BYTES = 4100;
 

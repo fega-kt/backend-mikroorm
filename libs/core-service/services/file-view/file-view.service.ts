@@ -17,6 +17,8 @@ import { REQUEST } from "@nestjs/core";
 import type { Request } from "express";
 import { AppSettingEntity, AppSettingType, PdfViewerEngine } from "../../entities/app-setting";
 import { AttachmentEntity, AttachmentPreviewStatus, AttachmentStatus, AttachmentVisibility } from "../../entities/attachment";
+import { isConvertibleToPdf, isPdf, OfficeConverter, pdfFilenameOf } from "../e-signature/office-converter";
+import { pdfDownloadKeyOf } from "../upload/upload.constants";
 import { UploadService } from "../upload/upload.service";
 import { FILE_ACCESS_POLICIES, type FileAccessPolicy } from "./file-access-policy";
 import { FileViewKind, NATIVE_FILE_TOKEN_TTL_SECONDS, OFFICE_FILE_TOKEN_TTL_SECONDS, resolveFileViewTarget } from "./file-view.constants";
@@ -39,6 +41,7 @@ export class FileViewService {
     @InjectRepository(AttachmentEntity)
     private readonly attachments: EntityRepository<AttachmentEntity>,
     private readonly uploadService: UploadService,
+    private readonly converter: OfficeConverter,
     @Inject(REQUEST) private readonly request: Request,
     @Optional() @Inject(FILE_ACCESS_POLICIES) private readonly policies: FileAccessPolicy[] = [],
   ) {}
@@ -136,6 +139,24 @@ export class FileViewService {
   async createDownloadUrl(fileId: string) {
     const { file } = await this.resolveViewableFile(fileId);
     return this.uploadService.createDownloadUrl(file.key, file.filename);
+  }
+
+  /**
+   * Link tải bản PDF của tệp, cùng quyền với xem tệp: tệp PDF thì như createDownloadUrl; Word / Excel / PowerPoint thì
+   * chuyển sang PDF lần đầu có người tải và lưu lại (tệp gốc không bao giờ đổi nên lần sau tải ngay), tên tải về {tên}.pdf.
+   * Hai người cùng tải lần đầu thì cùng chuyển và ghi đè cùng một key — không sao.
+   */
+  async createPdfDownloadUrl(fileId: string) {
+    const { file } = await this.resolveViewableFile(fileId);
+    if (isPdf(file.filename)) return this.uploadService.createDownloadUrl(file.key, file.filename);
+    if (!isConvertibleToPdf(file.filename)) {
+      throw new BadRequestException({ code: "NOT_CONVERTIBLE", message: "This file cannot be converted to PDF" });
+    }
+    const pdfKey = pdfDownloadKeyOf(file.key);
+    if (!(await this.uploadService.privateObjectExists(pdfKey))) {
+      await this.uploadService.putPrivateObject(pdfKey, await this.converter.toPdf(file), "application/pdf");
+    }
+    return this.uploadService.createDownloadUrl(pdfKey, pdfFilenameOf(file.filename));
   }
 
   /**

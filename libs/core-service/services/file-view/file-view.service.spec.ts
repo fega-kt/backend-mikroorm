@@ -1,5 +1,5 @@
 import { ENV } from "@config/env.config";
-import { ForbiddenException, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { AttachmentVisibility, type AttachmentEntity } from "../../entities/attachment";
 import { FileContextType, type FileAccessPolicy } from "./file-access-policy";
@@ -27,6 +27,7 @@ interface BuildOptions {
 const build = ({ stored = file(), policies = [], user = { id: "u1", fullName: "User" } }: BuildOptions) =>
   new FileViewService(
     { findOne: vi.fn().mockResolvedValue(stored) } as never,
+    {} as never,
     {} as never,
     { user: user ?? undefined, headers: {} } as never,
     policies,
@@ -78,6 +79,7 @@ describe("FileViewService.createDownloadUrl — cùng quyền với xem tệp", 
     service: new FileViewService(
       { findOne: vi.fn().mockResolvedValue(options.stored === undefined ? file() : options.stored) } as never,
       { createDownloadUrl } as never,
+      {} as never,
       { user: options.user === null ? undefined : (options.user ?? { id: "u1", fullName: "User" }), headers: {} } as never,
       options.policies ?? [],
     ),
@@ -105,12 +107,62 @@ describe("FileViewService.createDownloadUrl — cùng quyền với xem tệp", 
   });
 });
 
+describe("FileViewService.createPdfDownloadUrl — tải bản PDF", () => {
+  const buildPdfDownload = (resolved: AttachmentEntity, pdfExists = false) => {
+    const upload = {
+      createDownloadUrl: vi.fn().mockResolvedValue({ url: "signed", expiresAt: "x" }),
+      privateObjectExists: vi.fn().mockResolvedValue(pdfExists),
+      putPrivateObject: vi.fn().mockResolvedValue(undefined),
+    };
+    const converter = { toPdf: vi.fn().mockResolvedValue(Buffer.from("%PDF-1.7")) };
+    const service = new FileViewService(
+      { findOne: vi.fn().mockResolvedValue(resolved) } as never,
+      upload as never,
+      converter as never,
+      { user: { id: "u1", fullName: "User" }, headers: {} } as never,
+      [{ contextType: FileContextType.ApprovalRequest, resolveFile: vi.fn().mockResolvedValue(resolved) }],
+    );
+    return { service, upload, converter };
+  };
+
+  it("tệp PDF: tải thẳng tệp, không chuyển", async () => {
+    const { service, upload, converter } = buildPdfDownload(file({ key: "Attachments/r/scan.pdf", filename: "Scan.pdf" }));
+    await service.createPdfDownloadUrl("file-1");
+    expect(upload.createDownloadUrl).toHaveBeenCalledWith("Attachments/r/scan.pdf", "Scan.pdf");
+    expect(converter.toPdf).not.toHaveBeenCalled();
+  });
+
+  it("Word lần đầu: chuyển sang PDF, lưu ở Previews/{key}.pdf, tải về tên {tên}.pdf", async () => {
+    const word = file({ key: "Attachments/r/de-xuat.docx", filename: "Đề xuất.docx" });
+    const { service, upload, converter } = buildPdfDownload(word);
+    await service.createPdfDownloadUrl("file-1");
+    expect(converter.toPdf).toHaveBeenCalledWith(word);
+    expect(upload.putPrivateObject).toHaveBeenCalledWith("Previews/Attachments/r/de-xuat.docx.pdf", expect.any(Buffer), "application/pdf");
+    expect(upload.createDownloadUrl).toHaveBeenCalledWith("Previews/Attachments/r/de-xuat.docx.pdf", "Đề xuất.pdf");
+  });
+
+  it("Word đã có bản PDF lưu sẵn: tải ngay, không chuyển lại", async () => {
+    const { service, upload, converter } = buildPdfDownload(file({ key: "Attachments/r/de-xuat.docx", filename: "Đề xuất.docx" }), true);
+    await service.createPdfDownloadUrl("file-1");
+    expect(converter.toPdf).not.toHaveBeenCalled();
+    expect(upload.putPrivateObject).not.toHaveBeenCalled();
+    expect(upload.createDownloadUrl).toHaveBeenCalledWith("Previews/Attachments/r/de-xuat.docx.pdf", "Đề xuất.pdf");
+  });
+
+  it("tệp không chuyển được sang PDF (ảnh, zip…) thì báo lỗi", async () => {
+    const { service, converter } = buildPdfDownload(file({ key: "Attachments/r/anh.png", filename: "anh.png" }));
+    await expect(service.createPdfDownloadUrl("file-1")).rejects.toBeInstanceOf(BadRequestException);
+    expect(converter.toPdf).not.toHaveBeenCalled();
+  });
+});
+
 describe("FileViewService.describe — setting PDF_VIEWER", () => {
   const pdf = file({ filename: "scan.pdf", mimetype: "application/pdf" });
   const buildPdf = (settingValue: unknown) => {
     const settingFind = vi.fn().mockResolvedValue(settingValue === undefined ? null : { value: settingValue });
     return new FileViewService(
       { findOne: vi.fn().mockResolvedValue(pdf), getEntityManager: () => ({ findOne: settingFind }) } as never,
+      {} as never,
       {} as never,
       { user: { id: "u1", fullName: "User" }, headers: {} } as never,
       [{ contextType: FileContextType.ApprovalRequest, resolveFile: vi.fn().mockResolvedValue(pdf) }],
