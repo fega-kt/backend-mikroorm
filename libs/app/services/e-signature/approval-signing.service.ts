@@ -166,7 +166,7 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
       );
     } catch (error) {
       // Transaction đã rollback: xóa các bản PDF đã tải lên R2 trong lượt này
-      await Promise.all(uploadedKeys.map((key) => this.uploadService.deleteObject(key).catch(() => undefined)));
+      await this.pdf.deleteUnusedObjects(uploadedKeys);
       throw error;
     }
     return { id: requestId };

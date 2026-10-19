@@ -44,7 +44,7 @@ export class ApprovalFileConvertJob implements OnModuleInit {
     if (!requestId) return ack();
     try {
       // Bước không bắt buộc ký: không có văn bản nào đang chờ chuyển → không làm gì
-      const result = await this.pdf.processRequest(requestId);
+      const result = await this.pdf.processRequest(requestId, { ignoreSchedule: true });
       if (result.converted) this.logger.log(`Pre-converted ${result.converted} document(s) of request ${requestId}`);
     } catch (err) {
       // Không requeue: cron thử lại theo convertNextAt

@@ -3,6 +3,7 @@ import { maskUrl } from "@common/utils/mask-url.util";
 import { ENV } from "@config/env.config";
 import { ICacheService } from "@modules/cache/cache.interface";
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import Redis from "ioredis";
 
 const MAX_RETRY_DELAY_MS = 30_000;
@@ -77,6 +78,34 @@ export class RedisService implements ICacheService, OnModuleInit, OnModuleDestro
     } catch (err) {
       this.logger.warn(`Redis lock failed for key "${key}"`, err);
       return null;
+    }
+  }
+
+  /**
+   * Như acquireLock nhưng có chủ: trả về token để nhả đúng khóa của mình bằng releaseLock (false nếu đang bị giữ,
+   * null nếu Redis lỗi). Dùng khi cần nhả sớm thay vì chờ hết hạn.
+   */
+  async acquireOwnedLock(key: string, ttlMs: number): Promise<string | false | null> {
+    const token = randomUUID();
+    try {
+      return (await this.client.set(key, token, "PX", ttlMs, "NX")) === "OK" ? token : false;
+    } catch (err) {
+      this.logger.warn(`Redis lock failed for key "${key}"`, err);
+      return null;
+    }
+  }
+
+  /** Nhả khóa nếu vẫn là của mình (khóa đã hết hạn và bị nơi khác lấy thì không đụng tới) */
+  async releaseLock(key: string, token: string): Promise<void> {
+    try {
+      await this.client.eval(
+        'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end',
+        1,
+        key,
+        token,
+      );
+    } catch (err) {
+      this.logger.warn(`Redis unlock failed for key "${key}" (expires by itself)`, err);
     }
   }
 
