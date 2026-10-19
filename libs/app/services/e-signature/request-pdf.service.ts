@@ -5,6 +5,7 @@ import { isConvertibleToPdf, isPdf, OfficeConverter, pdfFilenameOf } from "@core
 import { FileContextType } from "@core-service/services/file-view/file-access-policy";
 import { UploadService } from "@core-service/services/upload/upload.service";
 import { EntityManager, LockMode, MikroORM } from "@mikro-orm/core";
+import { RedisService } from "@modules/redis/redis.service";
 import { Injectable, Logger } from "@nestjs/common";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
@@ -16,6 +17,9 @@ const PDF_MIME = "application/pdf";
 /** Job chuyển ở nền: thử lại sau 15, 15, 60 phút; hết lượt thì để người duyệt mở hộp ký chuyển lại */
 export const CONVERT_RETRY_DELAYS_MIN = [15, 15, 60];
 export const CONVERT_MAX_ATTEMPTS = CONVERT_RETRY_DELAYS_MIN.length;
+/** Khóa một văn bản trong lúc chuyển + gắn kết quả; quá hạn (tiến trình chết giữa chừng) thì tự nhả */
+const CONVERT_LOCK_PREFIX = "lock:approval:file-convert:file:";
+const CONVERT_LOCK_TTL_MS = 10 * 60 * 1000;
 
 const fileRef = (f: AttachmentEntity) => ({ id: f.id, filename: f.filename });
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -42,6 +46,7 @@ export class RequestPdfService {
     private readonly orm: MikroORM,
     private readonly converter: OfficeConverter,
     private readonly uploadService: UploadService,
+    private readonly redis: RedisService,
   ) {}
 
   /**
@@ -90,7 +95,7 @@ export class RequestPdfService {
    * NGOÀI transaction (không giữ khóa tờ trình trong lúc chờ chuyển), rồi khóa tờ trình để gắn kết quả —
    * văn bản đã được người duyệt chuyển trước (qua hộp ký) thì bỏ bản vừa tạo. Lỗi thì hẹn thử lại.
    */
-  async processRequest(requestId: string): Promise<{ converted: number; failed: number }> {
+  async processRequest(requestId: string, options: { ignoreSchedule?: boolean } = {}): Promise<{ converted: number; failed: number }> {
     const em = this.orm.em.fork();
     const request = await em.findOne(ApprovalRequestEntity, {
       id: requestId,
@@ -100,12 +105,41 @@ export class RequestPdfService {
     if (!request) return { converted: 0, failed: 0 };
 
     const now = new Date();
-    const due = (await loadRequestFiles(em, request.id, request.round, RequestFileCategory.Documents)).filter(
-      (row) =>
-        row.convertStatus === RequestFileConvertStatus.Pending && needsConversion(row) && (!row.convertNextAt || row.convertNextAt <= now),
-    );
-    if (!due.length) return { converted: 0, failed: 0 };
+    // ignoreSchedule: consumer nhận event "tới bước ký" chuyển ngay, không chờ giờ hẹn (giờ hẹn dành cho cron làm bù / thử lại)
+    const isDue = (row: ApprovalRequestFileEntity) =>
+      row.convertStatus === RequestFileConvertStatus.Pending &&
+      needsConversion(row) &&
+      (options.ignoreSchedule || !row.convertNextAt || row.convertNextAt <= now);
+    const candidates = (await loadRequestFiles(em, request.id, request.round, RequestFileCategory.Documents)).filter(isDue);
+    if (!candidates.length) return { converted: 0, failed: 0 };
 
+    // Khóa từng văn bản: consumer (event) và cron có thể cùng xử lý một tờ trình — văn bản đang được lượt khác chuyển thì bỏ qua.
+    // Giữ khóa tới khi kết quả đã ghi vào DB; Redis lỗi thì vẫn chạy (không khóa)
+    const locks: { key: string; token: string }[] = [];
+    const lockedIds: string[] = [];
+    for (const row of candidates) {
+      const key = `${CONVERT_LOCK_PREFIX}${row.id}`;
+      const token = await this.redis.acquireOwnedLock(key, CONVERT_LOCK_TTL_MS);
+      if (token === false) continue;
+      if (token) locks.push({ key, token });
+      lockedIds.push(row.id);
+    }
+    try {
+      if (!lockedIds.length) return { converted: 0, failed: 0 };
+      // Đọc lại sau khi khóa: lượt vừa nhả khóa có thể đã chuyển xong văn bản
+      const due = (
+        await this.orm.em.fork().find(ApprovalRequestFileEntity, { id: { $in: lockedIds } }, { populate: ["original", "current"] })
+      ).filter(isDue);
+      if (!due.length) return { converted: 0, failed: 0 };
+      return await this.convertAndAttach(request, due, now);
+    } finally {
+      await Promise.all(locks.map(({ key, token }) => this.redis.releaseLock(key, token)));
+    }
+  }
+
+  /** Chuyển các văn bản (đã khóa) ngoài transaction rồi khóa tờ trình để gắn kết quả */
+  private async convertAndAttach(request: ApprovalRequestEntity, due: ApprovalRequestFileEntity[], now: Date) {
+    const requestId = request.id;
     const results = new Map<string, { key: string; folder: string; filename: string; size: number }>();
     const failures = new Map<string, string>();
     for (const row of due) {

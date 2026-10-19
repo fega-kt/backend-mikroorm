@@ -102,19 +102,23 @@ export async function copyFilesToNextRound(
   }
 }
 
+/** Cron của job chuyển PDF chỉ làm bù sau ngần này phút (event đã chuyển ngay) */
+const CONVERT_CRON_FALLBACK_MIN = 5;
+
 /**
  * Tờ trình vừa tới bước bắt buộc ký: đánh dấu văn bản Word / Excel / PowerPoint của vòng hiện tại cần chuyển sang PDF,
  * để job ở nền (app-jobs) chuyển sẵn — người duyệt mở hộp ký không phải chờ. Văn bản đã có bản PDF thì bỏ qua.
  */
 export async function markDocumentsForConversion(em: EntityManager, request: ApprovalRequestEntity) {
   const rows = await loadRequestFiles(em, request.id, request.round, RequestFileCategory.Documents);
-  const now = new Date();
+  // Event (consumer) chuyển ngay; cron chỉ làm bù khi lỡ event nên hẹn muộn hơn, để không chuyển trùng với consumer
+  const cronAt = new Date(Date.now() + CONVERT_CRON_FALLBACK_MIN * 60_000);
   for (const row of rows) {
     if (!isConvertibleToPdf(row.current.filename) || row.convertStatus === RequestFileConvertStatus.Done) continue;
     Object.assign(row, {
       convertStatus: RequestFileConvertStatus.Pending,
       convertAttempts: 0,
-      convertNextAt: now,
+      convertNextAt: cronAt,
       convertError: undefined,
     });
   }
