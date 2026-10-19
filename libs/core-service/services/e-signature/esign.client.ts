@@ -10,6 +10,23 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 
+/**
+ * Khung chữ ký chuẩn (điểm PDF) của service ký số; người ký phóng to / thu nhỏ trong khoảng MIN–MAX lần, giữ tỉ lệ.
+ * Trùng với e-signature (SignatureAppearance) và giao diện (signature-size.ts)
+ */
+export const SIGNATURE_BOX = { width: 170, height: 72, minScale: 0.6, maxScale: 1.6 } as const;
+
+/** Khung chữ ký đúng tỉ lệ chuẩn và trong khoảng phóng cho phép (chừa sai số làm tròn ở giao diện) */
+export function isValidSignatureSize(width: number, height: number) {
+  const tolerance = 0.5;
+  const { width: refWidth, height: refHeight, minScale, maxScale } = SIGNATURE_BOX;
+  return (
+    width >= refWidth * minScale - tolerance &&
+    width <= refWidth * maxScale + tolerance &&
+    Math.abs(height - (width * refHeight) / refWidth) <= tolerance
+  );
+}
+
 /** Vị trí khung chữ ký theo điểm PDF, gốc góc dưới-trái trang (giống service ký số) */
 export interface SignaturePlacement {
   page: number;

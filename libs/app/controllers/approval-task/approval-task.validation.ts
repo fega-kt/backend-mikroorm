@@ -1,3 +1,4 @@
+import { SIGNATURE_BOX, isValidSignatureSize } from "@core-service/services/e-signature";
 import { z } from "zod";
 
 export const inboxFilterValidation = z.object({
@@ -13,13 +14,18 @@ export const actionValidation = z.object({
   comment: z.string().trim().max(2000).optional(),
 });
 
-const placementSchema = z.object({
-  page: z.number().int().min(1),
-  x: z.number().min(0),
-  y: z.number().min(0),
-  width: z.number().min(40).max(600),
-  height: z.number().min(20).max(400),
-});
+const placementSchema = z
+  .object({
+    page: z.number().int().min(1),
+    x: z.number().min(0),
+    y: z.number().min(0),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  })
+  // Giữ tỉ lệ khung chuẩn, phóng trong khoảng cho phép (nhỏ quá chữ in ra không đọc được)
+  .refine((placement) => isValidSignatureSize(placement.width, placement.height), {
+    message: `Signature box must keep the ${SIGNATURE_BOX.width}x${SIGNATURE_BOX.height} ratio and be ${SIGNATURE_BOX.minScale}-${SIGNATURE_BOX.maxScale} times that size`,
+  });
 
 export const signApproveValidation = z.object({
   pin: z.string().regex(/^\d{6}$/, "PIN must be 6 digits"),
