@@ -45,7 +45,7 @@ export async function setRequestFiles(
 
 /**
  * Bị trả lại: sao chép tệp gốc của vòng vừa duyệt (văn bản + đính kèm, không gồm bản chuyển đổi / bản ký)
- * sang thư mục vòng sau Attachments/{requestId}/round-{n+1}/{category} và tạo bộ tệp đang soạn từ các bản sao.
+ * sang thư mục vòng sau .../{requestId}/round-{n+1}/{category} và tạo bộ tệp đang soạn từ các bản sao.
  * Tệp của vòng vừa duyệt giữ nguyên. Bản sao do người trình sở hữu (để họ gỡ / gắn lại được).
  * uploadedKeys nhận các key đã tạo trên R2 để caller xóa nếu transaction lỗi.
  */
@@ -61,7 +61,7 @@ export async function copyFilesToNextRound(
 
   for (const row of rows) {
     const file = row.original;
-    const folder = buildRequestFileFolder(request.id, nextRound, row.category);
+    const folder = buildRequestFileFolder(request.id, nextRound, row.category, request.createdAt);
     const key = await uploadService.copyPrivateObject(file.key, folder, file.filename);
     uploadedKeys.push(key);
 
