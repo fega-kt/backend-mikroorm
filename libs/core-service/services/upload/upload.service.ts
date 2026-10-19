@@ -340,9 +340,16 @@ export class UploadService {
     await this.s3.send(new CopyObjectCommand({ Bucket: this.privateBucket, Key: targetKey, CopySource: source }));
   }
 
-  /** Ghi object mới vào thư mục của bucket private, giữ tên file (trùng thì thêm -2, -3…); trả về key */
+  /**
+   * Ghi object mới vào thư mục của bucket private: tên file + mã ngẫu nhiên (vd bao-cao-1a2b3c4d.pdf); trả về key.
+   * Không "hỏi có chưa rồi mới ghi" như buildUniqueKey: hai luồng chạy song song (job chuyển PDF ở nền và hộp ký)
+   * cùng thấy tên trống rồi ghi đè lên nhau, một bên xóa bản "thừa" của mình là xóa luôn file bên kia đang dùng
+   */
   async putPrivateObjectUnique(folder: string, filename: string, body: Uint8Array, contentType: string): Promise<string> {
-    const key = await this.buildUniqueKey(folder, filename.trim(), path.extname(filename).toLowerCase());
+    const name = filename.trim();
+    const ext = path.extname(name).toLowerCase();
+    const base = slugifyFilename(path.basename(name, path.extname(name)));
+    const key = urlJoin([folder, `${base}-${randomUUID().slice(0, 8)}${ext}`], { removeLeadingSlash: true, removeTrailingSlash: true });
     await this.putPrivateObject(key, body, contentType);
     return key;
   }

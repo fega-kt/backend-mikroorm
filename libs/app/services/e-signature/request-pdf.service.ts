@@ -45,7 +45,7 @@ export class RequestPdfService {
   ) {}
 
   /**
-   * Lưu một bản PDF vào thư mục của vòng: bản chuyển đổi là {tên}.pdf, bản ký là {taskId}-{tên}.pdf (trùng thì thêm -2…).
+   * Lưu một bản PDF vào thư mục của vòng: bản chuyển đổi là {tên}-{mã}.pdf, bản ký là {taskId}-{tên}-{mã}.pdf (mã ngẫu nhiên).
    * Tên hiển thị vẫn là tên văn bản. Key vừa tải lên được thêm vào uploadedKeys để caller xóa nếu transaction lỗi.
    */
   async storePdf(
@@ -156,7 +156,7 @@ export class RequestPdfService {
       orphanKeys.push(...[...results.values()].map((r) => r.key));
       throw err;
     } finally {
-      await Promise.all(orphanKeys.map((key) => this.uploadService.deleteObject(key).catch(() => undefined)));
+      await this.deleteUnusedObjects(orphanKeys);
     }
     if (failures.size) this.logger.warn(`Converting documents of request ${requestId} failed for ${failures.size} file(s)`);
     return { converted, failed: failures.size };
@@ -174,6 +174,24 @@ export class RequestPdfService {
       { fields: ["request"], orderBy: { convertNextAt: "ASC" }, limit },
     );
     return [...new Set(rows.map((row) => row.request.id))];
+  }
+
+  /**
+   * Xóa các bản PDF không dùng tới (bản thừa / tải lên trong lượt bị rollback), trừ key vẫn có bản ghi tệp trỏ tới:
+   * lớp an toàn để không bao giờ xóa file một văn bản đang dùng. Không kiểm được thì giữ lại (thà sót file rác)
+   */
+  async deleteUnusedObjects(keys: string[]) {
+    if (!keys.length) return;
+    let used: Set<string>;
+    try {
+      const rows = await this.orm.em.fork().find(AttachmentEntity, { key: { $in: keys } }, { fields: ["key"] });
+      used = new Set(rows.map((row) => row.key));
+    } catch (err) {
+      this.logger.warn(`Skip deleting ${keys.length} unused PDF(s), cannot check references: ${errorMessage(err)}`);
+      return;
+    }
+    for (const key of keys.filter((key) => used.has(key))) this.logger.warn(`Keep ${key}: still referenced by an attachment`);
+    await Promise.all(keys.filter((key) => !used.has(key)).map((key) => this.uploadService.deleteObject(key).catch(() => undefined)));
   }
 
   /* ================= HELPERS ================= */
