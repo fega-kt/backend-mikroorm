@@ -33,6 +33,7 @@ import {
   MULTIPART_MAX_PARTS,
   MULTIPART_PART_SIZE,
   MULTIPART_THRESHOLD,
+  pdfDownloadKeyOf,
   SNIFF_BYTES,
   UPLOAD_URL_TTL_SECONDS,
 } from "./upload.constants";
@@ -319,9 +320,15 @@ export class UploadService {
     await this.s3.send(new DeleteObjectCommand({ Bucket: this.privateBucket, Key: key }));
   }
 
-  /** Xóa mọi object của một tệp private: file gốc và bản xem (nếu có) */
+  /** Xóa mọi object của một tệp private: file gốc, bản xem và bản PDF tải về (nếu có; xóa key không tồn tại vẫn thành công) */
   async deleteAttachmentObjects(attachment: { key: string; previewKey?: string | null }) {
-    await Promise.all([attachment.key, attachment.previewKey].filter((key): key is string => !!key).map((key) => this.deleteObject(key)));
+    const keys = [attachment.key, attachment.previewKey, pdfDownloadKeyOf(attachment.key)];
+    await Promise.all(keys.filter((key): key is string => !!key).map((key) => this.deleteObject(key)));
+  }
+
+  /** Object có trong bucket private không */
+  async privateObjectExists(key: string): Promise<boolean> {
+    return this.objectExists(key);
   }
 
   /**

@@ -25,6 +25,12 @@ export class FileViewController {
     return this.fileViewService.createDownloadUrl(fileId);
   }
 
+  /** Link tải bản PDF (Word / Excel / PowerPoint được chuyển sang PDF; lần đầu có thể mất vài chục giây) */
+  @Get(":fileId/download-pdf")
+  downloadPdf(@Param("fileId", ParseUUIDPipe) fileId: string) {
+    return this.fileViewService.createPdfDownloadUrl(fileId);
+  }
+
   /** Stream nội dung tệp cho URL có token ngắn hạn (Document Server, trình xem PDF, thẻ img/video/audio) */
   @Public()
   @Get("stream/:token")
