@@ -57,7 +57,7 @@ export class RequestPdfService {
     uploadedKeys: string[],
     actorId: string | null,
   ) {
-    const folder = buildSignedFileFolder(request.id, request.round);
+    const folder = buildSignedFileFolder(request.id, request.round, request.createdAt);
     const key = await this.uploadService.putPrivateObjectUnique(folder, keyName, content, PDF_MIME);
     uploadedKeys.push(key);
     return this.pdfAttachment(em, request, { key, folder, filename, size: content.length }, actorId);
@@ -112,7 +112,7 @@ export class RequestPdfService {
       try {
         const pdf = await this.converter.toPdf(row.current);
         const filename = pdfFilenameOf(row.original.filename);
-        const folder = buildSignedFileFolder(request.id, request.round);
+        const folder = buildSignedFileFolder(request.id, request.round, request.createdAt);
         const key = await this.uploadService.putPrivateObjectUnique(folder, filename, pdf, PDF_MIME);
         results.set(row.id, { key, folder, filename, size: pdf.length });
       } catch (err) {

@@ -812,7 +812,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
   }
 
   /**
-   * Link upload thẳng lên R2 cho một tệp của tờ trình, vào Attachments/{requestId}/{loại}/{tên file}.
+   * Link upload thẳng lên R2 cho một tệp của tờ trình, vào Attachments/{yyyyMM}/{dd}/{requestId}/round-{n}/{loại}/{tên file}.
    * Phiếu đã tồn tại thì chỉ người tạo (khi đang soạn / bị trả lại) được upload; chưa tồn tại thì id đang được client giữ chỗ.
    */
   async presignFileUpload(requestId: string, data: PresignRequestFileDto) {
@@ -826,7 +826,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     }
 
     // Tệp đang soạn thuộc vòng sắp gửi: phiếu mới / nháp → vòng 1, bị trả lại ở vòng n → vòng n + 1
-    const folder = buildRequestFileFolder(requestId, (existing?.round ?? 0) + 1, data.category);
+    const folder = buildRequestFileFolder(requestId, (existing?.round ?? 0) + 1, data.category, existing?.createdAt);
     const { key, uploadUrl, headers, expiresAt, multipart } = await this.uploadService.createUploadUrl({
       folder,
       filename: data.filename,
