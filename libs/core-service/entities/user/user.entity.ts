@@ -1,4 +1,5 @@
 import { BaseEntity } from "@common/base/base.entity";
+import { PublicUrlType } from "@common/base/public-url.type";
 import { Collection, Entity, Index, ManyToMany, ManyToOne, OneToOne, Property, types } from "@mikro-orm/core";
 import { DepartmentEntity } from "../department/department.entity";
 import { GroupEntity } from "../group/group.entity";
@@ -22,7 +23,8 @@ export class UserEntity extends BaseEntity {
   @Property({ type: types.string })
   fullName!: string;
 
-  @Property({ type: types.string, nullable: true })
+  /** DB lưu key trên R2, đọc ra là link đầy đủ theo R2_PUBLIC_URL */
+  @Property({ type: PublicUrlType, nullable: true })
   avatar?: string;
 
   /**

@@ -303,6 +303,7 @@ export class UserService extends BaseService<UserEntity> {
   async uploadAvatar(id: string, file: Express.Multer.File) {
     const { url } = await this.uploadService.upload(file, `${STORAGE_PATH.USER_AVATAR}/${id}`);
     const oldData = await this.loadLogData(id);
+    // Gán link đầy đủ để entity trong bộ nhớ (log, cache) giống lúc đọc; PublicUrlType chỉ lưu key xuống DB
     await this.updateOne(id, { avatar: url });
     await this.cache.del(AuthCacheKey.user(id));
     await this.writeLog(id, ActivityLogAction.UPDATE, oldData, await this.loadLogData(id));

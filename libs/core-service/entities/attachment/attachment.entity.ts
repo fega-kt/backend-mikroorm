@@ -1,4 +1,5 @@
 import { BaseEntity } from "@common/base/base.entity";
+import { PublicUrlType } from "@common/base/public-url.type";
 import { Entity, Property, types } from "@mikro-orm/core";
 
 export enum AttachmentVisibility {
@@ -45,8 +46,8 @@ export class AttachmentEntity extends BaseEntity {
   @Property({ type: types.string })
   key!: string;
 
-  /** URL công khai để truy cập file; rỗng với file private (phải xin link ký qua API) */
-  @Property({ type: types.string })
+  /** URL công khai để truy cập file (DB lưu key, đọc ra ghép R2_PUBLIC_URL); rỗng với file private (phải xin link ký qua API) */
+  @Property({ type: PublicUrlType })
   url!: string;
 
   /** public: bucket công khai · private: bucket riêng, chỉ tải qua presigned URL sau khi kiểm quyền */
