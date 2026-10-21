@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { LIST_CACHE, LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
 import { EntityManager, EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, NotFoundException, Scope } from "@nestjs/common";
@@ -13,6 +14,8 @@ import { createGroupValidation, updateGroupValidation } from "../../controllers/
 
 @Injectable({ scope: Scope.REQUEST })
 export class GroupService extends BaseService<GroupEntity> {
+  protected readonly listCache = { ttl: LIST_CACHE_TTL.STATIC, dependents: [LIST_CACHE.PRINCIPAL] };
+
   constructor(
     @InjectRepository(GroupEntity)
     protected readonly repo: EntityRepository<GroupEntity>,
@@ -65,6 +68,7 @@ export class GroupService extends BaseService<GroupEntity> {
       return group.id;
     });
 
+    await this.invalidateLists();
     await this.writeLog(groupId, ActivityLogAction.CREATE, undefined, await this.loadLogData(groupId));
     return true;
   }
@@ -122,6 +126,7 @@ export class GroupService extends BaseService<GroupEntity> {
       await em.flush();
     });
 
+    await this.invalidateLists();
     await this.writeLog(id, ActivityLogAction.UPDATE, oldData, await this.loadLogData(id));
     return true;
   }
@@ -133,7 +138,13 @@ export class GroupService extends BaseService<GroupEntity> {
     return result;
   }
 
-  async getList(page = 1, limit = 10, keyword?: string, name?: string, description?: string) {
+  getList(page = 1, limit = 10, keyword?: string, name?: string, description?: string) {
+    return this.cachedList("page", { page, limit, keyword, name, description }, () =>
+      this.loadList(page, limit, keyword, name, description),
+    );
+  }
+
+  private async loadList(page: number, limit: number, keyword?: string, name?: string, description?: string) {
     const filter: FilterQuery<GroupEntity> = { deleted: { $ne: true } };
     if (keyword) {
       filter.$or = [{ name: { $ilike: `%${keyword}%` } }, { description: { $ilike: `%${keyword}%` } }];

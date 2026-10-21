@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { LIST_CACHE, LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
 import { WithChildren, handleTree } from "@common/utils/tree.util";
 import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
@@ -19,6 +20,11 @@ import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail,
 
 @Injectable({ scope: Scope.REQUEST })
 export class DepartmentService extends BaseService<DepartmentEntity> {
+  protected readonly listCache = {
+    ttl: LIST_CACHE_TTL.STATIC,
+    dependents: [LIST_CACHE.USER, LIST_CACHE.CATEGORY, LIST_CACHE.APPROVAL_WORKFLOW],
+  };
+
   constructor(
     @InjectRepository(DepartmentEntity)
     protected readonly repo: EntityRepository<DepartmentEntity>,
@@ -143,7 +149,20 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     }
   }
 
-  async getList({ page = 1, limit = 10, keyword, name, code, status }: DepartmentListFilterDto) {
+  getList({ page = 1, limit = 10, keyword, name, code, status }: DepartmentListFilterDto) {
+    const params = { page, limit, keyword, name, code, status };
+    return this.cachedList("page", params, () => this.loadList(params));
+  }
+
+  getTree(params: Pick<DepartmentListFilterDto, "keyword" | "name" | "code" | "status">) {
+    return this.cachedList("tree", params, () => this.loadTree(params));
+  }
+
+  getActiveTree(params: Pick<DepartmentListFilterDto, "keyword" | "name" | "code">) {
+    return this.cachedList("active-tree", params, () => this.loadActiveTree(params));
+  }
+
+  private async loadList({ page, limit, keyword, name, code, status }: DepartmentListFilterDto & { page: number; limit: number }) {
     const filter: FilterQuery<DepartmentEntity> = { deleted: { $ne: true } };
     if (keyword) {
       filter.$or = [{ name: { $ilike: `%${keyword}%` } }, { code: { $ilike: `%${keyword}%` } }];
@@ -168,7 +187,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     return { data, total };
   }
 
-  async getTree({ keyword, name, code, status }: Pick<DepartmentListFilterDto, "keyword" | "name" | "code" | "status">): Promise<
+  private async loadTree({ keyword, name, code, status }: Pick<DepartmentListFilterDto, "keyword" | "name" | "code" | "status">): Promise<
     WithChildren<
       {
         id: string;
@@ -238,7 +257,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     return handleTree(plain);
   }
 
-  async getActiveTree({ keyword, name, code }: Pick<DepartmentListFilterDto, "keyword" | "name" | "code">): Promise<
+  private async loadActiveTree({ keyword, name, code }: Pick<DepartmentListFilterDto, "keyword" | "name" | "code">): Promise<
     WithChildren<
       {
         id: string;
@@ -353,10 +372,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     });
     await this.repo.getEntityManager().flush();
 
-    await Promise.all([
-      ...departmentIds.map((departmentId) => this.cache.del(this.cacheKey(departmentId))),
-      this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`),
-    ]);
+    await Promise.all([...departmentIds.map((departmentId) => this.cache.del(this.cacheKey(departmentId))), this.invalidateLists()]);
 
     // Mỗi phòng ban bị xóa (kể cả phòng ban con) đều có log riêng, cùng requestId
     await this.writeLogs(
@@ -429,10 +445,7 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     });
     await this.repo.getEntityManager().flush();
 
-    await Promise.all([
-      ...departmentIds.map((departmentId) => this.cache.del(this.cacheKey(departmentId))),
-      this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`),
-    ]);
+    await Promise.all([...departmentIds.map((departmentId) => this.cache.del(this.cacheKey(departmentId))), this.invalidateLists()]);
 
     // Chỉ ghi log cho phòng ban thực sự đổi trạng thái (phòng ban con có thể đã ở sẵn trạng thái đích)
     const newData = await this.loadLogData(departmentIds);

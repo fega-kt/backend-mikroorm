@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { LIST_CACHE, LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
 import { EntityData } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
@@ -17,6 +18,8 @@ import {
 
 @Injectable({ scope: Scope.REQUEST })
 export class RequestTypeService extends BaseService<RequestTypeEntity> {
+  protected readonly listCache = { ttl: LIST_CACHE_TTL.STATIC, dependents: [LIST_CACHE.APPROVAL_WORKFLOW] };
+
   constructor(
     @InjectRepository(RequestTypeEntity)
     protected readonly repo: EntityRepository<RequestTypeEntity>,
@@ -58,16 +61,18 @@ export class RequestTypeService extends BaseService<RequestTypeEntity> {
 
   async getRequestTypes(filter: z.infer<typeof requestTypeFilterValidation>) {
     const { page, limit, categoryId, status, search } = filter;
-    const where: FilterQuery<RequestTypeEntity> = { deleted: { $ne: true } };
-    if (categoryId) (where as Record<string, unknown>).category = categoryId;
-    if (status) where.status = status;
-    if (search) where.name = { $re: search, $options: "i" } as never;
-    return this.paginate(where, {
-      page,
-      limit,
-      fields: ["id", "code", "name", "category", "prefix", "description", "status", "createdAt", "category.name", "form", "form.name"],
-      populate: ["category", "form"],
-      sort: { updatedAt: "DESC" },
+    return this.cachedList("page", { page, limit, categoryId, status, search }, () => {
+      const where: FilterQuery<RequestTypeEntity> = { deleted: { $ne: true } };
+      if (categoryId) (where as Record<string, unknown>).category = categoryId;
+      if (status) where.status = status;
+      if (search) where.name = { $re: search, $options: "i" } as never;
+      return this.paginate(where, {
+        page,
+        limit,
+        fields: ["id", "code", "name", "category", "prefix", "description", "status", "createdAt", "category.name", "form", "form.name"],
+        populate: ["category", "form"],
+        sort: { updatedAt: "DESC" },
+      });
     });
   }
 

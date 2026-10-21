@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { LIST_CACHE, LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
 import { EntityData } from "@mikro-orm/core";
 import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
@@ -14,6 +15,8 @@ import {
 
 @Injectable({ scope: Scope.REQUEST })
 export class CategoryService extends BaseService<CategoryEntity> {
+  protected readonly listCache = { ttl: LIST_CACHE_TTL.STATIC, dependents: [LIST_CACHE.REQUEST_TYPE] };
+
   constructor(
     @InjectRepository(CategoryEntity)
     protected readonly repo: EntityRepository<CategoryEntity>,
@@ -33,15 +36,17 @@ export class CategoryService extends BaseService<CategoryEntity> {
 
   async getCategories(filter: z.infer<typeof categoryFilterValidation>) {
     const { page, limit, departmentId, search } = filter;
-    const where: FilterQuery<CategoryEntity> = { deleted: { $ne: true } };
-    if (departmentId) (where as Record<string, unknown>).department = departmentId;
-    if (search) where.name = { $re: search, $options: "i" } as never;
-    return this.paginate(where, {
-      page,
-      limit,
-      fields: ["id", "code", "department", "name", "icon", "createdAt", "department.id", "department.name"],
-      populate: ["department"],
-      sort: { updatedAt: "DESC" },
+    return this.cachedList("page", { page, limit, departmentId, search }, () => {
+      const where: FilterQuery<CategoryEntity> = { deleted: { $ne: true } };
+      if (departmentId) (where as Record<string, unknown>).department = departmentId;
+      if (search) where.name = { $re: search, $options: "i" } as never;
+      return this.paginate(where, {
+        page,
+        limit,
+        fields: ["id", "code", "department", "name", "icon", "createdAt", "department.id", "department.name"],
+        populate: ["department"],
+        sort: { updatedAt: "DESC" },
+      });
     });
   }
 

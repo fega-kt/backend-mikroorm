@@ -8,6 +8,8 @@ export enum NodeEnv {
 
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || "development",
+  /** Commit của bản build (build-arg khi deploy); chạy local thì không có */
+  GIT_COMMIT: process.env.GIT_COMMIT && process.env.GIT_COMMIT !== "unknown" ? process.env.GIT_COMMIT : undefined,
   CORE_PORT: Number(process.env.CORE_PORT) || 2000,
   APP_PORT: Number(process.env.APP_PORT) || 2001,
   CORE_JOB_PORT: Number(process.env.CORE_JOB_PORT) || 2002,

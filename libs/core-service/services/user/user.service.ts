@@ -4,6 +4,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { isAuthApiError } from "@supabase/supabase-js";
 
 import { BaseService } from "@common/base/base.service";
+import { LIST_CACHE, LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
 import { STORAGE_PATH } from "@common/constants/storage.constant";
 import { SupabaseService } from "@modules/supabase/supabase.service";
 import z from "zod";
@@ -28,6 +29,11 @@ import {
 @Injectable({ scope: Scope.REQUEST })
 export class UserService extends BaseService<UserEntity> {
   private logger = new Logger(UserService.name);
+  /** Tên, avatar của user hiện ở list principal và cột người tạo / người sửa của nhiều list khác */
+  protected readonly listCache = {
+    ttl: LIST_CACHE_TTL.DYNAMIC,
+    dependents: [LIST_CACHE.PRINCIPAL, LIST_CACHE.GROUP, LIST_CACHE.ROLE, LIST_CACHE.DEPARTMENT, LIST_CACHE.APP_SETTING],
+  };
 
   constructor(
     @InjectRepository(UserEntity)
@@ -94,6 +100,7 @@ export class UserService extends BaseService<UserEntity> {
       return user.id;
     });
 
+    await this.invalidateLists();
     await this.writeLog(userId, ActivityLogAction.CREATE, undefined, await this.loadLogData(userId));
 
     void this.sendAccountCreatedMail(loginName, fullName).catch((error: Error) => {
@@ -101,7 +108,12 @@ export class UserService extends BaseService<UserEntity> {
     });
   }
 
-  async findAllUser({ page = 1, limit = 10, keyword, fullName, phoneNumber, isActive }: UserListFilterDto) {
+  findAllUser({ page = 1, limit = 10, keyword, fullName, phoneNumber, isActive }: UserListFilterDto) {
+    const params = { page, limit, keyword, fullName, phoneNumber, isActive };
+    return this.cachedList("page", params, () => this.loadList(params));
+  }
+
+  private async loadList({ page, limit, keyword, fullName, phoneNumber, isActive }: UserListFilterDto & { page: number; limit: number }) {
     const filter: FilterQuery<UserEntity> = { deleted: { $ne: true } };
     if (keyword) {
       filter.$or = [{ fullName: { $ilike: `%${keyword}%` } }, { loginName: { $ilike: `%${keyword}%` } }];
@@ -221,8 +233,7 @@ export class UserService extends BaseService<UserEntity> {
 
     await Promise.all([
       this.cache.del(this.cacheKey(id), AuthCacheKey.user(id)),
-      this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`),
-      ...(nameChanged ? [this.cache.delByPattern("cache:principal:list:*")] : []),
+      this.invalidateLists(),
       ...(principalId ? [this.cache.del(`cache:principal:${principalId}`)] : []),
     ]);
 

@@ -9,6 +9,7 @@ import {
   QueryOrderMap,
   RequiredEntityData,
 } from "@mikro-orm/core";
+import { LIST_CACHE_TTL, LIST_CACHE_VERSION } from "@common/constants/list-cache.constant";
 import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
 import { UserEntity } from "@core-service/entities/user";
 import { Inject, InternalServerErrorException, NotFoundException } from "@nestjs/common";
@@ -26,6 +27,9 @@ export interface PaginationQuery<T> {
   sort?: QueryOrderMap<T>;
   disableIdentityMap?: boolean;
 }
+
+/** Tham số tìm theo chuỗi: request có các tham số này dùng TTL ngắn (LIST_CACHE_TTL.SEARCH) */
+const SEARCH_PARAMS = new Set(["search", "keyword", "name", "code", "fullName", "phoneNumber", "description"]);
 
 function stableStringify(value: unknown): string {
   return JSON.stringify(value, (_, v) => {
@@ -45,7 +49,11 @@ export abstract class BaseService<T extends BaseEntity> {
 
   protected abstract readonly repo: EntityRepository<T>;
 
-  protected readonly cacheTTL = { item: 300, list: 120 };
+  /**
+   * Bật cache danh sách (cachedList): ttl tính bằng giây; dependents là prefix list của entity khác có hiển thị
+   * dữ liệu của entity này (vd: list user hiện tên phòng ban) — ghi entity này thì xóa luôn list của chúng.
+   */
+  protected readonly listCache?: { ttl: number; dependents?: readonly string[] };
 
   /* ================= CACHE HELPERS ================= */
   protected get cachePrefix(): string {
@@ -61,8 +69,33 @@ export abstract class BaseService<T extends BaseEntity> {
     return `cache:${this.cachePrefix}:${id}`;
   }
 
-  protected cacheListKey(filter: object): string {
-    return `cache:${this.cachePrefix}:list:${stableStringify(filter)}`;
+  /** scope phân biệt các method list khác nhau của cùng entity (vd: list phẳng và cây phòng ban) */
+  protected cacheListKey(scope: string, filter: object): string {
+    return `cache:${this.cachePrefix}:list:${LIST_CACHE_VERSION}:${scope}:${stableStringify(filter)}`;
+  }
+
+  /**
+   * Đọc danh sách qua cache; params phải chứa mọi thứ ảnh hưởng tới kết quả (phân trang, bộ lọc...).
+   * Kết quả lưu dạng JSON nên loader phải trả dữ liệu hiển thị (entity đã nạp đủ hoặc object thường), không dùng tiếp như entity.
+   */
+  protected async cachedList<R>(scope: string, params: object, loader: () => Promise<R>): Promise<R> {
+    if (!this.listCache) return loader();
+
+    const key = this.cacheListKey(scope, params);
+    const cached = await this.cache.get<R>(key);
+    if (cached !== null) return cached;
+
+    const result = await loader();
+    const searching = Object.entries(params).some(([name, value]) => SEARCH_PARAMS.has(name) && value);
+    await this.cache.set(key, result, searching ? Math.min(this.listCache.ttl, LIST_CACHE_TTL.SEARCH) : this.listCache.ttl);
+    return result;
+  }
+
+  /** Xóa cache list của entity này và các list phụ thuộc; gọi sau mọi thao tác ghi không đi qua addOne/updateOne/remove */
+  protected async invalidateLists(): Promise<void> {
+    if (!this.listCache) return;
+    const prefixes = [this.cachePrefix, ...(this.listCache.dependents ?? [])];
+    await Promise.all(prefixes.map((prefix) => this.cache.delByPattern(`cache:${prefix}:list:*`)));
   }
 
   /* ================= CURRENT USER ================= */
@@ -102,7 +135,7 @@ export abstract class BaseService<T extends BaseEntity> {
     const em = this.repo.getEntityManager();
     em.persist(entity);
     await em.flush();
-    await this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`);
+    await this.invalidateLists();
     return entity;
   }
 
@@ -166,7 +199,7 @@ export abstract class BaseService<T extends BaseEntity> {
     Object.assign(entity, data, baseUpdate);
     await this.repo.getEntityManager().flush();
 
-    await Promise.all([this.cache.del(this.cacheKey(id)), this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`)]);
+    await Promise.all([this.cache.del(this.cacheKey(id)), this.invalidateLists()]);
 
     return entity;
   }
@@ -182,7 +215,7 @@ export abstract class BaseService<T extends BaseEntity> {
     entity.deleted = true;
     await this.repo.getEntityManager().flush();
 
-    await Promise.all([this.cache.del(this.cacheKey(id)), this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`)]);
+    await Promise.all([this.cache.del(this.cacheKey(id)), this.invalidateLists()]);
 
     return { message: "Deleted successfully" };
   }
