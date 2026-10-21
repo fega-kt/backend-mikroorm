@@ -7,6 +7,8 @@ import { randomUUID } from "crypto";
 import Redis from "ioredis";
 
 const MAX_RETRY_DELAY_MS = 30_000;
+/** Kết nối chết âm thầm (tunnel, mạng chập chờn) thì lệnh báo lỗi sau thời gian này để caller bỏ qua cache, không treo request */
+const COMMAND_TIMEOUT_MS = 2000;
 
 @Injectable()
 export class RedisService implements ICacheService, OnModuleInit, OnModuleDestroy {
@@ -18,6 +20,7 @@ export class RedisService implements ICacheService, OnModuleInit, OnModuleDestro
       lazyConnect: true,
       keepAlive: 1000,
       connectTimeout: 5000,
+      commandTimeout: COMMAND_TIMEOUT_MS,
       maxRetriesPerRequest: 0,
       enableOfflineQueue: false,
       retryStrategy: (times) => {
