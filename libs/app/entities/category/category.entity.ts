@@ -1,4 +1,5 @@
 import { BaseEntity } from "@common/base/base.entity";
+import { PublicUrlType } from "@common/base/public-url.type";
 import { Entity, Index, ManyToOne, Property, types } from "@mikro-orm/core";
 import { DepartmentEntity } from "@core-service/entities/department";
 
@@ -14,6 +15,7 @@ export class CategoryEntity extends BaseEntity {
   @Property({ type: types.string })
   name!: string;
 
-  @Property({ type: types.string, nullable: true })
+  /** DB lưu key trên R2, đọc ra là link đầy đủ theo R2_PUBLIC_URL */
+  @Property({ type: PublicUrlType, nullable: true })
   icon?: string;
 }

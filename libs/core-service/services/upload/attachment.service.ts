@@ -36,14 +36,13 @@ export class AttachmentService extends BaseService<AttachmentEntity> {
     // multer đọc tên file theo latin1: giải mã lại để giữ đúng tiếng Việt
     file.originalname = Buffer.from(file.originalname, "latin1").toString("utf8");
 
-    const { key, url, visibility } = await this.uploadService.upload(file, path);
+    const { key, visibility } = await this.uploadService.upload(file, path);
 
     return this.addOne({
       filename: file.originalname,
       mimetype: file.mimetype,
       size: file.size,
       key,
-      url,
       visibility,
       storagePath: path,
     });

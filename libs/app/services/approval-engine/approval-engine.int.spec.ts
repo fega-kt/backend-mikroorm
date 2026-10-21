@@ -560,7 +560,6 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
           mimetype: "application/octet-stream",
           size: 1024,
           key: `Attachments/${id}/${filename}`,
-          url: `https://files.local/${filename}`,
           storagePath: "Attachments",
           createdBy: owner,
           updatedBy: owner,

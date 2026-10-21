@@ -242,7 +242,6 @@ export class RequestPdfService {
       mimetype: PDF_MIME,
       size: file.size,
       key: file.key,
-      url: "",
       visibility: AttachmentVisibility.Private,
       status: AttachmentStatus.Ready,
       storagePath: file.folder,
