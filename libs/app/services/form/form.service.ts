@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { LIST_CACHE, LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
 import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { ConflictException, Injectable, NotFoundException, Scope } from "@nestjs/common";
@@ -14,6 +15,8 @@ import { ensureLatestFormVersion, recordFormVersionIfChanged, sameFormSchema } f
 
 @Injectable({ scope: Scope.REQUEST })
 export class FormService extends BaseService<FormEntity> {
+  protected readonly listCache = { ttl: LIST_CACHE_TTL.STATIC, dependents: [LIST_CACHE.REQUEST_TYPE] };
+
   constructor(
     @InjectRepository(FormEntity)
     protected readonly repo: EntityRepository<FormEntity>,
@@ -57,19 +60,23 @@ export class FormService extends BaseService<FormEntity> {
 
   async getForms(filter: z.infer<typeof formFilterValidation>) {
     const { page, limit, search } = filter;
-    const where: FilterQuery<FormEntity> = { deleted: { $ne: true } };
-    if (search) where.$or = [{ name: { $ilike: `%${search}%` } }, { code: { $ilike: `%${search}%` } }];
-    return this.paginate(where, {
-      page,
-      limit,
-      fields: ["id", "code", "name", "description", "createdAt"],
-      sort: { updatedAt: "DESC" },
+    return this.cachedList("page", { page, limit, search }, () => {
+      const where: FilterQuery<FormEntity> = { deleted: { $ne: true } };
+      if (search) where.$or = [{ name: { $ilike: `%${search}%` } }, { code: { $ilike: `%${search}%` } }];
+      return this.paginate(where, {
+        page,
+        limit,
+        fields: ["id", "code", "name", "description", "createdAt"],
+        sort: { updatedAt: "DESC" },
+      });
     });
   }
 
   async getFormOptions() {
-    const forms = await this.repo.find({ deleted: { $ne: true } }, { fields: ["id", "code", "name"], orderBy: { name: "ASC" } });
-    return forms.map((f) => ({ id: f.id, code: f.code, name: f.name }));
+    return this.cachedList("options", {}, async () => {
+      const forms = await this.repo.find({ deleted: { $ne: true } }, { fields: ["id", "code", "name"], orderBy: { name: "ASC" } });
+      return forms.map((f) => ({ id: f.id, code: f.code, name: f.name }));
+    });
   }
 
   async getFormById(id: string) {

@@ -5,6 +5,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException, Scope } fro
 import z from "zod";
 
 import { BaseService } from "@common/base/base.service";
+import { LIST_CACHE, LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
 import { ActivityLogAction, ActivityLogType } from "../../entities/activity-log";
 import { APP_SETTING_META, AppSettingEntity, AppSettingType, AppSettingValueType } from "../../entities/app-setting";
 import { ActivityLogService } from "../activity-log/activity-log.service";
@@ -33,6 +34,7 @@ const DETAIL_FIELDS = [
 @Injectable({ scope: Scope.REQUEST })
 export class AppSettingService extends BaseService<AppSettingEntity> {
   private readonly logger = new Logger(AppSettingService.name);
+  protected readonly listCache = { ttl: LIST_CACHE_TTL.STATIC };
 
   constructor(
     @InjectRepository(AppSettingEntity)
@@ -105,7 +107,13 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
    * Danh sách cho màn quản lý: chỉ các key isShow đã có giá trị trong DB, kèm type/rule để FE dựng input.
    * Phân trang, tìm kiếm (key hoặc ghi chú) và sắp xếp (cập nhật mới nhất trước) đều làm ở DB.
    */
-  async getVisibleList(page = 1, limit = 10, keyword?: string) {
+  getVisibleList(page = 1, limit = 10, keyword?: string) {
+    // rule ngày tương đối ("today+7") được tính sẵn vào kết quả nên cache theo ngày
+    const today = new Date().toDateString();
+    return this.cachedList("page", { page, limit, keyword, today }, () => this.loadVisibleList(page, limit, keyword));
+  }
+
+  private async loadVisibleList(page: number, limit: number, keyword?: string) {
     const filter: FilterQuery<AppSettingEntity> = { key: { $in: this.getVisibleKeys() }, deleted: { $ne: true } };
     if (keyword) {
       // Escape ký tự đặc biệt của LIKE để tìm đúng chuỗi người dùng nhập
@@ -123,6 +131,12 @@ export class AppSettingService extends BaseService<AppSettingEntity> {
 
     const rows = serialize(data, { populate: ["updatedBy"], forceObject: true }).map((setting) => this.toRow(setting.key, setting));
     return { data: rows, total };
+  }
+
+  /** Xóa cache của mọi màn danh sách — dùng khi dữ liệu bị sửa ngoài app (SQL tay, migration, seed) */
+  async clearListCache() {
+    await Promise.all(Object.values(LIST_CACHE).map((prefix) => this.cache.delByPattern(`cache:${prefix}:list:*`)));
+    return { message: "List cache cleared" };
   }
 
   /** Các key hiển thị nhưng chưa có giá trị trong DB, kèm type/rule để FE dựng input khi thêm mới */

@@ -37,6 +37,13 @@ export class AppSettingController {
     return this.appSettingService.getAvailableKeys();
   }
 
+  /** Xóa cache mọi màn danh sách; đặt trước route ":key" để "list-cache" không bị hiểu là một key */
+  @Delete("list-cache")
+  @Permissions(PermissionType.UpdateAppSetting)
+  clearListCache() {
+    return this.appSettingService.clearListCache();
+  }
+
   @Get(":key/history")
   @Permissions(PermissionType.ViewAppSettingDetail)
   getHistory(

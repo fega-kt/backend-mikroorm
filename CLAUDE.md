@@ -104,7 +104,7 @@ All entities extend `BaseEntity` (`src/common/base/base.entity.ts`):
 
 `BaseService<T>` provides: `addOne`, `findAll`, `paginate`, `findById`, `updateOne`, `remove` (soft delete). Services must declare `scope: Scope.REQUEST` to inject `REQUEST` (for current user).
 
-`paginate` and `findAll` auto-cache results via `CACHE_SERVICE`. Write methods (`addOne`, `updateOne`, `remove`) auto-invalidate the relevant cache keys. Do not call `findOne` results' collection methods (`.getItems()` etc.) — use `repo.findOne` directly when ORM collections are needed.
+List caching is opt-in: a service declares `protected readonly listCache = { ttl: LIST_CACHE_TTL.X, dependents: [LIST_CACHE.Y] }` (`@common/constants/list-cache.constant`) and wraps its list method in `this.cachedList(scope, params, loader)` — `params` must hold everything that affects the result, `dependents` are other entities' lists that display this entity's data. `addOne` / `updateOne` / `remove` call `invalidateLists()` automatically; any other write (`em.flush()` in a transaction, `nativeUpdate`, ...) must call `this.invalidateLists()` itself after commit. `paginate` / `findAll` do not cache. Do not call `findOne` results' collection methods (`.getItems()` etc.) — use `repo.findOne` directly when ORM collections are needed.
 
 ```typescript
 @Injectable({ scope: Scope.REQUEST })
@@ -161,7 +161,7 @@ import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
 
 `ICacheService` interface: `get<T>(key)`, `set(key, value, ttl)`, `del(...keys)`, `delByPattern(pattern)`.
 
-Driver is selected via `CACHE_DRIVER` env var (`redis` | `cloudflare`). Cache keys follow the convention `cache:<entity>:<id>` for items and `cache:<entity>:list:<hash>` for lists — helpers `cacheKey(id)` and `cacheListKey(filter)` are available on `BaseService`.
+Driver is selected via `CACHE_DRIVER` env var (`redis` | `cloudflare`). Cache keys follow the convention `cache:<entity>:<id>` for items and `cache:<entity>:list:<version>:<scope>:<params>` for lists (`<version>` = build commit, so a deploy never serves an old response shape; `DELETE /app-setting/list-cache` clears every list cache after out-of-app data changes) — helpers `cacheKey(id)` and `cacheListKey(scope, filter)` are available on `BaseService`.
 
 **Do not cache MikroORM entities with uninitialized `Collection<>` fields** — collections lose their ORM methods after JSON round-trip.
 

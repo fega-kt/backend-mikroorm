@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
 import { FilterQuery } from "@mikro-orm/core";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
@@ -14,6 +15,8 @@ import { createRoleValidation, updateRoleValidation } from "../../controllers/ro
 
 @Injectable({ scope: Scope.REQUEST })
 export class RoleService extends BaseService<RoleEntity> {
+  protected readonly listCache = { ttl: LIST_CACHE_TTL.STATIC };
+
   constructor(
     @InjectRepository(RoleEntity)
     protected readonly repo: EntityRepository<RoleEntity>,
@@ -66,7 +69,11 @@ export class RoleService extends BaseService<RoleEntity> {
     return role;
   }
 
-  async findAllRoles(page = 1, limit = 10, keyword?: string) {
+  findAllRoles(page = 1, limit = 10, keyword?: string) {
+    return this.cachedList("page", { page, limit, keyword }, () => this.loadList(page, limit, keyword));
+  }
+
+  private async loadList(page: number, limit: number, keyword?: string) {
     const filter: FilterQuery<RoleEntity> = { deleted: { $ne: true } };
     if (keyword) {
       filter.name = { $ilike: `%${keyword}%` };

@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
 import { DepartmentEntity } from "@core-service/entities/department";
 import { UserEntity } from "@core-service/entities/user";
 import { EntityRepository, FilterQuery, LockMode, serialize } from "@mikro-orm/core";
@@ -48,6 +49,8 @@ const VERSION_FIELDS = [
 
 @Injectable({ scope: Scope.REQUEST })
 export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity> {
+  protected readonly listCache = { ttl: LIST_CACHE_TTL.DYNAMIC };
+
   constructor(
     @InjectRepository(ApprovalWorkflowEntity)
     protected readonly repo: EntityRepository<ApprovalWorkflowEntity>,
@@ -62,57 +65,59 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
 
   async getWorkflows(filter: ApprovalWorkflowFilterDto) {
     const { page, limit, requestTypeId, departmentId, isActive, search } = filter;
-    const where: FilterQuery<ApprovalWorkflowEntity> = { deleted: { $ne: true } };
-    if (requestTypeId) where.requestType = requestTypeId;
-    if (departmentId) where.department = departmentId;
-    if (isActive !== undefined) where.isActive = isActive;
-    if (search) where.name = { $ilike: `%${search}%` };
+    return this.cachedList("page", { page, limit, requestTypeId, departmentId, isActive, search }, async () => {
+      const where: FilterQuery<ApprovalWorkflowEntity> = { deleted: { $ne: true } };
+      if (requestTypeId) where.requestType = requestTypeId;
+      if (departmentId) where.department = departmentId;
+      if (isActive !== undefined) where.isActive = isActive;
+      if (search) where.name = { $ilike: `%${search}%` };
 
-    const result = await this.paginate(where, {
-      page,
-      limit,
-      fields: [
-        "id",
-        "name",
-        "description",
-        "priority",
-        "isActive",
-        "createdAt",
-        "updatedAt",
-        "requestType.id",
-        "requestType.code",
-        "requestType.name",
-        "department.id",
-        "department.name",
-        "publishedVersion.id",
-        "publishedVersion.version",
-        "publishedVersion.publishedAt",
-      ],
-      populate: ["requestType", "department", "publishedVersion"],
-      sort: { updatedAt: "DESC" },
+      const result = await this.paginate(where, {
+        page,
+        limit,
+        fields: [
+          "id",
+          "name",
+          "description",
+          "priority",
+          "isActive",
+          "createdAt",
+          "updatedAt",
+          "requestType.id",
+          "requestType.code",
+          "requestType.name",
+          "department.id",
+          "department.name",
+          "publishedVersion.id",
+          "publishedVersion.version",
+          "publishedVersion.publishedAt",
+        ],
+        populate: ["requestType", "department", "publishedVersion"],
+        sort: { updatedAt: "DESC" },
+      });
+
+      const ids = result.data.map((w) => w.id);
+      const drafts = ids.length
+        ? await this.em.find(
+            ApprovalWorkflowVersionEntity,
+            { workflow: { $in: ids }, status: ApprovalWorkflowVersionStatus.Draft, deleted: { $ne: true } },
+            { fields: ["id", "workflow", "version", "updatedAt"] },
+          )
+        : [];
+      const draftByWorkflow = new Map(drafts.map((d) => [d.workflow.id, { id: d.id, version: d.version, updatedAt: d.updatedAt }]));
+      return {
+        ...result,
+        data: result.data.map((w) => ({
+          ...serialize(w, { populate: ["requestType", "department", "publishedVersion"], forceObject: true }),
+          draftVersion: draftByWorkflow.get(w.id) ?? null,
+        })),
+      };
     });
-
-    const ids = result.data.map((w) => w.id);
-    const drafts = ids.length
-      ? await this.em.find(
-          ApprovalWorkflowVersionEntity,
-          { workflow: { $in: ids }, status: ApprovalWorkflowVersionStatus.Draft, deleted: { $ne: true } },
-          { fields: ["id", "workflow", "version", "updatedAt"] },
-        )
-      : [];
-    const draftByWorkflow = new Map(drafts.map((d) => [d.workflow.id, { id: d.id, version: d.version, updatedAt: d.updatedAt }]));
-    return {
-      ...result,
-      data: result.data.map((w) => ({
-        ...serialize(w, { populate: ["requestType", "department", "publishedVersion"], forceObject: true }),
-        draftVersion: draftByWorkflow.get(w.id) ?? null,
-      })),
-    };
   }
 
   async createWorkflow(data: CreateApprovalWorkflowDto) {
     await this.ensureRequestType(data.requestType);
-    return this.em.transactional(async (em) => {
+    const result = await this.em.transactional(async (em) => {
       const audit = this.getDefaultValuesForCreate();
       const workflow = em.create(ApprovalWorkflowEntity, {
         name: data.name,
@@ -133,6 +138,8 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
       await em.flush();
       return { id: workflow.id };
     });
+    await this.invalidateLists();
+    return result;
   }
 
   async getWorkflowDetail(id: string) {
@@ -185,6 +192,7 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
       ...this.getDefaultValuesForUpdate(),
     });
     await this.em.flush();
+    await this.invalidateLists();
     return { id };
   }
 
@@ -210,12 +218,15 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
   async saveDraft(id: string, definition: WorkflowDefinition) {
     await this.getWorkflowOrFail(id);
     const draft = await this.findDraft(id);
+    // List hiện bản nháp (draftVersion) nên lưu nháp cũng phải xóa cache list
     if (draft) {
       this.em.assign(draft, { definition, ...this.getDefaultValuesForUpdate() });
       await this.em.flush();
+      await this.invalidateLists();
       return { id: draft.id, version: draft.version, updatedAt: draft.updatedAt };
     }
     const created = await this.createDraft(id, definition);
+    await this.invalidateLists();
     return { id: created.id, version: created.version, updatedAt: created.updatedAt };
   }
 
@@ -243,7 +254,7 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
   /** Xuất bản bản nháp: khóa dòng quy trình, lưu trữ bản đang chạy, đổi trạng thái bản nháp */
   async publishWorkflow(id: string) {
     const user = this.getCurrentUser();
-    return this.em.transactional(async (em) => {
+    const result = await this.em.transactional(async (em) => {
       const workflow = await em.findOne(ApprovalWorkflowEntity, { id, deleted: { $ne: true } }, { lockMode: LockMode.PESSIMISTIC_WRITE });
       if (!workflow) throw new NotFoundException("Workflow not found");
       await em.populate(workflow, ["requestType", "requestType.form"]);
@@ -275,6 +286,9 @@ export class ApprovalWorkflowService extends BaseService<ApprovalWorkflowEntity>
       await em.flush();
       return { id: draft.id, version: draft.version, publishedAt: now };
     });
+    // Xóa sau khi transaction commit, tránh request khác kịp nạp lại dữ liệu cũ vào cache
+    await this.invalidateLists();
+    return result;
   }
 
   /* ================= HELPERS ================= */

@@ -38,7 +38,7 @@ export class ActivityLogService extends BaseService<ActivityLogEntity> {
     const base = { ...this.getDefaultValuesForCreate(), ...this.getRequestMeta() };
     items.forEach((item) => em.persist(this.repo.create({ ...item, ...base })));
     await em.flush();
-    await this.cache.delByPattern(`cache:${this.cachePrefix}:list:*`);
+    await this.invalidateLists();
   }
 
   /**

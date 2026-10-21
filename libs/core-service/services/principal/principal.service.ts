@@ -1,4 +1,5 @@
 import { BaseService } from "@common/base/base.service";
+import { LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
 import { FilterQuery } from "@mikro-orm/core";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
@@ -7,6 +8,8 @@ import { PrincipalEntity } from "../../entities/principal";
 
 @Injectable({ scope: Scope.REQUEST })
 export class PrincipalService extends BaseService<PrincipalEntity> {
+  protected readonly listCache = { ttl: LIST_CACHE_TTL.DYNAMIC };
+
   constructor(
     @InjectRepository(PrincipalEntity)
     protected readonly repo: EntityRepository<PrincipalEntity>,
@@ -14,7 +17,11 @@ export class PrincipalService extends BaseService<PrincipalEntity> {
     super();
   }
 
-  async findAllPrincipal(page = 1, limit = 10, keyword?: string) {
+  findAllPrincipal(page = 1, limit = 10, keyword?: string) {
+    return this.cachedList("page", { page, limit, keyword }, () => this.loadList(page, limit, keyword));
+  }
+
+  private async loadList(page: number, limit: number, keyword?: string) {
     const filter: FilterQuery<PrincipalEntity> = { deleted: { $ne: true } };
     if (keyword) {
       filter.name = { $ilike: `%${keyword}%` };
