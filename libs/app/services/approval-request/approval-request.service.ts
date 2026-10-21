@@ -838,7 +838,6 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       mimetype: data.mimetype,
       size: data.size,
       key,
-      url: "",
       visibility: AttachmentVisibility.Private,
       status: AttachmentStatus.Pending,
       storagePath: folder,

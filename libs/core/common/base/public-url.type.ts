@@ -5,6 +5,9 @@ const ABSOLUTE_URL = /^https?:\/\//i;
 
 const publicPrefix = () => `${(ENV.R2_PUBLIC_URL ?? "").replace(/\/+$/, "")}/`;
 
+/** Link công khai của một key ở bucket public */
+export const toPublicUrl = (key: string) => `${publicPrefix()}${key}`;
+
 /**
  * Link file ở bucket public: DB chỉ lưu key (vd UserAvatars/<id>/<uuid>-a.png), đọc ra thì ghép R2_PUBLIC_URL.
  * Đổi domain chỉ cần đổi env. Link ngoài (vd avatar Google) lưu và trả nguyên như cũ.
@@ -19,7 +22,7 @@ export class PublicUrlType extends Type<string | null | undefined, string | null
 
   convertToJSValue(value: string | null | undefined): string | null | undefined {
     if (!value || ABSOLUTE_URL.test(value)) return value;
-    return `${publicPrefix()}${value}`;
+    return toPublicUrl(value);
   }
 
   getColumnType(prop: EntityProperty, platform: Platform) {

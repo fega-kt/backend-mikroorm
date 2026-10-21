@@ -77,7 +77,6 @@ export async function copyFilesToNextRound(
       mimetype: file.mimetype,
       size: file.size,
       key,
-      url: "",
       visibility: AttachmentVisibility.Private,
       status: AttachmentStatus.Ready,
       storagePath: folder,
