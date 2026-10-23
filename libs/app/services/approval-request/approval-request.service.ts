@@ -50,6 +50,7 @@ import { ApprovalEngineService } from "../approval-engine/approval-engine.servic
 import { ApproverResolver } from "../approval-engine/approver-resolver";
 import { requestFilesError, resolveAttachmentConfig } from "../approval-engine/attachment-config";
 import { NodeType, workflowDefinitionSchema, type WaitNode } from "../approval-engine/definition.schema";
+import { ensureTableRowIds } from "../approval-engine/form-schema";
 import { buildTaskAccess, canActOnTask, holderUserId, isGroupTask, type TaskAccess } from "../approval-engine/task-access";
 
 const userBrief = (u?: UserEntity | null) => (u ? { id: u.id, fullName: u.fullName, avatar: u.avatar } : null);
@@ -230,6 +231,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     // Gắn cứng phiên bản loại tờ trình (tên, tiền tố, cấu hình tệp…) và phiên bản form lúc này: sửa / xóa loại hay form sau đó không ảnh hưởng phiếu này
     const requestTypeVersion = await ensureLatestTypeVersion(this.em, requestType, this.getDefaultValuesForCreate());
     const formVersion = await ensureLatestFormVersion(this.em, requestType.form, this.getDefaultValuesForCreate());
+    const payload = ensureTableRowIds(formVersion.formSchema, data.payload);
     const request = this.em.create(ApprovalRequestEntity, {
       ...(data.id ? { id: data.id } : {}),
       title: data.title,
@@ -239,7 +241,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       formVersion,
       requester: this.em.getReference(UserEntity, user.id),
       department: this.em.getReference(DepartmentEntity, departmentId),
-      payload: data.payload,
+      payload,
       priority: data.priority,
       status: ApprovalRequestStatus.Draft,
       ...this.getDefaultValuesForCreate(),
@@ -256,7 +258,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         buildChange("priority", null, data.priority),
         { field: "category", from: null, to: categoryBrief(requestType.category) },
         { field: "department", from: null, to: departments.get(departmentId) ?? null },
-        ...diffPayload({}, data.payload),
+        ...diffPayload({}, payload),
       ],
       ...(initialFiles.length ? { files: initialFiles } : {}),
     });
@@ -274,8 +276,10 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       request.title = data.title;
     }
     if (data.payload !== undefined) {
-      changes.push(...diffPayload(request.payload ?? {}, data.payload));
-      request.payload = data.payload;
+      await this.em.populate(request, ["formVersion"]);
+      const payload = ensureTableRowIds(request.formVersion.formSchema, data.payload);
+      changes.push(...diffPayload(request.payload ?? {}, payload));
+      request.payload = payload;
     }
     if (data.priority !== undefined) {
       if (data.priority !== request.priority) changes.push(buildChange("priority", request.priority, data.priority));

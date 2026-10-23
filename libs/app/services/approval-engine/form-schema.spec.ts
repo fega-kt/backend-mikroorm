@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { FormFieldType, FormulaOperator, buildPayloadValidator, computeFormula, formSchemaSchema } from "./form-schema";
+import {
+  FormFieldType,
+  FormulaOperator,
+  TABLE_ROW_ID,
+  buildPayloadValidator,
+  computeFormula,
+  ensureTableRowIds,
+  formSchemaSchema,
+} from "./form-schema";
+
+/** Dữ liệu mẫu của trường bảng: gắn mã dòng (bắt buộc) row-1, row-2… */
+const withIds = <T extends Record<string, unknown>>(rows: T[]) =>
+  rows.map((row, index) => ({ [TABLE_ROW_ID]: `row-${index + 1}`, ...row }));
 
 const leaveForm = formSchemaSchema.parse([
   { key: "dates", label: "Thời gian nghỉ", type: FormFieldType.DateRange, required: true },
@@ -106,26 +118,48 @@ describe("form-schema — trường bảng", () => {
 
   it("nhận các dòng hợp lệ, ô không bắt buộc được để trống, bỏ cột lạ", () => {
     const parsed = validator.parse({
-      items: [
+      items: withIds([
         { name: "Laptop", kind: "laptop", qty: 2, price: 1000, extra: 1 },
         { name: "Chuột", qty: 1 },
-      ],
+      ]),
     });
     expect(parsed).toEqual({
       items: [
-        { name: "Laptop", kind: "laptop", qty: 2, price: 1000 },
-        { name: "Chuột", qty: 1 },
+        { _id: "row-1", name: "Laptop", kind: "laptop", qty: 2, price: 1000 },
+        { _id: "row-2", name: "Chuột", qty: 1 },
       ],
     });
   });
 
+  it("không cho đặt mã cột trùng khóa mã dòng", () => {
+    const table = { key: "items", label: "Bảng", type: FormFieldType.Table };
+    expect(
+      formSchemaSchema.safeParse([{ ...table, columns: [{ key: TABLE_ROW_ID, label: "Mã", type: FormFieldType.Text }] }]).success,
+    ).toBe(false);
+  });
+
+  it("mã dòng bắt buộc, không trùng trong bảng, tối đa 64 ký tự", () => {
+    expect(validator.safeParse({ items: [{ name: "Laptop", qty: 1 }] }).success).toBe(false);
+    expect(validator.safeParse({ items: [{ _id: "", name: "Laptop", qty: 1 }] }).success).toBe(false);
+    expect(validator.safeParse({ items: [{ _id: "x".repeat(65), name: "Laptop", qty: 1 }] }).success).toBe(false);
+    const duplicated = validator.safeParse({
+      items: [
+        { _id: "row-a", name: "Laptop", qty: 1 },
+        { _id: "row-a", name: "Chuột", qty: 1 },
+      ],
+    });
+    expect(duplicated.success).toBe(false);
+    expect(duplicated.error?.issues[0]?.path).toEqual(["items", 1, TABLE_ROW_ID]);
+  });
+
   it("kiểm từng ô theo cột và số dòng tối thiểu / tối đa", () => {
-    expect(validator.safeParse({ items: [{ name: "", qty: 1 }] }).success).toBe(false);
-    expect(validator.safeParse({ items: [{ name: "Laptop", qty: 0 }] }).success).toBe(false);
-    expect(validator.safeParse({ items: [{ name: "Laptop", qty: 1, kind: "phone" }] }).success).toBe(false);
+    expect(validator.safeParse({ items: withIds([{ name: "", qty: 1 }]) }).success).toBe(false);
+    expect(validator.safeParse({ items: withIds([{ name: "Laptop", qty: 0 }]) }).success).toBe(false);
+    expect(validator.safeParse({ items: withIds([{ name: "Laptop", qty: 1, kind: "phone" }]) }).success).toBe(false);
     expect(validator.safeParse({ items: [] }).success).toBe(false);
     const row = { name: "Laptop", qty: 1 };
-    expect(validator.safeParse({ items: [row, row, row, row] }).success).toBe(false);
+    expect(validator.safeParse({ items: withIds([row, row, row]) }).success).toBe(true);
+    expect(validator.safeParse({ items: withIds([row, row, row, row]) }).success).toBe(false);
   });
 
   it("cấu hình bảng sai thì không lưu được biểu mẫu", () => {
@@ -163,8 +197,13 @@ describe("form-schema — cột công thức", () => {
   );
 
   it("server tự tính cột công thức, bỏ giá trị client gửi lên", () => {
-    const parsed = validator.parse({ items: [{ qty: 3, price: 1000, amount: 999999 }, { qty: 2 }] });
-    expect(parsed).toEqual({ items: [{ qty: 3, price: 1000, amount: 3000, vat: 100 }, { qty: 2 }] });
+    const parsed = validator.parse({ items: withIds([{ qty: 3, price: 1000, amount: 999999 }, { qty: 2 }]) });
+    expect(parsed).toEqual({
+      items: [
+        { _id: "row-1", qty: 3, price: 1000, amount: 3000, vat: 100 },
+        { _id: "row-2", qty: 2 },
+      ],
+    });
   });
 
   it("chia cho 0 hoặc thiếu toán hạng thì không có giá trị; làm tròn 2 chữ số", () => {
@@ -218,11 +257,39 @@ describe("form-schema — cột không được trùng", () => {
   );
 
   it("báo trùng ở cột bật unique (văn bản không phân biệt hoa thường, bỏ khoảng trắng)", () => {
-    expect(validator.safeParse({ items: [{ name: "Laptop" }, { name: " laptop " }] }).success).toBe(false);
-    expect(validator.safeParse({ items: [{ kind: "a" }, { kind: "a" }] }).success).toBe(false);
+    expect(validator.safeParse({ items: withIds([{ name: "Laptop" }, { name: " laptop " }]) }).success).toBe(false);
+    expect(validator.safeParse({ items: withIds([{ kind: "a" }, { kind: "a" }]) }).success).toBe(false);
   });
 
   it("ô trống không tính trùng, cột không bật unique được lặp", () => {
-    expect(validator.safeParse({ items: [{ name: "A", qty: 1 }, { name: "B", qty: 1 }, { qty: 2 }, { qty: 3 }] }).success).toBe(true);
+    expect(validator.safeParse({ items: withIds([{ name: "A", qty: 1 }, { name: "B", qty: 1 }, { qty: 2 }, { qty: 3 }]) }).success).toBe(
+      true,
+    );
+  });
+});
+
+describe("form-schema — cấp mã dòng khi lưu", () => {
+  const fields = formSchemaSchema.parse([
+    { key: "items", label: "Thiết bị", type: FormFieldType.Table, columns: [{ key: "name", label: "Tên", type: FormFieldType.Text }] },
+    { key: "people", label: "Người", type: FormFieldType.User, multiple: true },
+  ]);
+
+  it("giữ mã sẵn có, cấp mã cho dòng thiếu / rỗng / trùng, không đụng trường khác", () => {
+    const people = [{ id: "u1", name: "A" }];
+    const result = ensureTableRowIds(fields, {
+      items: [{ _id: "keep", name: "Laptop" }, { _id: "keep", name: "Chuột" }, { _id: "", name: "SSD" }, { name: "Bàn phím" }],
+      people,
+    }) as { items: { _id: string }[]; people: unknown };
+    const ids = result.items.map((row) => row._id);
+    expect(ids[0]).toBe("keep");
+    expect(new Set(ids).size).toBe(4);
+    expect(ids.every((id) => id.length > 0)).toBe(true);
+    expect(result.people).toBe(people);
+    // Kết quả qua được bước kiểm lúc gửi duyệt
+    expect(buildPayloadValidator(fields).safeParse(result).success).toBe(true);
+  });
+
+  it("không có form thì trả nguyên payload", () => {
+    expect(ensureTableRowIds(null, { items: [{ name: "x" }] })).toEqual({ items: [{ name: "x" }] });
   });
 });
