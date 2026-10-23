@@ -1,5 +1,6 @@
 import { todayVn } from "@common/utils/vn-date.util";
 import { PrincipalType } from "@core-service/entities/principal";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 /** Kiểu trường trong form của loại đơn — FE map sang valueType của BetaSchemaForm */
@@ -244,10 +245,37 @@ function fieldValidator(field: FormField): z.ZodType {
   }
 }
 
+/**
+ * Mã riêng của dòng bảng (bắt buộc, duy nhất trong bảng): client sinh khi thêm dòng, giữ nguyên khi sửa —
+ * lịch sử so hai lần lưu theo mã để phân biệt sửa / thêm / xoá. Mã cột luôn bắt đầu bằng chữ cái nên không trùng khóa này.
+ */
+export const TABLE_ROW_ID = "_id";
+
+/**
+ * Cấp mã cho dòng bảng thiếu / trùng mã khi lưu tờ trình. Lưu nháp không kiểm payload (gửi duyệt mới kiểm, mã là bắt buộc):
+ * trang FE cũ còn mở lưu dòng không mã thì vẫn gửi được, và mọi payload lưu xuống đều có mã.
+ */
+export function ensureTableRowIds(fields: FormSchema | null | undefined, payload: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...payload };
+  for (const field of fields ?? []) {
+    const rows = result[field.key];
+    if (field.type !== FormFieldType.Table || !Array.isArray(rows)) continue;
+    const seen = new Set<string>();
+    result[field.key] = rows.map((row: unknown) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+      const current = (row as Record<string, unknown>)[TABLE_ROW_ID];
+      const id = typeof current === "string" && current.trim() && !seen.has(current) ? current : randomUUID();
+      seen.add(id);
+      return id === current ? row : { ...row, [TABLE_ROW_ID]: id };
+    });
+  }
+  return result;
+}
+
 /** Bảng: mảng các dòng, mỗi dòng kiểm từng cột như một trường thường; ô không bắt buộc được để trống */
 function tableValidator(field: FormField): z.ZodType {
   const columns = field.columns ?? [];
-  const shape: Record<string, z.ZodType> = {};
+  const shape: Record<string, z.ZodType> = { [TABLE_ROW_ID]: z.string().trim().min(1).max(64) };
   for (const column of columns) {
     // Cột công thức không nhận giá trị từ client: tính lại sau khi kiểm các cột nhập tay
     if (column.type === FormFieldType.Formula) continue;
@@ -273,6 +301,12 @@ function tableValidator(field: FormField): z.ZodType {
     .min(minRows)
     .max(field.maxRows ?? TABLE_MAX_ROWS)
     .superRefine((rows, ctx) => {
+      const ids = new Map<unknown, number>();
+      rows.forEach((values, index) => {
+        const first = ids.get(values[TABLE_ROW_ID]);
+        if (first === undefined) ids.set(values[TABLE_ROW_ID], index);
+        else ctx.addIssue({ code: "custom", path: [index, TABLE_ROW_ID], message: `Row ${index + 1}: row id duplicates row ${first + 1}` });
+      });
       for (const column of uniqueColumns) {
         const seen = new Map<string, number>();
         rows.forEach((values, index) => {
