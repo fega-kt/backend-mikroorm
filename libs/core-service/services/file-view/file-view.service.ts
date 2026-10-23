@@ -165,7 +165,7 @@ export class FileViewService {
     }
     const pdfKey = pdfDownloadKeyOf(file.key);
     if (!(await this.uploadService.privateObjectExists(pdfKey))) {
-      await this.uploadService.putPrivateObject(pdfKey, await this.converter.toPdf(file), "application/pdf");
+      await this.converter.toPdfObject(file, pdfKey);
     }
     return this.uploadService.createDownloadUrl(pdfKey, pdfFilenameOf(file.filename));
   }

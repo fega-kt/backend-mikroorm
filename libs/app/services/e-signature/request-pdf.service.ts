@@ -81,8 +81,13 @@ export class RequestPdfService {
   ) {
     const converted = [];
     for (const row of rows.filter(needsConversion)) {
-      const name = pdfFilenameOf(row.original.filename);
-      const copy = await this.storePdf(em, request, name, name, await this.converter.toPdf(row.current), uploadedKeys, actor.userId);
+      const filename = pdfFilenameOf(row.original.filename);
+      const folder = buildSignedFileFolder(request.id, request.round, request.createdAt);
+      const key = this.uploadService.newUniquePrivateKey(folder, filename);
+      // Ghi nhận key trước khi chuyển: lỗi giữa chừng / rollback thì caller xóa cả bản PDF dở
+      uploadedKeys.push(key);
+      const { size } = await this.converter.toPdfObject(row.current, key);
+      const copy = this.pdfAttachment(em, request, { key, folder, filename, size }, actor.userId);
       converted.push({ from: fileRef(row.current), to: fileRef(copy) });
       this.markConverted(row, copy);
     }
@@ -144,11 +149,11 @@ export class RequestPdfService {
     const failures = new Map<string, string>();
     for (const row of due) {
       try {
-        const pdf = await this.converter.toPdf(row.current);
         const filename = pdfFilenameOf(row.original.filename);
         const folder = buildSignedFileFolder(request.id, request.round, request.createdAt);
-        const key = await this.uploadService.putPrivateObjectUnique(folder, filename, pdf, PDF_MIME);
-        results.set(row.id, { key, folder, filename, size: pdf.length });
+        const key = this.uploadService.newUniquePrivateKey(folder, filename);
+        const { size } = await this.converter.toPdfObject(row.current, key);
+        results.set(row.id, { key, folder, filename, size });
       } catch (err) {
         failures.set(row.id, errorMessage(err));
       }

@@ -9,7 +9,7 @@ import { RedisService } from "@modules/redis/redis.service";
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 
-/** Mỗi lượt xử lý tối đa chừng này tệp (mỗi tệp đọc trọn vào bộ nhớ, tối đa 100 MB): tồn đọng thì dọn dần qua các lượt sau */
+/** Mỗi lượt xử lý tối đa chừng này tệp (mỗi tệp đọc trọn vào bộ nhớ, tối đa bằng trần upload MAX_PRIVATE_UPLOAD_SIZE): tồn đọng thì dọn dần qua các lượt sau */
 const MAX_PER_RUN = 30;
 const LOCK_KEY = "lock:attachment:pdf-preview-backfill";
 /** Ngắn hơn chu kỳ cron (10 phút) để lượt sau không bị chặn nếu instance giữ khóa chết giữa chừng */

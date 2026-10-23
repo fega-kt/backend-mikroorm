@@ -114,7 +114,7 @@ describe("FileViewService.createPdfDownloadUrl — tải bản PDF", () => {
       privateObjectExists: vi.fn().mockResolvedValue(pdfExists),
       putPrivateObject: vi.fn().mockResolvedValue(undefined),
     };
-    const converter = { toPdf: vi.fn().mockResolvedValue(Buffer.from("%PDF-1.7")) };
+    const converter = { toPdfObject: vi.fn().mockResolvedValue({ size: 8 }) };
     const service = new FileViewService(
       { findOne: vi.fn().mockResolvedValue(resolved) } as never,
       upload as never,
@@ -129,22 +129,21 @@ describe("FileViewService.createPdfDownloadUrl — tải bản PDF", () => {
     const { service, upload, converter } = buildPdfDownload(file({ key: "Attachments/r/scan.pdf", filename: "Scan.pdf" }));
     await service.createPdfDownloadUrl("file-1");
     expect(upload.createDownloadUrl).toHaveBeenCalledWith("Attachments/r/scan.pdf", "Scan.pdf");
-    expect(converter.toPdf).not.toHaveBeenCalled();
+    expect(converter.toPdfObject).not.toHaveBeenCalled();
   });
 
   it("Word lần đầu: chuyển sang PDF, lưu ở Previews/{key}.pdf, tải về tên {tên}.pdf", async () => {
     const word = file({ key: "Attachments/r/de-xuat.docx", filename: "Đề xuất.docx" });
     const { service, upload, converter } = buildPdfDownload(word);
     await service.createPdfDownloadUrl("file-1");
-    expect(converter.toPdf).toHaveBeenCalledWith(word);
-    expect(upload.putPrivateObject).toHaveBeenCalledWith("Previews/Attachments/r/de-xuat.docx.pdf", expect.any(Buffer), "application/pdf");
+    expect(converter.toPdfObject).toHaveBeenCalledWith(word, "Previews/Attachments/r/de-xuat.docx.pdf");
     expect(upload.createDownloadUrl).toHaveBeenCalledWith("Previews/Attachments/r/de-xuat.docx.pdf", "Đề xuất.pdf");
   });
 
   it("Word đã có bản PDF lưu sẵn: tải ngay, không chuyển lại", async () => {
     const { service, upload, converter } = buildPdfDownload(file({ key: "Attachments/r/de-xuat.docx", filename: "Đề xuất.docx" }), true);
     await service.createPdfDownloadUrl("file-1");
-    expect(converter.toPdf).not.toHaveBeenCalled();
+    expect(converter.toPdfObject).not.toHaveBeenCalled();
     expect(upload.putPrivateObject).not.toHaveBeenCalled();
     expect(upload.createDownloadUrl).toHaveBeenCalledWith("Previews/Attachments/r/de-xuat.docx.pdf", "Đề xuất.pdf");
   });
@@ -152,7 +151,7 @@ describe("FileViewService.createPdfDownloadUrl — tải bản PDF", () => {
   it("tệp không chuyển được sang PDF (ảnh, zip…) thì báo lỗi", async () => {
     const { service, converter } = buildPdfDownload(file({ key: "Attachments/r/anh.png", filename: "anh.png" }));
     await expect(service.createPdfDownloadUrl("file-1")).rejects.toBeInstanceOf(BadRequestException);
-    expect(converter.toPdf).not.toHaveBeenCalled();
+    expect(converter.toPdfObject).not.toHaveBeenCalled();
   });
 });
 
