@@ -21,7 +21,13 @@ import { isConvertibleToPdf, isPdf, OfficeConverter, pdfFilenameOf } from "../e-
 import { pdfDownloadKeyOf } from "../upload/upload.constants";
 import { UploadService } from "../upload/upload.service";
 import { FILE_ACCESS_POLICIES, type FileAccessPolicy } from "./file-access-policy";
-import { FileViewKind, NATIVE_FILE_TOKEN_TTL_SECONDS, OFFICE_FILE_TOKEN_TTL_SECONDS, resolveFileViewTarget } from "./file-view.constants";
+import {
+  FileViewKind,
+  FileViewUnavailableReason,
+  NATIVE_FILE_TOKEN_TTL_SECONDS,
+  OFFICE_FILE_TOKEN_TTL_SECONDS,
+  resolveFileViewTarget,
+} from "./file-view.constants";
 import { signEditorConfig, signFileViewToken, verifyDocumentServerJwt, verifyFileViewToken } from "./file-view.token";
 
 export type FileViewLang = "vi" | "en" | "zh";
@@ -84,6 +90,11 @@ export class FileViewService {
       return { ...base, streamPath: `/file-view/stream/${token}` };
     }
 
+    // Tệp quá lớn: Document Server mở rất chậm hoặc báo lỗi chung — trả unsupported để client cũ vẫn rơi về nút tải
+    const maxPreviewSize = ENV.ONLYOFFICE_MAX_FILE_SIZE_MB * 1024 * 1024;
+    if (file.size > maxPreviewSize) {
+      return { ...base, kind: FileViewKind.Unsupported, reason: FileViewUnavailableReason.TooLarge, maxPreviewSize };
+    }
     if (!ENV.ONLYOFFICE_URL || !ENV.ONLYOFFICE_FILE_BASE_URL) {
       throw new ServiceUnavailableException("OnlyOffice is not configured");
     }
