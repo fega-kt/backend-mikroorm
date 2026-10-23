@@ -353,17 +353,29 @@ export class UploadService {
    * cùng thấy tên trống rồi ghi đè lên nhau, một bên xóa bản "thừa" của mình là xóa luôn file bên kia đang dùng
    */
   async putPrivateObjectUnique(folder: string, filename: string, body: Uint8Array, contentType: string): Promise<string> {
+    const key = this.newUniquePrivateKey(folder, filename);
+    await this.putPrivateObject(key, body, contentType);
+    return key;
+  }
+
+  /** Key mới cho object sắp ghi vào thư mục của bucket private: tên file + mã ngẫu nhiên (cùng quy tắc putPrivateObjectUnique) */
+  newUniquePrivateKey(folder: string, filename: string): string {
     const name = filename.trim();
     const ext = path.extname(name).toLowerCase();
     const base = slugifyFilename(path.basename(name, path.extname(name)));
-    const key = urlJoin([folder, `${base}-${randomUUID().slice(0, 8)}${ext}`], { removeLeadingSlash: true, removeTrailingSlash: true });
-    await this.putPrivateObject(key, body, contentType);
-    return key;
+    return urlJoin([folder, `${base}-${randomUUID().slice(0, 8)}${ext}`], { removeLeadingSlash: true, removeTrailingSlash: true });
   }
 
   /** Ghi object vào bucket private từ server (vd bản xem do job tạo) */
   async putPrivateObject(key: string, body: Uint8Array, contentType: string) {
     await this.s3.send(new PutObjectCommand({ Bucket: this.privateBucket, Key: key, Body: body, ContentType: contentType }));
+  }
+
+  /** Ghi object vào bucket private từ luồng (tệp lớn, không giữ cả tệp trong RAM); R2 cần biết trước dung lượng */
+  async putPrivateObjectStream(key: string, body: Readable, size: number, contentType: string) {
+    await this.s3.send(
+      new PutObjectCommand({ Bucket: this.privateBucket, Key: key, Body: body, ContentLength: size, ContentType: contentType }),
+    );
   }
 
   /** Đọc trọn một object ở bucket private vào bộ nhớ (job xử lý file; không dùng cho file quá lớn) */

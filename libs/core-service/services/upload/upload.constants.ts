@@ -26,8 +26,11 @@ export const MAX_FILENAME_LENGTH = 255;
 
 export const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
 
-/** Trần dung lượng file upload thẳng lên bucket private (byte) — khớp maxSizeMb tối đa của cấu hình tệp tờ trình */
-export const MAX_PRIVATE_UPLOAD_SIZE = 100 * 1024 * 1024;
+/**
+ * Trần dung lượng file upload thẳng lên bucket private (byte) — khớp maxSizeMb tối đa của cấu hình tệp tờ trình
+ * và MAX_FILE_MB của service FileConverter (chuyển văn bản sang PDF để ký)
+ */
+export const MAX_PRIVATE_UPLOAD_SIZE = 200 * 1024 * 1024;
 
 /** Thời hạn link upload (giây) — đủ để file lớn trên mạng chậm tải xong */
 export const UPLOAD_URL_TTL_SECONDS = 30 * 60;

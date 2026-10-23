@@ -27,7 +27,8 @@ export const fileBlockConfigSchema = z
     /** Chỉ có nghĩa khi required = true */
     minFiles: z.number().int().min(0).max(50).default(1),
     maxFiles: z.number().int().min(1).max(50).default(20),
-    maxSizeMb: z.number().int().min(1).max(100).default(10),
+    // Tối đa = trần upload (MAX_PRIVATE_UPLOAD_SIZE)
+    maxSizeMb: z.number().int().min(1).max(200).default(10),
     fileTypes: z.array(z.enum(FileKind)).min(1).default([FileKind.Pdf, FileKind.Word]),
     hint: z.string().trim().max(500).optional().nullable(),
   })
