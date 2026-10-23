@@ -39,6 +39,8 @@ export const ENV = {
   ONLYOFFICE_FILE_BASE_URL: process.env.ONLYOFFICE_FILE_BASE_URL,
   /** Bắt buộc request tải tệp của Document Server mang JWT hợp lệ; chỉ tắt (false) khi đã xác nhận bản DS không gửi kèm */
   ONLYOFFICE_VERIFY_DS_AUTH: process.env.ONLYOFFICE_VERIFY_DS_AUTH !== "false",
+  /** Tệp lớn hơn mức này (MB) không mở bằng Document Server (chậm, dễ vượt giới hạn của DS) — người xem phải tải về */
+  ONLYOFFICE_MAX_FILE_SIZE_MB: Number(process.env.ONLYOFFICE_MAX_FILE_SIZE_MB) || 50,
   /** Service FileConverter (repo netcore) chuyển Word/Excel/PowerPoint sang PDF trước khi ký — vd http://fileconverter:8080 */
   FILE_CONVERTER_URL: process.env.FILE_CONVERTER_URL,
   /** Service ký số nội bộ (repo e-signature, .NET) — vd http://e-signature:8080 */

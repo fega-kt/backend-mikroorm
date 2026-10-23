@@ -14,6 +14,12 @@ export enum FileViewKind {
   Unsupported = "unsupported",
 }
 
+/** Lý do không xem được (kèm kind = unsupported) — không có thì là loại tệp chưa hỗ trợ */
+export enum FileViewUnavailableReason {
+  /** Vượt ngưỡng xem trước bằng Document Server: phải tải về */
+  TooLarge = "too-large",
+}
+
 /** documentType của OnlyOffice theo đuôi file */
 export type OfficeDocumentType = "word" | "cell" | "slide" | "pdf";
 
