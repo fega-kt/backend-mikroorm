@@ -1,6 +1,6 @@
 import { SYSTEM_USER_ID } from "@common/constants/system.constant";
 import { NotificationEntity, NotificationType } from "@core-service/entities/notification";
-import { PrincipalEntity } from "@core-service/entities/principal";
+import { PrincipalEntity, PrincipalType } from "@core-service/entities/principal";
 import { UserEntity } from "@core-service/entities/user";
 import { EntityManager, LockMode, MikroORM } from "@mikro-orm/core";
 import { OutboxService } from "@modules/outbox/outbox.service";
@@ -77,7 +77,8 @@ export interface SimulateStep {
   nodeId: string;
   name?: string;
   type: NodeType;
-  approvers: { id: string; fullName: string }[];
+  /** Người duyệt theo principal: suất nhóm là một mục nhóm (không bung thành viên), suất người là từng người */
+  approvers: { id: string; name: string; type: PrincipalType; user?: { id: string; fullName: string; avatar?: string } }[];
   skipped?: boolean;
   error?: string;
 }
@@ -606,12 +607,12 @@ export class ApprovalEngineService {
         continue;
       }
       const effective = node.options.skipIfRequester ? resolved.filter((id) => id !== requesterId) : resolved;
-      const users = effective.length ? await em.find(UserEntity, { id: { $in: effective } }, { fields: ["id", "fullName"] }) : [];
+      const approvers = effective.length ? await this.previewApprovers(em, resolver, node, ctx, new Set(effective)) : [];
       steps.push({
         nodeId: node.id,
         name: node.name,
         type: node.type,
-        approvers: users.map((u) => ({ id: u.id, fullName: u.fullName })),
+        approvers,
         skipped: resolved.length > 0 && effective.length === 0,
         error: resolved.length ? undefined : "NO_APPROVER",
       });
@@ -619,6 +620,50 @@ export class ApprovalEngineService {
       from = node.id;
     }
     return { path, steps, outcome: "blocked" as const };
+  }
+
+  /** Người duyệt của một bước theo principal: suất nhóm giữ nguyên là nhóm, suất người tách theo từng người còn duyệt */
+  private async previewApprovers(
+    em: EntityManager,
+    resolver: ApproverResolver,
+    node: WaitNode,
+    ctx: { requesterId: string; departmentId: string },
+    effective: Set<string>,
+  ) {
+    const slots = await resolver.resolveSlotTargets(this.nodeApprovers(node), { ...ctx, keepRequester: this.keepsRequester(node) });
+    const picked: { id: string; type: PrincipalType }[] = [];
+    for (const slot of slots) {
+      if (slot.group) {
+        if (slot.principalId && slot.users.some((id) => effective.has(id)))
+          picked.push({ id: slot.principalId, type: PrincipalType.Group });
+        continue;
+      }
+      for (const userId of slot.users.filter((id) => effective.has(id))) {
+        const principalId =
+          slot.members?.find((m) => m.userId === userId)?.principalId ?? slot.principalId ?? (await resolver.principalOfUser(userId));
+        if (principalId) picked.push({ id: principalId, type: PrincipalType.User });
+      }
+    }
+    const principals = picked.length
+      ? await em.find(
+          PrincipalEntity,
+          { id: { $in: picked.map((p) => p.id) }, deleted: { $ne: true } },
+          { fields: ["id", "name", "user.id", "user.fullName", "user.avatar"] },
+        )
+      : [];
+    const byId = new Map(principals.map((p) => [p.id, p]));
+    const seen = new Set<string>();
+    return picked
+      .filter((p) => !seen.has(p.id) && !!seen.add(p.id))
+      .map((p) => {
+        const principal = byId.get(p.id);
+        const user = principal?.user;
+        return {
+          ...p,
+          name: principal?.name ?? "",
+          user: user ? { id: user.id, fullName: user.fullName, avatar: user.avatar } : undefined,
+        };
+      });
   }
 
   /**
@@ -966,7 +1011,15 @@ export class ApprovalEngineService {
     if (!formSchema?.length) return payload ?? {};
     const result = buildPayloadValidator(formSchema).safeParse(payload ?? {});
     if (!result.success) {
-      throw new BadRequestException({ message: "Invalid request data", errors: result.error.issues });
+      const labels = new Map(formSchema.map((field) => [field.key, field.label]));
+      const detail = result.error.issues
+        .map((issue) => {
+          const [key, ...rest] = issue.path;
+          const label = labels.get(String(key)) ?? String(key ?? "");
+          return `${[label, ...rest].filter((part) => part !== "").join(" › ")}: ${issue.message}`;
+        })
+        .join("; ");
+      throw new BadRequestException({ message: detail || "Invalid request data", errors: result.error.issues });
     }
     return result.data;
   }
