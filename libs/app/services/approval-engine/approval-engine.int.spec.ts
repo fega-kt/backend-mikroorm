@@ -970,7 +970,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
 
     const preview = await engine.previewForRequest({ requestTypeId, departmentId: D.root, payload: { days: 1 }, requesterId: U.staff });
     expect(preview.workflow?.version).toBe(1);
-    expect(preview.steps[0].approvers.map((a) => a.id)).toEqual([U.director]);
+    expect(preview.steps[0].approvers.map((a) => a.id)).toEqual([P.director]);
   });
 
   it("checks documents and attachments against the request type config", async () => {
@@ -1105,7 +1105,7 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     const result = await engine.simulate(definition(), { days: 5 }, U.staff);
     expect(result.outcome).toBe("approved");
     expect(result.path).toEqual(["start", "n1", "c1", "n2", "p1", "end"]);
-    expect(result.steps.map((s) => s.approvers.map((a) => a.fullName))).toEqual([["itHead"], ["director"], ["hr", "admin"]]);
+    expect(result.steps.map((s) => s.approvers.map((a) => a.name))).toEqual([["itHead"], ["director"], ["hr", "admin"]]);
     expect(await em().count(ApprovalTaskEntity, {})).toBe(before);
   });
 
