@@ -6,6 +6,8 @@ export interface FileViewTokenPayload {
   fileId: string;
   audience: FileViewAudience;
   userId: string;
+  /** "pdf": stream bản PDF đã chuyển của tệp Word / Excel / PowerPoint thay vì tệp gốc */
+  view?: "pdf";
 }
 
 const TYPE = "file-view";
@@ -13,7 +15,7 @@ const encode = (secret: string) => new TextEncoder().encode(secret);
 
 /** Token ngắn hạn đặt trong URL stream: chỉ cho đọc đúng một tệp, không dùng được cho việc khác */
 export async function signFileViewToken(secret: string, payload: FileViewTokenPayload, ttlSeconds: number): Promise<string> {
-  return new SignJWT({ typ: TYPE, fid: payload.fileId, uid: payload.userId })
+  return new SignJWT({ typ: TYPE, fid: payload.fileId, uid: payload.userId, ...(payload.view ? { vw: payload.view } : {}) })
     .setProtectedHeader({ alg: "HS256" })
     .setAudience(payload.audience)
     .setIssuedAt()
@@ -29,7 +31,7 @@ export async function verifyFileViewToken(secret: string, token: string): Promis
   }
   const audience = Array.isArray(payload.aud) ? payload.aud[0] : payload.aud;
   if (audience !== "office" && audience !== "native") throw new Error("Invalid file view token audience");
-  return { fileId: payload.fid, userId: payload.uid, audience };
+  return { fileId: payload.fid, userId: payload.uid, audience, ...(payload.vw === "pdf" ? { view: "pdf" as const } : {}) };
 }
 
 /** Kiểm chữ ký JWT do Document Server gửi kèm khi tải tệp (cùng secret với ONLYOFFICE_JWT_SECRET) */

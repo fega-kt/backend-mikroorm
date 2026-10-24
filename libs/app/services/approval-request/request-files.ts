@@ -4,8 +4,11 @@ import { FileContextType } from "@core-service/services/file-view/file-access-po
 import { previewKeyOf } from "@core-service/services/upload/upload.constants";
 import type { UploadService } from "@core-service/services/upload/upload.service";
 import type { EntityManager } from "@mikro-orm/core";
+import { BadRequestException } from "@nestjs/common";
 import type { ApprovalRequestEntity } from "../../entities/approval-request";
+import { ApprovalFileSignSlotEntity, type SignSlotPlacement } from "../../entities/approval-file-sign-slot";
 import { ApprovalRequestFileEntity, RequestFileConvertStatus } from "../../entities/approval-request-file";
+import { isPdf } from "@core-service/services/e-signature";
 import { isConvertibleToPdf } from "@core-service/services/e-signature/office-converter";
 import { buildRequestFileFolder, RequestFileCategory } from "./request-file.constants";
 
@@ -43,6 +46,62 @@ export async function setRequestFiles(
   });
 }
 
+/** Văn bản ký được: PDF hoặc Office (chuyển sang PDF trước khi ký) */
+const isSignableDocument = (filename: string) => isPdf(filename) || isConvertibleToPdf(filename);
+
+export interface SignSlotInput {
+  /** Id tệp gốc (attachment) của văn bản */
+  file: string;
+  nodeId: string;
+  slot: number;
+  placement: SignSlotPlacement;
+  locked: boolean;
+}
+
+/** Ô ký đặt sẵn của các dòng tệp, nhóm theo id dòng tệp */
+export async function loadSignSlots(em: EntityManager, fileRowIds: string[]) {
+  const slots = fileRowIds.length ? await em.find(ApprovalFileSignSlotEntity, { requestFile: { $in: fileRowIds } }) : [];
+  const byRow = new Map<string, ApprovalFileSignSlotEntity[]>();
+  for (const slot of slots) byRow.set(slot.requestFile.id, [...(byRow.get(slot.requestFile.id) ?? []), slot]);
+  return byRow;
+}
+
+/**
+ * Đặt lại toàn bộ ô ký đặt sẵn của văn bản đang soạn (vòng round + 1) theo danh sách cho trước.
+ * Văn bản PDF hoặc Word / Excel / PowerPoint (người soạn đặt trên bản PDF chuyển tạm, cùng bộ chuyển với lúc ký);
+ * tệp không thuộc bộ văn bản đang soạn hoặc trùng (tệp, bước, suất) thì báo lỗi.
+ */
+export async function setSignSlots(
+  em: EntityManager,
+  request: ApprovalRequestEntity,
+  slots: SignSlotInput[],
+  audit: { createdBy: UserEntity; updatedBy: UserEntity },
+) {
+  const rows = await loadRequestFiles(em, request.id, draftRound(request), RequestFileCategory.Documents);
+  const byFile = new Map(rows.map((row) => [row.original.id, row]));
+  const seen = new Set<string>();
+  for (const input of slots) {
+    const row = byFile.get(input.file);
+    if (!row || !isSignableDocument(row.original.filename))
+      throw new BadRequestException("Signature slots are only allowed on PDF, Word, Excel or PowerPoint documents of the request");
+    const key = `${input.file}|${input.nodeId}|${input.slot}`;
+    if (seen.has(key)) throw new BadRequestException("Duplicate signature slot");
+    seen.add(key);
+  }
+  const existing = rows.length ? await em.find(ApprovalFileSignSlotEntity, { requestFile: { $in: rows.map((row) => row.id) } }) : [];
+  existing.forEach((slot) => em.remove(slot));
+  for (const input of slots) {
+    em.create(ApprovalFileSignSlotEntity, {
+      requestFile: byFile.get(input.file),
+      nodeId: input.nodeId,
+      slot: input.slot,
+      placement: input.placement,
+      locked: input.locked,
+      ...audit,
+    });
+  }
+}
+
 /**
  * Bị trả lại: sao chép tệp gốc của vòng vừa duyệt (văn bản + đính kèm, không gồm bản chuyển đổi / bản ký)
  * sang thư mục vòng sau .../{requestId}/round-{n+1}/{category} và tạo bộ tệp đang soạn từ các bản sao.
@@ -58,6 +117,10 @@ export async function copyFilesToNextRound(
   const owner = em.getReference(UserEntity, request.requester.id);
   const nextRound = draftRound(request);
   const rows = await loadRequestFiles(em, request.id, request.round);
+  const slotsByRow = await loadSignSlots(
+    em,
+    rows.map((row) => row.id),
+  );
 
   for (const row of rows) {
     const file = row.original;
@@ -88,7 +151,7 @@ export async function copyFilesToNextRound(
       createdBy: owner,
       updatedBy: owner,
     });
-    em.create(ApprovalRequestFileEntity, {
+    const nextRow = em.create(ApprovalRequestFileEntity, {
       request,
       round: nextRound,
       category: row.category,
@@ -98,6 +161,18 @@ export async function copyFilesToNextRound(
       createdBy: owner,
       updatedBy: owner,
     });
+    // Ô ký đặt sẵn đi theo bản sao của tệp sang vòng mới
+    for (const slot of slotsByRow.get(row.id) ?? []) {
+      em.create(ApprovalFileSignSlotEntity, {
+        requestFile: nextRow,
+        nodeId: slot.nodeId,
+        slot: slot.slot,
+        placement: slot.placement,
+        locked: slot.locked,
+        createdBy: owner,
+        updatedBy: owner,
+      });
+    }
   }
 }
 

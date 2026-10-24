@@ -36,7 +36,7 @@ import { buildChange, diffFiles, diffPayload, type FieldChange, type FileChangeI
 import { buildRequestFileFolder, isRequestFileKey, RequestFileCategory } from "./request-file.constants";
 import { ApprovalRequestFileEntity } from "../../entities/approval-request-file";
 import { ApprovalFileSignatureEntity } from "../../entities/approval-file-signature";
-import { draftRound, loadRequestFiles, setRequestFiles } from "./request-files";
+import { draftRound, loadRequestFiles, loadSignSlots, setRequestFiles, setSignSlots, type SignSlotInput } from "./request-files";
 import {
   ARCHIVE_TOKEN_TTL_SECONDS,
   archiveFilename,
@@ -249,6 +249,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const documents = await this.setFiles(request, RequestFileCategory.Documents, data.documents);
     const attachments = await this.setFiles(request, RequestFileCategory.Attachments, data.attachments);
     this.assertDraftFiles(requestTypeVersion.attachmentConfig, { documents: documents.files, attachments: attachments.files });
+    await this.saveSignSlots(request, data.signSlots);
     const initialFiles = [...documents.items, ...attachments.items];
     // Dòng "tạo" ghi luôn thông tin ban đầu (giá trị đầu tiên của từng trường + tệp) để lịch sử cho thấy phiếu tạo với nội dung gì
     const departments = await this.departmentBriefs([departmentId]);
@@ -320,6 +321,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       documents: current[RequestFileCategory.Documents],
       attachments: current[RequestFileCategory.Attachments],
     });
+
+    if (data.signSlots) await this.saveSignSlots(request, data.signSlots);
 
     if (changes.length) this.recordHistory(request, ApprovalHistoryAction.Update, { changes });
     if (files.added.length) this.recordHistory(request, ApprovalHistoryAction.FileAdd, { files: files.added });
@@ -627,6 +630,21 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     const currentNode = myTask ? (definition?.nodes.find((n) => n.id === myTask.nodeId) as WaitNode | undefined) : undefined;
     const editable = isRequester && [ApprovalRequestStatus.Draft, ApprovalRequestStatus.Returned].includes(request.status);
     const approvedThisRound = tasks.some((t) => t.round === request.round && t.status === ApprovalTaskStatus.Approved);
+    // Ô ký đặt sẵn chỉ người trình đang soạn mới cần (để sửa); người duyệt nhận ô qua bước chuẩn bị ký
+    const documentRows = editable ? requestFiles.filter((f) => f.round === shownRound && f.category === RequestFileCategory.Documents) : [];
+    const slotsByRow = await loadSignSlots(
+      this.em,
+      documentRows.map((row) => row.id),
+    );
+    const signSlots = documentRows.flatMap((row) =>
+      (slotsByRow.get(row.id) ?? []).map((slot) => ({
+        file: row.original.id,
+        nodeId: slot.nodeId,
+        slot: slot.slot,
+        placement: slot.placement,
+        locked: slot.locked,
+      })),
+    );
 
     return {
       id: request.id,
@@ -656,6 +674,7 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
       department: { id: request.department.id, name: request.department.name },
       documents: shownFiles(RequestFileCategory.Documents),
       attachments: shownFiles(RequestFileCategory.Attachments),
+      signSlots,
       /** Bộ tệp từng vòng duyệt (mới nhất trước); tờ trình gửi trước khi lưu theo vòng thì rỗng */
       rounds: groupRoundFiles(
         requestFiles.filter((f) => f.round <= request.round),
@@ -779,6 +798,12 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
   private async draftFileItems(request: ApprovalRequestEntity, block: RequestFileCategory): Promise<FileChangeItem[]> {
     const rows = await loadRequestFiles(this.em, request.id, draftRound(request), block);
     return rows.map((row) => ({ id: row.original.id, filename: row.original.filename, block }));
+  }
+
+  /** Đặt lại ô ký đặt sẵn của văn bản đang soạn */
+  private async saveSignSlots(request: ApprovalRequestEntity, slots: SignSlotInput[]) {
+    const owner = this.em.getReference(UserEntity, this.getCurrentUser().id);
+    await setSignSlots(this.em, request, slots, { createdBy: owner, updatedBy: owner });
   }
 
   /** Tên phòng ban lúc ghi lịch sử: đổi tên phòng về sau thì dòng lịch sử cũ vẫn đọc đúng như thời điểm sửa */

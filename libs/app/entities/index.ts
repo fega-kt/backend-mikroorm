@@ -13,6 +13,7 @@ export { ApprovalShareEntity } from "./approval-share";
 export { ApprovalCounterEntity } from "./approval-counter";
 export { ApprovalRequestFileEntity } from "./approval-request-file";
 export { ApprovalFileSignatureEntity, ApprovalFileSignatureStatus } from "./approval-file-signature";
+export { ApprovalFileSignSlotEntity } from "./approval-file-sign-slot";
 export { TranslationEntity } from "./translation";
 
 import { CategoryEntity } from "./category";
@@ -31,6 +32,7 @@ import { ApprovalShareEntity } from "./approval-share";
 import { ApprovalCounterEntity } from "./approval-counter";
 import { ApprovalRequestFileEntity } from "./approval-request-file";
 import { ApprovalFileSignatureEntity } from "./approval-file-signature";
+import { ApprovalFileSignSlotEntity } from "./approval-file-sign-slot";
 
 export const appEntities = [
   CategoryEntity,
@@ -49,4 +51,5 @@ export const appEntities = [
   ApprovalCounterEntity,
   ApprovalRequestFileEntity,
   ApprovalFileSignatureEntity,
+  ApprovalFileSignSlotEntity,
 ];

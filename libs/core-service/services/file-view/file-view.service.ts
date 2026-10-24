@@ -160,6 +160,12 @@ export class FileViewService {
   async createPdfDownloadUrl(fileId: string) {
     const { file } = await this.resolveViewableFile(fileId);
     if (isPdf(file.filename)) return this.uploadService.createDownloadUrl(file.key, file.filename);
+    const pdfKey = await this.ensurePdfObject(file);
+    return this.uploadService.createDownloadUrl(pdfKey, pdfFilenameOf(file.filename));
+  }
+
+  /** Bản PDF của Word / Excel / PowerPoint: chuyển lần đầu rồi dùng lại (cùng key với bản tải PDF) */
+  private async ensurePdfObject(file: AttachmentEntity) {
     if (!isConvertibleToPdf(file.filename)) {
       throw new BadRequestException({ code: "NOT_CONVERTIBLE", message: "This file cannot be converted to PDF" });
     }
@@ -167,7 +173,42 @@ export class FileViewService {
     if (!(await this.uploadService.privateObjectExists(pdfKey))) {
       await this.converter.toPdfObject(file, pdfKey);
     }
-    return this.uploadService.createDownloadUrl(pdfKey, pdfFilenameOf(file.filename));
+    return pdfKey;
+  }
+
+  /**
+   * Xem tệp dưới dạng PDF cho trình xem PDF (vd đặt vị trí ký trên văn bản Word): tệp PDF thì như describe;
+   * Word / Excel / PowerPoint thì chuyển tạm sang PDF (cùng bộ chuyển và cùng bản cache với lúc ký / tải PDF), không lưu vào tờ trình.
+   */
+  async describePdf(fileId: string) {
+    const { user, file } = await this.resolveViewableFile(fileId);
+    const native = (view?: "pdf") =>
+      signFileViewToken(this.secret, { fileId: file.id, userId: user.id, audience: "native", view }, NATIVE_FILE_TOKEN_TTL_SECONDS);
+    if (isPdf(file.filename)) {
+      const token = await native();
+      return {
+        fileId: file.id,
+        filename: file.filename,
+        mimetype: file.mimetype,
+        size: file.size,
+        kind: FileViewKind.Pdf,
+        streamPath: `/file-view/stream/${token}`,
+      };
+    }
+    const pdfKey = await this.ensurePdfObject(file);
+    // Dung lượng bản PDF: đọc 1 byte đầu để lấy tổng từ Content-Range
+    const head = await this.uploadService.getObject(pdfKey, "bytes=0-0");
+    head.body.destroy();
+    const size = Number(head.contentRange?.split("/")[1]) || 0;
+    const token = await native("pdf");
+    return {
+      fileId: file.id,
+      filename: pdfFilenameOf(file.filename),
+      mimetype: "application/pdf",
+      size,
+      kind: FileViewKind.Pdf,
+      streamPath: `/file-view/stream/${token}`,
+    };
   }
 
   /**
@@ -211,6 +252,10 @@ export class FileViewService {
     const file = await this.attachments.findOne({ id: payload.fileId, deleted: { $ne: true }, status: AttachmentStatus.Ready });
     if (file?.visibility !== AttachmentVisibility.Private) throw new NotFoundException("File not found");
     // PDF đã có bản xem (object sắp xếp gọn) thì stream bản xem; tải xuống vẫn luôn là tệp gốc
+    if (payload.view === "pdf") {
+      const pdf = { id: file.id, size: file.size, mimetype: "application/pdf" };
+      return { file: pdf, object: await this.uploadService.getObject(pdfDownloadKeyOf(file.key), range) };
+    }
     const key = file.previewStatus === AttachmentPreviewStatus.Ready && file.previewKey ? file.previewKey : file.key;
     return { file, object: await this.uploadService.getObject(key, range) };
   }

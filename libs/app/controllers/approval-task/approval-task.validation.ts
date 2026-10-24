@@ -14,7 +14,7 @@ export const actionValidation = z.object({
   comment: z.string().trim().max(2000).optional(),
 });
 
-const placementSchema = z
+export const placementSchema = z
   .object({
     page: z.number().int().min(1),
     x: z.number().min(0),
