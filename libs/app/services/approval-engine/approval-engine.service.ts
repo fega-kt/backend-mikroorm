@@ -81,6 +81,8 @@ export interface SimulateStep {
   approvers: { id: string; name: string; type: PrincipalType; user?: { id: string; fullName: string; avatar?: string } }[];
   skipped?: boolean;
   error?: string;
+  /** Bước bắt buộc ký số (người trình có thể đặt sẵn vị trí ký) */
+  requireSignature?: boolean;
 }
 
 /** Cấu hình người nhận + kênh dùng chung cho bước Thông báo và thông báo theo sự kiện của bước duyệt */
@@ -613,6 +615,7 @@ export class ApprovalEngineService {
         name: node.name,
         type: node.type,
         approvers,
+        requireSignature: node.options.requireSignature,
         skipped: resolved.length > 0 && effective.length === 0,
         error: resolved.length ? undefined : "NO_APPROVER",
       });

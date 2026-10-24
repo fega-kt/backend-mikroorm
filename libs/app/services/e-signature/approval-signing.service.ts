@@ -12,7 +12,7 @@ import { ApprovalRequestEntity } from "../../entities/approval-request";
 import { ApprovalAction, ApprovalEngineService, type ActableStep } from "../approval-engine/approval-engine.service";
 import { ApprovalRequestService } from "../approval-request/approval-request.service";
 import { RequestFileCategory } from "../approval-request/request-file.constants";
-import { loadRequestFiles } from "../approval-request/request-files";
+import { loadRequestFiles, loadSignSlots } from "../approval-request/request-files";
 import { RequestPdfService } from "./request-pdf.service";
 
 const fileRef = (f: AttachmentEntity) => ({ id: f.id, filename: f.filename });
@@ -85,15 +85,24 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
       const rows = await this.prepareDocuments(step, []);
       // Bước chuẩn bị không đi qua act: ghi bản chuyển đổi / bộ tệp vòng ngay trong transaction này
       await step.em.flush();
-      return rows;
+      return { rows, presets: await this.presetSlots(step, rows) };
     });
 
     const items = await Promise.all(
-      documents.map(async (row) => {
+      documents.rows.map(async (row) => {
         if (!isPdf(row.current.filename)) return { ...fileRef(row.original), signable: false as const };
         const layout = await this.signing.placement(await this.uploadService.getObjectBuffer(row.current.key));
         // id = văn bản gốc (khóa của vị trí ký); fileId = bản PDF đang ký để xem
-        return { ...fileRef(row.original), fileId: row.current.id, size: row.current.size, signable: true as const, ...layout };
+        const preset = documents.presets.get(row.original.id);
+        return {
+          ...fileRef(row.original),
+          fileId: row.current.id,
+          size: row.current.size,
+          signable: true as const,
+          ...layout,
+          /** Khung người trình đặt sẵn cho bước này (null = tự xếp); locked thì không được dời */
+          preset: preset ? { placement: preset.placement, locked: preset.locked } : null,
+        };
       }),
     );
     return {
@@ -124,13 +133,14 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
             const rows = (await this.prepareDocuments(step, uploadedKeys)).filter((row) => isPdf(row.current.filename));
             if (!rows.length) throw new BadRequestException({ code: "NO_DOCUMENT_TO_SIGN", message: "There is no document to sign" });
 
+            const presets = await this.presetSlots(step, rows);
             const signedAt = new Date();
             const reason = [step.request.code, step.node.name].filter(Boolean).join(" - ") || undefined;
             const files = [];
             for (const row of rows) {
               const pdf = await this.uploadService.getObjectBuffer(row.current.key);
               const signed = await this.signing.sign(pdf, signer, certificate, input.pin, {
-                placement: input.placements?.[row.original.id],
+                placement: this.placementFor(presets.get(row.original.id), input.placements?.[row.original.id]),
                 reason,
                 signedAt,
               });
@@ -192,6 +202,26 @@ export class ApprovalSigningService extends BaseService<AttachmentEntity> {
   private audit(em: EntityManager) {
     const user = em.getReference(UserEntity, this.getCurrentUser().id);
     return { createdBy: user, updatedBy: user };
+  }
+
+  /** Ô ký người trình đặt sẵn cho bước đang ký, theo id văn bản gốc (bước có nhiều suất thì lấy suất nhỏ nhất) */
+  private async presetSlots({ em, node }: ActableStep, rows: { id: string; original: { id: string } }[]) {
+    const byRow = await loadSignSlots(
+      em,
+      rows.map((row) => row.id),
+    );
+    const presets = new Map<string, { placement: SignaturePlacement; locked: boolean }>();
+    for (const row of rows) {
+      const slot = (byRow.get(row.id) ?? []).filter((item) => item.nodeId === node.id).sort((a, b) => a.slot - b.slot)[0];
+      if (slot) presets.set(row.original.id, { placement: slot.placement, locked: slot.locked });
+    }
+    return presets;
+  }
+
+  /** Khóa thì theo ô đặt sẵn; không thì người duyệt tự dời > ô đặt sẵn > tự xếp (undefined) */
+  private placementFor(preset: { placement: SignaturePlacement; locked: boolean } | undefined, chosen: SignaturePlacement | undefined) {
+    if (preset?.locked) return preset.placement;
+    return chosen ?? preset?.placement;
   }
 
   private assertSigningStep({ node }: ActableStep) {

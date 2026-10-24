@@ -19,6 +19,12 @@ export class FileViewController {
     return this.fileViewService.describe(fileId);
   }
 
+  /** Xem tệp dạng PDF (Word / Excel / PowerPoint chuyển tạm sang PDF; lần đầu có thể mất vài chục giây) */
+  @Get(":fileId/view-pdf")
+  describePdf(@Param("fileId", ParseUUIDPipe) fileId: string) {
+    return this.fileViewService.describePdf(fileId);
+  }
+
   /** Link tải tệp: ký thẳng tới R2, sống rất ngắn, client mở ngay sau khi nhận */
   @Get(":fileId/download")
   download(@Param("fileId", ParseUUIDPipe) fileId: string) {

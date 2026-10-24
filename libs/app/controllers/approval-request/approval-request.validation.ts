@@ -1,9 +1,23 @@
 import { z } from "zod";
+import { placementSchema } from "../approval-task/approval-task.validation";
 import { RequestFileCategory } from "../../services/approval-request/request-file.constants";
 import { RequestArchiveKind } from "../../services/approval-request/request-files-archive";
 import { ApprovalPriority, ApprovalRequestStatus } from "../../entities/approval-request";
 
 const fileIds = z.array(z.string().trim().min(1)).max(50);
+
+/** Ô ký đặt sẵn: tệp gốc của văn bản PDF + bước duyệt (+ suất) + khung chữ ký; thiếu thì tự xếp lúc ký */
+const signSlots = z
+  .array(
+    z.object({
+      file: z.string().trim().min(1),
+      nodeId: z.string().trim().min(1),
+      slot: z.number().int().min(0).default(0),
+      placement: placementSchema,
+      locked: z.boolean().default(false),
+    }),
+  )
+  .max(200);
 
 /** "Tải về toàn bộ": bản ký số (bản cuối của văn bản) hoặc tệp gốc (văn bản + tài liệu đính kèm) */
 export const filesArchiveValidation = z.object({
@@ -25,6 +39,8 @@ export const createApprovalRequestValidation = z.object({
   documents: fileIds.default([]),
   /** Tài liệu đính kèm */
   attachments: fileIds.default([]),
+  /** Vị trí ký đặt sẵn cho các bước duyệt */
+  signSlots: signSlots.default([]),
   /** true → tạo xong gửi luôn */
   submit: z.boolean().default(false),
 });
@@ -36,6 +52,8 @@ export const updateApprovalRequestValidation = z.object({
   department: z.string().trim().min(1).optional(),
   documents: fileIds.optional(),
   attachments: fileIds.optional(),
+  /** Có gửi thì thay toàn bộ ô ký đặt sẵn của văn bản đang soạn; không gửi thì giữ nguyên */
+  signSlots: signSlots.optional(),
 });
 
 /** Xem trước luồng phê duyệt ở màn tạo tờ trình */
