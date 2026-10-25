@@ -8,8 +8,9 @@ import { type ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/appr
  * - Principal người H: H, cộng người H ủy quyền
  *   · "trong thời gian" (window): ủy quyền đang hiệu lực ngay lúc xử lý, bước cho phép ủy quyền (`task.delegable`);
  *   · "giao phiếu" (handover): ủy quyền đã gắn vào task khi task về tay H (`task.handoverDelegations`), chưa bị xóa.
- * - Principal nhóm (nhóm "cùng xử lý"): thành viên hiện tại của nhóm. Chưa hỗ trợ ủy quyền cho nhóm.
- * Chung: đúng loại tờ trình, không xử lý đơn của chính mình. Không chuyển tiếp ủy quyền.
+ * - Principal nhóm (nhóm "cùng xử lý"): thành viên hiện tại của nhóm, kể cả người trình (như bước giao đích danh).
+ *   Chưa hỗ trợ ủy quyền cho nhóm.
+ * Ủy quyền: đúng loại tờ trình, người trình không xử lý thay trên đơn của chính mình. Không chuyển tiếp ủy quyền.
  *
  * Các hàm đọc `task.approver.user` → task phải được populate `approver`.
  */
@@ -107,7 +108,7 @@ export async function buildTaskAccess(
 export function canActOnTask(task: ApprovalTaskEntity, userId: string, access: TaskAccess) {
   const holder = holderUserId(task);
   if (holder) return holder === userId || (access.delegates.get(task.id)?.includes(userId) ?? false);
-  return !!task.approver && access.memberOf.has(task.approver.id) && userId !== access.requesterId;
+  return !!task.approver && access.memberOf.has(task.approver.id);
 }
 
 /** Principal nhóm mà người dùng đang là thành viên */
@@ -118,7 +119,7 @@ export async function memberGroupPrincipalIds(em: EntityManager, userId: string)
 
 /**
  * Điều kiện (ghép bằng $or) lọc task mà người dùng xử lý được — dùng cho hộp chờ duyệt:
- * task tôi giữ, task của nhóm tôi đang ở (trừ đơn của tôi), task của người đang ủy quyền cho tôi.
+ * task tôi giữ, task của nhóm tôi đang ở (kể cả đơn của tôi), task của người đang ủy quyền cho tôi (trừ đơn của tôi).
  */
 export async function actionableTaskFilter(em: EntityManager, userId: string): Promise<FilterQuery<ApprovalTaskEntity>[]> {
   const now = new Date();
@@ -134,7 +135,7 @@ export async function actionableTaskFilter(em: EntityManager, userId: string): P
     }),
   ]);
   const conditions: FilterQuery<ApprovalTaskEntity>[] = [{ approver: { user: userId } }];
-  if (memberOf.size) conditions.push({ approver: { $in: [...memberOf] }, request: notMine });
+  if (memberOf.size) conditions.push({ approver: { $in: [...memberOf] } });
   for (const d of windows) {
     conditions.push({
       approver: { user: d.fromUser.id },

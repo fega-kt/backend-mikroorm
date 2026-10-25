@@ -459,7 +459,7 @@ export class ApprovalEngineService {
       if (!current || (!task.assignedFromGroup && holder)) return "none" as const;
 
       const groupId = task.assignedFromGroup ? task.originApprover.id : task.approver.id;
-      const members = (await new ApproverResolver(tx.em).groupMembers(groupId)).filter((id) => id !== request.requester.id);
+      const members = await new ApproverResolver(tx.em).groupMembers(groupId);
       if (task.assignedFromGroup ? !!holder && members.includes(holder) : members.length > 0) return "none" as const;
 
       const definition = await this.loadDefinition(tx.em, request);
@@ -735,8 +735,8 @@ export class ApprovalEngineService {
           ...target,
           members,
           principalId: members?.length ? members[0].principalId : target.principalId,
-          // Nhóm: người trình không xử lý đơn của chính mình
-          users: target.group ? target.users.filter((id) => id !== requesterId) : members ? members.map((m) => m.userId) : target.users,
+          // Nhóm: người trình là thành viên thì vẫn được giao / xử lý như mọi thành viên khác
+          users: !target.group && members ? members.map((m) => m.userId) : target.users,
         };
       });
       // Nhóm không còn ai → luôn bỏ suất (không để treo). Người không xác định được → theo skipIfNoApprover
@@ -751,20 +751,25 @@ export class ApprovalEngineService {
         continue;
       }
 
-      const skipRequester = node.options.skipIfRequester && filledSlots.some((item) => !item.group && item.users[0] === requesterId);
-      // Suất chỉ có người tạo đơn coi như đã xong (bỏ qua)
-      const openSlots = filledSlots.filter((item) => item.group || !(skipRequester && item.users[0] === requesterId));
+      // Bật bỏ qua người trình: suất chỉ có mỗi người trình (người cụ thể, hoặc nhóm chỉ có người trình) coi như đã xong.
+      // Nhóm nhiều người vẫn phải duyệt, người trình là thành viên cũng tự duyệt được
+      const requesterSlots = node.options.skipIfRequester
+        ? filledSlots.filter((item) => item.users.length === 1 && item.users[0] === requesterId)
+        : [];
+      const openSlots = filledSlots.filter((item) => !requesterSlots.includes(item));
       const now = new Date();
 
-      if (skipRequester) {
-        const principal = filledSlots.find((item) => !item.group && item.users[0] === requesterId).principalId;
-        this.createTask(
-          tx,
-          request,
-          node,
-          { origin: principal, approver: principal },
-          { status: ApprovalTaskStatus.Skipped, actedAt: now },
-        );
+      if (requesterSlots.length) {
+        // Mỗi principal bị bỏ qua một task Skipped để sơ đồ / lịch sử còn dấu
+        for (const principal of new Set(requesterSlots.map((item) => item.principalId))) {
+          this.createTask(
+            tx,
+            request,
+            node,
+            { origin: principal, approver: principal },
+            { status: ApprovalTaskStatus.Skipped, actedAt: now },
+          );
+        }
         if (!openSlots.length) {
           this.history(tx, request, ApprovalHistoryAction.Skip, { node, data: { reason: "requester" } });
           from = node.id;
@@ -1097,7 +1102,7 @@ export class ApprovalEngineService {
         if (holder === userId && !access.delegates.get(task.id)?.length) result.push(task);
         continue;
       }
-      const members = (await resolver.groupMembers(task.approver.id)).filter((id) => id !== access.requesterId);
+      const members = await resolver.groupMembers(task.approver.id);
       if (members.length === 1 && members[0] === userId) result.push(task);
     }
     return result;
