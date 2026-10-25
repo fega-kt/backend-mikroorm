@@ -77,8 +77,16 @@ export interface SimulateStep {
   nodeId: string;
   name?: string;
   type: NodeType;
-  /** Người duyệt theo principal: suất nhóm là một mục nhóm (không bung thành viên), suất người là từng người */
-  approvers: { id: string; name: string; type: PrincipalType; user?: { id: string; fullName: string; avatar?: string } }[];
+  /**
+   * Người duyệt theo principal: suất nhóm là một mục nhóm (không bung thành viên), suất người là từng người.
+   * user.departmentName in vào khung xem trước chữ ký của bước (dòng "Đơn vị")
+   */
+  approvers: {
+    id: string;
+    name: string;
+    type: PrincipalType;
+    user?: { id: string; fullName: string; avatar?: string; departmentName?: string };
+  }[];
   skipped?: boolean;
   error?: string;
   /** Bước bắt buộc ký số (người trình có thể đặt sẵn vị trí ký) */
@@ -651,7 +659,7 @@ export class ApprovalEngineService {
       ? await em.find(
           PrincipalEntity,
           { id: { $in: picked.map((p) => p.id) }, deleted: { $ne: true } },
-          { fields: ["id", "name", "user.id", "user.fullName", "user.avatar"] },
+          { fields: ["id", "name", "user.id", "user.fullName", "user.avatar", "user.department.name"] },
         )
       : [];
     const byId = new Map(principals.map((p) => [p.id, p]));
@@ -664,7 +672,7 @@ export class ApprovalEngineService {
         return {
           ...p,
           name: principal?.name ?? "",
-          user: user ? { id: user.id, fullName: user.fullName, avatar: user.avatar } : undefined,
+          user: user ? { id: user.id, fullName: user.fullName, avatar: user.avatar, departmentName: user.department?.name } : undefined,
         };
       });
   }
