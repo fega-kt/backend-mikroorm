@@ -8,7 +8,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { NotificationEntity, NotificationType } from "../../entities/notification";
 import { UserEntity } from "../../entities/user";
 import { UserDeviceEntity } from "../../entities/user-device";
-import { AuthCacheKey } from "./auth.constants";
+import { AccessTokenClaims, AuthCacheKey, decodeTokenClaims } from "./auth.constants";
 import { AuthSessionService } from "./auth-session.service";
 
 /** Header client gửi lên (device token đã lưu) và server trả về (device token mới cần lưu) */
@@ -23,12 +23,6 @@ const FRESH_LOGIN_WINDOW_MS = 10 * 60 * 1000;
 /** Bỏ tiền tố IPv4-mapped "::ffff:" (vd: ::ffff:1.2.3.4 → 1.2.3.4) */
 function normalizeIp(ip: string | undefined): string | undefined {
   return ip?.replace(/^::ffff:/, "");
-}
-
-interface AccessTokenClaims {
-  session_id?: string;
-  /** Supabase: phương thức xác thực kèm thời điểm (giây) */
-  amr?: Array<{ method: string; timestamp: number }>;
 }
 
 /**
@@ -63,7 +57,7 @@ export class LoginDeviceService {
     const secret = ENV.DEVICE_TOKEN_SECRET;
     if (!secret) return undefined;
 
-    const claims = this.decodeClaims(params.accessToken);
+    const claims = decodeTokenClaims(params.accessToken);
     if (!claims?.session_id) return undefined;
 
     const cacheKey = AuthCacheKey.deviceSession(claims.session_id);
@@ -146,16 +140,6 @@ export class LoginDeviceService {
       // Request song song cùng thiết bị đã ghi nhận (và báo nếu cần) — bỏ qua
       if (error instanceof UniqueConstraintViolationException) return;
       throw error;
-    }
-  }
-
-  /** Token đã được guard xác thực trước đó → chỉ cần đọc payload */
-  private decodeClaims(accessToken: string): AccessTokenClaims | undefined {
-    try {
-      const payload = accessToken.split(".")[1];
-      return payload ? (JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AccessTokenClaims) : undefined;
-    } catch {
-      return undefined;
     }
   }
 

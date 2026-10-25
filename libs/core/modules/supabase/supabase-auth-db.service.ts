@@ -4,6 +4,7 @@ import { Pool, QueryResultRow } from "pg";
 
 /**
  * Kết nối chỉ đọc tới database của Supabase (schema auth: users, sessions, audit_log_entries...).
+ * SupabaseAuthGuard dùng để kiểm tra session còn sống ở mỗi request.
  * Database này (SUPABASE_AUTH_DB_NAME) khác database của app (DB_NAME) trên cùng server và Postgres không query chéo database,
  * nên cần pool riêng. Dùng chung host, user, mật khẩu với DATABASE_URL; pool chỉ tạo ở lần query đầu tiên.
  */
@@ -24,7 +25,8 @@ export class SupabaseAuthDbService implements OnModuleDestroy {
     if (!this.pool) {
       const url = new URL(ENV.DATABASE_URL);
       url.pathname = `/${ENV.SUPABASE_AUTH_DB_NAME}`;
-      this.pool = new Pool({ connectionString: url.toString(), max: 1, idleTimeoutMillis: 30_000 });
+      // Guard tra auth.sessions mỗi request → cần vài kết nối song song
+      this.pool = new Pool({ connectionString: url.toString(), max: 5, idleTimeoutMillis: 30_000 });
     }
     return this.pool;
   }
