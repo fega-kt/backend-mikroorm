@@ -83,6 +83,14 @@ export class AuthSessionService {
     return true;
   }
 
+  /** Session còn hiệu lực: chưa bị xoá (đăng xuất, đổi mật khẩu, admin huỷ...) và chưa quá not_after. Lỗi DB → throw */
+  async isActive(sessionId: string): Promise<boolean> {
+    const rows = await this.authDb.query("select 1 from auth.sessions where id = $1 and (not_after is null or not_after > now())", [
+      sessionId,
+    ]);
+    return rows.length > 0;
+  }
+
   /** undefined nếu chưa thấy session; {} nếu session không có ip/user agent */
   private async readClientInfo(sessionId: string): Promise<Record<string, string> | undefined> {
     const rows = await this.authDb.query<{ ip: string | null; user_agent: string | null }>(

@@ -1,3 +1,26 @@
+import { createHash } from "crypto";
+
+/** Key cache của access token (băm, không lưu token gốc) */
+export const tokenCacheKey = (token: string) => AuthCacheKey.token(createHash("sha256").update(token).digest("hex"));
+
+export interface AccessTokenClaims {
+  session_id?: string;
+  /** Hết hạn (giây) */
+  exp?: number;
+  /** Supabase: phương thức xác thực kèm thời điểm (giây) */
+  amr?: Array<{ method: string; timestamp: number }>;
+}
+
+/** Chỉ đọc payload, không kiểm chữ ký — dùng cho token đã được Supabase xác thực */
+export function decodeTokenClaims(token: string): AccessTokenClaims | undefined {
+  try {
+    const payload = token.split(".")[1];
+    return payload ? (JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AccessTokenClaims) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Cache keys cho auth module — tập trung để tránh typo và dễ tra cứu */
 export const AuthCacheKey = {
   /** OTP quên mật khẩu — xác thực trước khi reset password */

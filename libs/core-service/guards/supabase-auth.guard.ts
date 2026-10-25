@@ -1,4 +1,12 @@
-import { CanActivate, ExecutionContext, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
 import { IUserResponse } from "@common/base/consts";
@@ -8,13 +16,21 @@ import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
 import { SupabaseService } from "@modules/supabase/supabase.service";
-import { createHash } from "crypto";
 import { compact, uniq } from "lodash";
 import { RoleEntity } from "../entities/role";
 import { UserEntity } from "../entities/user";
-import { AUTH_CACHE_TTL, AuthCacheKey } from "../services/auth/auth.constants";
+import { AUTH_CACHE_TTL, AuthCacheKey, decodeTokenClaims, tokenCacheKey } from "../services/auth/auth.constants";
+import { AuthSessionService } from "../services/auth/auth-session.service";
 import { DEVICE_ID_HEADER, LoginDeviceService } from "../services/auth/login-device.service";
 import type { Request, Response } from "express";
+
+/** Cache của token đã verify với Supabase */
+interface TokenSession {
+  userId: string;
+  email: string;
+  /** session_id trong JWT — mỗi request tra auth.sessions để chặn token của session đã huỷ */
+  sessionId: string;
+}
 
 /** Ghi users.lastActiveAt tối đa 1 lần/giờ/user — đủ chính xác để đếm số ngày không online, không ghi DB mỗi request */
 const LAST_ACTIVE_SYNC_TTL_SECONDS = 3600;
@@ -32,6 +48,7 @@ export class SupabaseAuthGuard implements CanActivate {
     private readonly roleEntity: EntityRepository<RoleEntity>,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     private readonly loginDeviceService: LoginDeviceService,
+    private readonly authSessionService: AuthSessionService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -61,10 +78,16 @@ export class SupabaseAuthGuard implements CanActivate {
     }
 
     try {
-      const tokenKey = AuthCacheKey.token(createHash("sha256").update(token).digest("hex"));
-      let session = await this.cache.get<{ userId: string; email: string }>(tokenKey);
+      const tokenKey = tokenCacheKey(token);
+      let session = await this.cache.get<TokenSession>(tokenKey);
 
-      if (session) {
+      // Token đã verify trước đó: chữ ký đúng, nhưng session có thể đã bị huỷ (đăng xuất, đổi mật khẩu...) → tra auth.sessions
+      if (session?.sessionId) {
+        if (!(await this.isSessionActive(session.sessionId))) {
+          await this.cache.del(tokenKey);
+          throw new UnauthorizedException("Session has ended");
+        }
+
         const cached = await this.cache.get<Omit<IUserResponse, "canAccess">>(AuthCacheKey.user(session.userId));
         if (cached) {
           request.user = { ...cached, canAccess: (pers: PermissionType[]) => pers.some((per) => cached.permissions?.includes(per)) };
@@ -72,6 +95,9 @@ export class SupabaseAuthGuard implements CanActivate {
           await this.checkLoginDevice(context, token, cached.id);
           return true;
         }
+      } else {
+        // Cache cũ (chưa có sessionId) → verify lại với Supabase
+        session = undefined;
       }
 
       const email = session?.email ?? (await this.verifyToken(token));
@@ -83,15 +109,21 @@ export class SupabaseAuthGuard implements CanActivate {
       this.refreshLastActive(user.id);
 
       const { canAccess: _, ...cacheable } = user;
-      session ??= { userId: user.id, email };
-      await Promise.all([
-        this.cache.set(tokenKey, session, AUTH_CACHE_TTL),
-        this.cache.set(AuthCacheKey.user(user.id), cacheable, AUTH_CACHE_TTL),
-      ]);
+      await this.cache.set(AuthCacheKey.user(user.id), cacheable, AUTH_CACHE_TTL);
+      // Chỉ cache token ngay sau khi Supabase xác nhận (không gia hạn khi đọc lại từ cache), không quá hạn của JWT
+      if (!session) {
+        const claims = decodeTokenClaims(token);
+        const ttl = Math.min(AUTH_CACHE_TTL, Math.floor((claims?.exp ?? 0) - Date.now() / 1000));
+        if (claims?.session_id && ttl > 0) {
+          await this.cache.set(tokenKey, { userId: user.id, email, sessionId: claims.session_id } satisfies TokenSession, ttl);
+        }
+      }
       await this.checkLoginDevice(context, token, user.id);
 
       return true;
     } catch (error) {
+      // Không đọc được auth.sessions: lỗi hệ thống, không phải token sai → không trả 401 (client sẽ refresh/đăng xuất)
+      if (error instanceof ServiceUnavailableException) throw error;
       this.logger.error(error);
       throw new UnauthorizedException(error.message ?? "Invalid or expired token");
     }
@@ -125,6 +157,15 @@ export class SupabaseAuthGuard implements CanActivate {
         await this.userRepo.nativeUpdate({ id: userId }, { lastActiveAt: new Date() });
       })
       .catch((error: Error) => this.logger.warn(`Failed to update lastActiveAt (${userId}): ${error.message}`));
+  }
+
+  private async isSessionActive(sessionId: string): Promise<boolean> {
+    try {
+      return await this.authSessionService.isActive(sessionId);
+    } catch (error) {
+      this.logger.error(`Failed to check auth.sessions (${sessionId}): ${(error as Error).message}`);
+      throw new ServiceUnavailableException("Cannot verify session");
+    }
   }
 
   private async verifyToken(token: string): Promise<string | undefined> {
