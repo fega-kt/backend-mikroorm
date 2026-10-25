@@ -22,9 +22,11 @@ import { randomUUID } from "crypto";
 import type { Readable } from "stream";
 import { fromBuffer } from "file-type";
 import * as path from "path";
+import { checkOfficeZip, hasOfficeZipParts } from "./office-zip";
 import { type ByteRange, orderedParallelStream, parseContentRangeTotal, splitByteRanges } from "./parallel-range-stream";
 import {
   ALLOWED_MIME_TYPES,
+  CONTAINER_MIME_EXTENSIONS,
   DOWNLOAD_URL_TTL_SECONDS,
   EXT_MIME_MAP,
   INVALID_FILENAME_CHARS,
@@ -35,8 +37,13 @@ import {
   MULTIPART_THRESHOLD,
   pdfDownloadKeyOf,
   SNIFF_BYTES,
+  TEXT_EXTENSIONS,
   UPLOAD_URL_TTL_SECONDS,
 } from "./upload.constants";
+
+/** Nội dung không phải loại của đuôi file (không nhận dạng được, hoặc văn bản Office thiếu thành phần) */
+const invalidContent = (ext: string) =>
+  new BadRequestException(`File content is not a valid "${ext}" file (the file may be damaged or renamed)`);
 
 @Injectable()
 export class UploadService {
@@ -80,7 +87,8 @@ export class UploadService {
 
   /** Loại nội dung thật (hoặc khai báo) phải nằm trong danh sách cho phép và khớp với đuôi file */
   private assertMimeAllowed(ext: string, actualMime: string | undefined): void {
-    if (!actualMime || !ALLOWED_MIME_TYPES.includes(actualMime)) {
+    if (!actualMime) throw invalidContent(ext);
+    if (!ALLOWED_MIME_TYPES.includes(actualMime)) {
       throw new BadRequestException(`Actual file content type "${actualMime ?? "unknown"}" is not allowed`);
     }
 
@@ -89,10 +97,26 @@ export class UploadService {
     }
   }
 
+  /**
+   * Loại nội dung thật từ các byte đầu file. Chỉ đuôi văn bản (không có chữ ký nhị phân) mới được lấy loại khai báo;
+   * đuôi khác mà không nhận dạng được (vd file text đổi đuôi thành .docx) → undefined để bị từ chối
+   */
+  private async sniffMime(ext: string, bytes: Uint8Array, declared: string | undefined): Promise<string | undefined> {
+    const detected = (await fromBuffer(bytes))?.mime;
+    if (!detected) return TEXT_EXTENSIONS.has(ext) ? declared : undefined;
+    // Vỏ OLE2 / ZIP đúng với đuôi Office → coi như đúng loại của đuôi đó
+    return CONTAINER_MIME_EXTENSIONS[detected]?.includes(ext) ? EXT_MIME_MAP[ext][0] : detected;
+  }
+
+  /** docx / xlsx / pptx: mục lục ZIP phải có đủ thành phần (chặn file ZIP khác đổi đuôi, file bị cắt cụt) */
+  private async assertOfficeZip(ext: string, size: number, read: (start: number, end: number) => Promise<Uint8Array>) {
+    if (hasOfficeZipParts(ext) && (await checkOfficeZip(ext, size, read)) === "invalid") throw invalidContent(ext);
+  }
+
   private async validateFile(file: Express.Multer.File): Promise<void> {
     const ext = this.assertFilenameAllowed(file.originalname);
-    const detected = await fromBuffer(file.buffer);
-    this.assertMimeAllowed(ext, detected?.mime || file.mimetype);
+    this.assertMimeAllowed(ext, await this.sniffMime(ext, file.buffer, file.mimetype));
+    await this.assertOfficeZip(ext, file.buffer.length, async (start, end) => file.buffer.subarray(start, end));
   }
 
   /** Bucket private; thiếu cấu hình thì báo lỗi, tuyệt đối không rơi về bucket public */
@@ -304,8 +328,13 @@ export class UploadService {
       }
       const part = await this.s3.send(new GetObjectCommand({ Bucket: this.privateBucket, Key: key, Range: `bytes=0-${SNIFF_BYTES - 1}` }));
       const bytes = Buffer.from((await part.Body?.transformToByteArray()) ?? []);
-      const detected = await fromBuffer(bytes);
-      this.assertMimeAllowed(ext, detected?.mime || head.ContentType);
+      this.assertMimeAllowed(ext, await this.sniffMime(ext, bytes, head.ContentType));
+      await this.assertOfficeZip(ext, expectedSize, async (start, end) => {
+        const range = await this.s3.send(
+          new GetObjectCommand({ Bucket: this.privateBucket, Key: key, Range: `bytes=${start}-${end - 1}` }),
+        );
+        return (await range.Body?.transformToByteArray()) ?? new Uint8Array();
+      });
     } catch (error) {
       this.logger.warn(`verifyUploadedObject key=${key} filename=${filename} rejected, deleting object: ${describeError(error)}`);
       await this.deleteObject(key).catch((deleteError) =>
