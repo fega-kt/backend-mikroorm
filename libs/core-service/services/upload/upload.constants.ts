@@ -22,6 +22,19 @@ export const EXT_MIME_MAP: Record<string, string[]> = {
 
 export const ALLOWED_MIME_TYPES = [...new Set(Object.values(EXT_MIME_MAP).flat())];
 
+/** Đuôi file dạng văn bản, không có chữ ký nhị phân → file-type không nhận dạng được, đành dựa vào loại khai báo */
+export const TEXT_EXTENSIONS = new Set([".txt", ".csv", ".svg"]);
+
+/**
+ * Loại file-type trả về theo "vỏ" chứa chứ không phân biệt được Word / Excel / PowerPoint:
+ * Office đời cũ là OLE2 (`application/x-cfb`); Office mới là ZIP — file-type thường nhận ra đúng loại,
+ * nhưng file do vài công cụ tạo (thứ tự mục trong ZIP khác) chỉ nhận ra `application/zip`
+ */
+export const CONTAINER_MIME_EXTENSIONS: Record<string, string[]> = {
+  "application/x-cfb": [".doc", ".xls", ".ppt"],
+  "application/zip": [".docx", ".xlsx", ".pptx"],
+};
+
 export const MAX_FILENAME_LENGTH = 255;
 
 export const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;

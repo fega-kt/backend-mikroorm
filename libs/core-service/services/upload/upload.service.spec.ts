@@ -43,3 +43,31 @@ describe("UploadService.completeMultipartUpload (kiểm danh sách phần)", () 
     await expect(service.completeMultipartUpload({ key: "k", uploadId: "u", parts })).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+describe("UploadService.sniffMime (nhận dạng nội dung thật từ các byte đầu)", () => {
+  const service = new UploadService();
+  const sniff = (ext: string, bytes: Uint8Array, declared?: string) => service["sniffMime"](ext, bytes, declared);
+  const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const text = Buffer.from("examplefile.com - Sample Files\n".repeat(200));
+  const ole2 = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(4092)]);
+  const zip = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(4096)]);
+
+  it("file text đổi đuôi .docx: không nhận dạng được, không dùng loại khai báo", async () => {
+    expect(await sniff(".docx", text, DOCX)).toBeUndefined();
+  });
+
+  it("đuôi văn bản (.txt, .csv): dùng loại khai báo", async () => {
+    expect(await sniff(".txt", text, "text/plain")).toBe("text/plain");
+    expect(await sniff(".csv", text, "text/csv")).toBe("text/csv");
+  });
+
+  it("vỏ OLE2 với đuôi Office đời cũ: đúng loại của đuôi", async () => {
+    expect(await sniff(".doc", ole2)).toBe("application/msword");
+    expect(await sniff(".xls", ole2)).toBe("application/vnd.ms-excel");
+  });
+
+  it("vỏ ZIP với đuôi Office mới: đúng loại của đuôi; đuôi khác giữ nguyên application/zip", async () => {
+    expect(await sniff(".docx", zip)).toBe(DOCX);
+    expect(await sniff(".doc", zip)).toBe("application/zip");
+  });
+});
