@@ -39,7 +39,6 @@ jobs:
 
   build-and-push:
     name: Build & Push (${{ matrix.app }})
-    needs: test
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -104,7 +103,8 @@ jobs:
 
   deploy:
     name: Deploy to server
-    needs: build-and-push
+    # Image build song song với test, nhưng chỉ deploy khi cả hai đều pass
+    needs: [test, build-and-push]
     runs-on: ubuntu-24.04
     environment: production
 
