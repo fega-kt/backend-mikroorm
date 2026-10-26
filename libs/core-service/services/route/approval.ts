@@ -1,9 +1,10 @@
+import { PermissionType } from "@common/base/permission-type.enum";
 import { C403Exception } from "@common/exceptions/exceptions";
 import { ResponseCode } from "@common/exceptions/response-code";
 import { Inject, Injectable } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
 import { Request } from "express";
-import { approvalDelegation, approvalMine, approvalReview } from "./order";
+import { approvalDelegation, approvalMine, approvalReport, approvalReview } from "./order";
 
 const leaf = (path: string, title: string, icon: string, component: string) => ({
   path,
@@ -11,13 +12,14 @@ const leaf = (path: string, title: string, icon: string, component: string) => (
   handle: { keepAlive: false, icon, title },
 });
 
-/** Menu tờ trình cho mọi người dùng: Tờ trình của tôi, Phê duyệt tờ trình, Ủy quyền duyệt */
+/** Menu tờ trình: Tờ trình của tôi, Phê duyệt tờ trình, Ủy quyền duyệt (mọi người dùng) và Báo cáo (theo quyền) */
 @Injectable()
 export class ApprovalRouteService {
   constructor(@Inject(REQUEST) protected readonly request: Request | undefined) {}
 
   getRouteApproval() {
-    if (!this.request?.user) {
+    const currentUser = this.request?.user;
+    if (!currentUser) {
       throw new C403Exception(ResponseCode.PermissionDenied);
     }
 
@@ -73,6 +75,28 @@ export class ApprovalRouteService {
       ],
     };
 
-    return [myRequests, review, delegation, requestPages];
+    // Báo cáo cho cấp quản lý: vào menu cần MenuApprovalReport; phạm vi dữ liệu (toàn hệ thống / phòng ban) do API quyết định
+    const report = "/approval/report/index.tsx";
+    const reportMenu = currentUser.canAccess([PermissionType.MenuApprovalReport])
+      ? {
+          path: "/approval/report",
+          handle: { keepAlive: false, icon: "BarChartOutlined", title: "common.menu.approvalReport", order: approvalReport },
+          children: [
+            leaf("/approval/report/overview", "common.menu.approvalReportOverview", "DashboardOutlined", report),
+            leaf("/approval/report/performance", "common.menu.approvalReportPerformance", "ThunderboltOutlined", report),
+            leaf("/approval/report/backlog", "common.menu.approvalReportBacklog", "HourglassOutlined", report),
+            leaf("/approval/report/request-types", "common.menu.approvalReportRequestTypes", "AppstoreOutlined", report),
+          ].map((route) => ({
+            ...route,
+            handle: {
+              ...route.handle,
+              roles: [PermissionType.MenuApprovalReport],
+              permissions: [PermissionType.ViewApprovalReportAll, PermissionType.ViewApprovalReportDepartment],
+            },
+          })),
+        }
+      : undefined;
+
+    return [myRequests, review, delegation, ...(reportMenu ? [reportMenu] : []), requestPages];
   }
 }

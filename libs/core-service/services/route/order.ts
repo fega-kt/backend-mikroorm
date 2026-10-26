@@ -2,6 +2,7 @@ export const home = 1;
 export const approvalReview = 5;
 export const approvalMine = 6;
 export const approvalDelegation = 7;
+export const approvalReport = 8;
 export const access = 10;
 export const routeNest = 20;
 

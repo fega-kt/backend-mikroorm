@@ -6,6 +6,7 @@ import { ApprovalWorkflowController } from "./approval-workflow";
 import { ApprovalRequestController } from "./approval-request";
 import { ApprovalTaskController } from "./approval-task";
 import { ApprovalDelegationController } from "./approval-delegation";
+import { ApprovalReportController } from "./approval-report";
 import { EmailTemplateController } from "./email-template";
 import { I18nController } from "./i18n";
 
@@ -18,6 +19,7 @@ export {
   ApprovalRequestController,
   ApprovalTaskController,
   ApprovalDelegationController,
+  ApprovalReportController,
   EmailTemplateController,
   I18nController,
 };
@@ -31,6 +33,7 @@ export const appControllers = [
   ApprovalRequestController,
   ApprovalTaskController,
   ApprovalDelegationController,
+  ApprovalReportController,
   EmailTemplateController,
   I18nController,
 ];
