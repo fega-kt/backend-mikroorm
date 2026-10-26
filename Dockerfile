@@ -1,14 +1,25 @@
-FROM node:22-alpine AS builder
+FROM node:22-alpine AS base
 RUN corepack enable
 RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 COPY package.json pnpm-lock.yaml .npmrc ./
+
+# ---
+
+# Chỉ phụ thuộc lockfile: layer node_modules giữ nguyên digest giữa các lần deploy,
+# server chỉ kéo lại layer dist thay vì cả node_modules
+FROM base AS prod-deps
+RUN pnpm install --frozen-lockfile --prod
+
+# ---
+
+FROM base AS builder
 RUN pnpm install --frozen-lockfile
 
 COPY . .
 ARG APP=core
-RUN node_modules/.bin/nest build ${APP} && pnpm prune --prod
+RUN node_modules/.bin/nest build ${APP}
 
 # ---
 
@@ -30,7 +41,7 @@ ENV NODE_ENV=production \
     GIT_BRANCH=$GIT_BRANCH \
     BUILD_TIME=$BUILD_TIME
 
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY package.json .vault.json ./
 
