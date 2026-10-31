@@ -11,6 +11,7 @@ import { ApprovalSigningService } from "../../services/e-signature/approval-sign
 import {
   approvalRequestFilterValidation,
   cancelApprovalRequestValidation,
+  cloneApprovalRequestValidation,
   createApprovalRequestValidation,
   filesArchiveValidation,
   presignRequestFileValidation,
@@ -143,6 +144,15 @@ export class ApprovalRequestController {
   @Post(":id/submit")
   submit(@Param("id") id: string) {
     return this.requestService.submitRequest(id);
+  }
+
+  /** Nhân bản thành bản nháp mới (người trình / người tạo phiếu gốc); trả { id, formChanged } */
+  @Post(":id/clone")
+  clone(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(cloneApprovalRequestValidation)) data: z.infer<typeof cloneApprovalRequestValidation>,
+  ) {
+    return this.requestService.cloneRequest(id, data);
   }
 
   /** Chia sẻ tờ trình (chỉ xem) cho người / nhóm; quyền (người trình, người tạo, người duyệt) kiểm tra trong service */

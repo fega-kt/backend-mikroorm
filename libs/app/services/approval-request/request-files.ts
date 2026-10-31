@@ -114,14 +114,31 @@ export async function copyFilesToNextRound(
   uploadService: UploadService,
   uploadedKeys: string[],
 ) {
-  const owner = em.getReference(UserEntity, request.requester.id);
-  const nextRound = draftRound(request);
   const rows = await loadRequestFiles(em, request.id, request.round);
+  await copyRequestFiles(em, rows, { request, round: draftRound(request), ownerId: request.requester.id }, uploadService, uploadedKeys);
+}
+
+/**
+ * Sao chép tệp gốc của các dòng tệp (không gồm bản chuyển đổi / bản ký) sang thư mục vòng `round` của tờ trình đích
+ * và tạo dòng tệp từ các bản sao, kèm ô ký đặt sẵn (keepSlot lọc ô ký). Dùng khi trả lại (vòng sau, cùng tờ trình)
+ * và khi nhân bản (vòng 1 của tờ trình mới). uploadedKeys nhận các key đã tạo trên R2 để caller xóa nếu transaction lỗi.
+ */
+export async function copyRequestFiles(
+  em: EntityManager,
+  rows: ApprovalRequestFileEntity[],
+  target: { request: ApprovalRequestEntity; round: number; ownerId: string },
+  uploadService: UploadService,
+  uploadedKeys: string[],
+  keepSlot: (slot: ApprovalFileSignSlotEntity) => boolean = () => true,
+) {
+  const { request, round: nextRound } = target;
+  const owner = em.getReference(UserEntity, target.ownerId);
   const slotsByRow = await loadSignSlots(
     em,
     rows.map((row) => row.id),
   );
 
+  const copied: ApprovalRequestFileEntity[] = [];
   for (const row of rows) {
     const file = row.original;
     const folder = buildRequestFileFolder(request.id, nextRound, row.category, request.createdAt);
@@ -161,8 +178,9 @@ export async function copyFilesToNextRound(
       createdBy: owner,
       updatedBy: owner,
     });
+    copied.push(nextRow);
     // Ô ký đặt sẵn đi theo bản sao của tệp sang vòng mới
-    for (const slot of slotsByRow.get(row.id) ?? []) {
+    for (const slot of (slotsByRow.get(row.id) ?? []).filter(keepSlot)) {
       em.create(ApprovalFileSignSlotEntity, {
         requestFile: nextRow,
         nodeId: slot.nodeId,
@@ -174,6 +192,7 @@ export async function copyFilesToNextRound(
       });
     }
   }
+  return copied;
 }
 
 /** Cron của job chuyển PDF chỉ làm bù sau ngần này phút (event đã chuyển ngay) */
