@@ -1040,8 +1040,11 @@ export class ApprovalEngineService {
     return result.data;
   }
 
-  /** Ưu tiên quy trình riêng của phòng ban (gần nhất trong cây), rồi quy trình chung; cùng cấp thì priority lớn hơn */
-  private async pickWorkflowVersion(em: EntityManager, requestTypeId: string, departmentId: string) {
+  /**
+   * Ưu tiên quy trình riêng của phòng ban (gần nhất trong cây), rồi quy trình chung; cùng cấp thì priority lớn hơn.
+   * Public để nhân bản tờ trình biết trước quy trình sẽ chạy khi gửi (lọc ô ký đặt sẵn).
+   */
+  async pickWorkflowVersion(em: EntityManager, requestTypeId: string, departmentId: string) {
     const chain = await new ApproverResolver(em).departmentChain(departmentId);
     const workflows = await em.find(ApprovalWorkflowEntity, {
       requestType: requestTypeId,

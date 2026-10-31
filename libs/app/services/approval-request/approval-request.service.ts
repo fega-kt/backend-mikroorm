@@ -15,6 +15,7 @@ import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import type {
   ApprovalRequestFilterDto,
+  CloneApprovalRequestDto,
   CreateApprovalRequestDto,
   PresignRequestFileDto,
   PreviewFlowDto,
@@ -30,13 +31,22 @@ import { ApprovalWorkflowVersionEntity } from "../../entities/approval-workflow-
 import { CategoryEntity } from "../../entities/category";
 import { RequestTypeEntity, RequestTypeStatus } from "../../entities/request-type";
 import { RequestTypeVersionEntity } from "../../entities/request-type-version";
-import { ensureLatestFormVersion } from "../form/form-version";
+import { ensureLatestFormVersion, sameFormSchema } from "../form/form-version";
 import { ensureLatestTypeVersion } from "../request-type/request-type-version";
 import { buildChange, diffFiles, diffPayload, type FieldChange, type FileChangeItem } from "./request-change-log";
 import { buildRequestFileFolder, isRequestFileKey, RequestFileCategory } from "./request-file.constants";
 import { ApprovalRequestFileEntity } from "../../entities/approval-request-file";
 import { ApprovalFileSignatureEntity } from "../../entities/approval-file-signature";
-import { draftRound, loadRequestFiles, loadSignSlots, setRequestFiles, setSignSlots, type SignSlotInput } from "./request-files";
+import {
+  copyRequestFiles,
+  draftRound,
+  loadRequestFiles,
+  loadSignSlots,
+  setRequestFiles,
+  setSignSlots,
+  type SignSlotInput,
+} from "./request-files";
+import { migratePayload } from "./payload-migration";
 import {
   ARCHIVE_TOKEN_TTL_SECONDS,
   archiveFilename,
@@ -110,6 +120,12 @@ export interface ArchiveTicket {
 }
 
 const archiveTicketKey = (token: string) => `approval:files-archive:${token}`;
+
+/** Tiền tố tiêu đề của phiếu nhân bản (để trước cho dễ thấy khi danh sách cắt bớt tiêu đề dài) */
+const CLONE_TITLE_PREFIX = "[Bản sao] ";
+
+/** Tiêu đề phiếu nhân bản; nhân bản từ một bản sao thì không thêm tiền tố lần nữa */
+const cloneTitle = (title: string) => (title.startsWith(CLONE_TITLE_PREFIX) ? title : `${CLONE_TITLE_PREFIX}${title}`).slice(0, 255);
 
 const LIST_FIELDS = [
   "id",
@@ -267,6 +283,91 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
 
     if (data.submit) await this.engine.submit(request.id, user.id);
     return { id: request.id };
+  }
+
+  /**
+   * Nhân bản tờ trình thành bản nháp mới của người dùng (người trình hoặc người tạo phiếu gốc), như tạo phiếu mới lúc này:
+   * loại tờ trình / form theo phiên bản mới nhất (dữ liệu chuyển theo mã trường), quy trình gắn khi gửi.
+   * Chọn sao chép tài liệu (data.files): tệp gốc của bộ tệp mới nhất được sao chép sang phiếu mới,
+   * kèm ô ký đặt sẵn của các bước còn trong quy trình sẽ chạy; không chọn thì bản nháp mới không có tệp / ô ký.
+   * Không kiểm cấu hình tệp (có thể đã chặt hơn): người dùng sửa ở bản nháp, lưu / gửi mới kiểm.
+   * formChanged: form đã đổi so với phiếu gốc — FE nhắc kiểm tra lại các trường.
+   */
+  async cloneRequest(id: string, data: CloneApprovalRequestDto) {
+    const user = this.getCurrentUser();
+    const source = await this.repo.findOne({ id, deleted: { $ne: true } }, { populate: ["formVersion", "category"] });
+    if (!source) throw new NotFoundException("Request not found");
+    if (source.requester.id !== user.id && source.createdBy?.id !== user.id) {
+      throw new ForbiddenException("Only the requester or creator can clone this request");
+    }
+    const requestType = await this.em.findOne(
+      RequestTypeEntity,
+      { id: source.requestType.id, status: RequestTypeStatus.Published, deleted: { $ne: true } },
+      { populate: ["form", "category"] },
+    );
+    if (!requestType) throw new BadRequestException("Request type is not available");
+
+    // Đơn vị trình của phiếu gốc nếu vẫn trình được, không thì phòng của người dùng
+    const ownId = await this.userDepartmentId();
+    const chain = await new ApproverResolver(this.em).departmentChain(ownId);
+    const departmentId = chain.includes(source.department.id) ? source.department.id : ownId;
+
+    const requestTypeVersion = await ensureLatestTypeVersion(this.em, requestType, this.getDefaultValuesForCreate());
+    const formVersion = await ensureLatestFormVersion(this.em, requestType.form, this.getDefaultValuesForCreate());
+    const formChanged = !sameFormSchema(source.formVersion.formSchema, formVersion.formSchema);
+    const sourcePayload = source.payload ?? {};
+    const payload = ensureTableRowIds(
+      formVersion.formSchema,
+      formChanged ? migratePayload(source.formVersion.formSchema, formVersion.formSchema, sourcePayload) : { ...sourcePayload },
+    );
+    const title = cloneTitle(source.title);
+    const category = requestType.category ?? source.category;
+    const request = this.em.create(ApprovalRequestEntity, {
+      title,
+      requestType,
+      category,
+      requestTypeVersion,
+      formVersion,
+      requester: this.em.getReference(UserEntity, user.id),
+      department: this.em.getReference(DepartmentEntity, departmentId),
+      payload,
+      priority: source.priority,
+      status: ApprovalRequestStatus.Draft,
+      ...this.getDefaultValuesForCreate(),
+    });
+
+    const rows = data.files ? await this.latestRequestFiles(source) : [];
+    const nodeIds = rows.length ? await this.workflowNodeIds(requestType.id, departmentId) : new Set<string>();
+    const uploadedKeys: string[] = [];
+    try {
+      const copied = await copyRequestFiles(
+        this.em,
+        rows,
+        { request, round: draftRound(request), ownerId: user.id },
+        this.uploadService,
+        uploadedKeys,
+        (slot) => nodeIds.has(slot.nodeId),
+      );
+      const files: FileChangeItem[] = copied.map((row) => ({ id: row.original.id, filename: row.original.filename, block: row.category }));
+      const departments = await this.departmentBriefs([departmentId]);
+      this.recordHistory(request, ApprovalHistoryAction.Create, {
+        clonedFrom: { id: source.id, code: source.code ?? null },
+        changes: [
+          buildChange("title", null, title),
+          buildChange("priority", null, source.priority),
+          { field: "category", from: null, to: categoryBrief(category) },
+          { field: "department", from: null, to: departments.get(departmentId) ?? null },
+          ...diffPayload({}, payload),
+        ],
+        ...(files.length ? { files } : {}),
+      });
+      await this.em.flush();
+    } catch (error) {
+      // Không lưu được: xóa các bản sao vừa tạo trên R2
+      await Promise.all(uploadedKeys.map((key) => this.uploadService.deleteObject(key).catch(() => undefined)));
+      throw error;
+    }
+    return { id: request.id, formChanged };
   }
 
   async updateRequest(id: string, data: UpdateApprovalRequestDto) {
@@ -726,6 +827,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         canEdit: editable,
         canSubmit: editable,
         canDelete: isRequester && request.status === ApprovalRequestStatus.Draft,
+        /** Nhân bản thành bản nháp mới (loại tờ trình đã gỡ phát hành thì server báo lỗi khi bấm) */
+        canClone: isRequester || request.createdBy?.id === user.id,
         canCancel: isRequester && (editable || (isPending && !approvedThisRound)),
         canApprove: !!myTask,
         canReject: !!myTask,
@@ -798,6 +901,35 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
   private async draftFileItems(request: ApprovalRequestEntity, block: RequestFileCategory): Promise<FileChangeItem[]> {
     const rows = await loadRequestFiles(this.em, request.id, draftRound(request), block);
     return rows.map((row) => ({ id: row.original.id, filename: row.original.filename, block }));
+  }
+
+  /**
+   * Bộ tệp mới nhất của phiếu để nhân bản: đang soạn / bị trả lại → bộ đang soạn;
+   * còn lại → vòng mới nhất có tệp (phiếu hủy khi đang soạn thì tệp nằm ở vòng round + 1).
+   */
+  private async latestRequestFiles(request: ApprovalRequestEntity) {
+    if ([ApprovalRequestStatus.Draft, ApprovalRequestStatus.Returned].includes(request.status)) {
+      return loadRequestFiles(this.em, request.id, draftRound(request));
+    }
+    const latest = await this.em.findOne(
+      ApprovalRequestFileEntity,
+      { request: request.id },
+      { fields: ["round"], orderBy: { round: "DESC" } },
+    );
+    return latest ? loadRequestFiles(this.em, request.id, latest.round) : [];
+  }
+
+  /** Các bước của quy trình sẽ chạy khi gửi (loại tờ trình + đơn vị trình); chưa có quy trình thì rỗng */
+  private async workflowNodeIds(requestTypeId: string, departmentId: string) {
+    let versionId: string;
+    try {
+      versionId = (await this.engine.pickWorkflowVersion(this.em, requestTypeId, departmentId)).id;
+    } catch (error) {
+      if (error instanceof BadRequestException) return new Set<string>();
+      throw error;
+    }
+    const version = await this.em.findOneOrFail(ApprovalWorkflowVersionEntity, versionId);
+    return new Set(workflowDefinitionSchema.parse(version.definition).nodes.map((node) => node.id));
   }
 
   /** Đặt lại ô ký đặt sẵn của văn bản đang soạn */
