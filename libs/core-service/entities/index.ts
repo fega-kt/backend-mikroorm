@@ -11,6 +11,10 @@ export { AttachmentEntity } from "./attachment";
 export { UserDeviceEntity } from "./user-device";
 export { EmailTemplateEntity } from "./email-template";
 export { SigningCertificateEntity, SigningCertificateStatus } from "./signing-certificate";
+export { WorkShiftEntity, type ShiftSegment } from "./work-shift";
+export { WorkScheduleEntity, WEEK_ANCHOR_DATE } from "./work-schedule";
+export { WorkScheduleAssignmentEntity, WorkTargetType } from "./work-schedule-assignment";
+export { WorkDayOverrideEntity, WorkDayType } from "./work-day-override";
 export type { AppRoute, RouteHandle } from "./route";
 
 import { UserEntity } from "./user";
@@ -26,6 +30,10 @@ import { AttachmentEntity } from "./attachment";
 import { UserDeviceEntity } from "./user-device";
 import { EmailTemplateEntity } from "./email-template";
 import { SigningCertificateEntity } from "./signing-certificate";
+import { WorkShiftEntity } from "./work-shift";
+import { WorkScheduleEntity } from "./work-schedule";
+import { WorkScheduleAssignmentEntity } from "./work-schedule-assignment";
+import { WorkDayOverrideEntity } from "./work-day-override";
 
 export const coreEntities = [
   UserEntity,
@@ -41,4 +49,8 @@ export const coreEntities = [
   UserDeviceEntity,
   EmailTemplateEntity,
   SigningCertificateEntity,
+  WorkShiftEntity,
+  WorkScheduleEntity,
+  WorkScheduleAssignmentEntity,
+  WorkDayOverrideEntity,
 ];

@@ -19,6 +19,13 @@ import { NotificationService } from "./notification";
 import { UploadService, AttachmentService } from "./upload";
 import { SystemMailService } from "./email-template";
 import { DocumentSigningService, ESignClient, OfficeConverter, SigningCertificateService } from "./e-signature";
+import {
+  WorkCalendarService,
+  WorkDayOverrideService,
+  WorkScheduleAssignmentService,
+  WorkScheduleService,
+  WorkShiftService,
+} from "./work-calendar";
 
 export {
   AuthService,
@@ -46,6 +53,11 @@ export {
   ESignClient,
   OfficeConverter,
   SigningCertificateService,
+  WorkShiftService,
+  WorkScheduleService,
+  WorkScheduleAssignmentService,
+  WorkDayOverrideService,
+  WorkCalendarService,
 };
 
 export const coreServices = [
@@ -74,4 +86,9 @@ export const coreServices = [
   ESignClient,
   OfficeConverter,
   SigningCertificateService,
+  WorkShiftService,
+  WorkScheduleService,
+  WorkScheduleAssignmentService,
+  WorkDayOverrideService,
+  WorkCalendarService,
 ];

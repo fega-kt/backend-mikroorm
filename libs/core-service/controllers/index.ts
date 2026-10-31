@@ -11,6 +11,13 @@ import { ActivityLogQueueController } from "./activity-log-queue";
 import { NotificationController } from "./notification";
 import { AttachmentController } from "./upload";
 import { SigningCertificateController } from "./signing-certificate";
+import {
+  WorkCalendarController,
+  WorkDayOverrideController,
+  WorkScheduleAssignmentController,
+  WorkScheduleController,
+  WorkShiftController,
+} from "./work-calendar";
 
 export {
   AuthController,
@@ -26,6 +33,11 @@ export {
   NotificationController,
   AttachmentController,
   SigningCertificateController,
+  WorkShiftController,
+  WorkScheduleController,
+  WorkScheduleAssignmentController,
+  WorkDayOverrideController,
+  WorkCalendarController,
 };
 
 export const coreControllers = [
@@ -42,4 +54,9 @@ export const coreControllers = [
   NotificationController,
   AttachmentController,
   SigningCertificateController,
+  WorkShiftController,
+  WorkScheduleController,
+  WorkScheduleAssignmentController,
+  WorkDayOverrideController,
+  WorkCalendarController,
 ];
