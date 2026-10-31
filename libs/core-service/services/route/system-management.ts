@@ -79,6 +79,34 @@ export class SystemManagementService {
       });
     }
 
+    if (currentUser.canAccess([PermissionType.MenuWorkShift])) {
+      children.push({
+        path: "/system/work-shift",
+        component: "/system/work-shift/index.tsx",
+        handle: {
+          keepAlive: false,
+          icon: "FieldTimeOutlined",
+          title: "common.menu.workShift",
+          roles: [PermissionType.MenuWorkShift],
+          permissions: [],
+        },
+      });
+    }
+
+    if (currentUser.canAccess([PermissionType.MenuWorkCalendar])) {
+      children.push({
+        path: "/system/work-calendar",
+        component: "/system/work-calendar/index.tsx",
+        handle: {
+          keepAlive: false,
+          icon: "CalendarOutlined",
+          title: "common.menu.workCalendar",
+          roles: [PermissionType.MenuWorkCalendar],
+          permissions: [],
+        },
+      });
+    }
+
     const systemManagementRouter = {
       path: "/system",
       handle: {
