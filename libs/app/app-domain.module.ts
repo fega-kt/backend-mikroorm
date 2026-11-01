@@ -7,7 +7,9 @@ import { DepartmentEntity } from "@core-service/entities/department";
 import { EmailTemplateEntity } from "@core-service/entities/email-template";
 import { NotificationEntity } from "@core-service/entities/notification";
 import { PrincipalEntity } from "@core-service/entities/principal";
+import { TranslationEntity } from "@core-service/entities/translation";
 import { UserEntity } from "@core-service/entities/user";
+import { I18nService } from "@core-service/services/i18n/i18n.service";
 import { FileViewController } from "@core-service/controllers/file-view/file-view.controller";
 import { FILE_ACCESS_POLICIES } from "@core-service/services/file-view/file-access-policy";
 import { FileViewService } from "@core-service/services/file-view/file-view.service";
@@ -29,6 +31,7 @@ import { appEntities } from "./entities";
       NotificationEntity,
       PrincipalEntity,
       SigningCertificateEntity,
+      TranslationEntity,
       UserEntity,
     ]),
   ],
@@ -37,6 +40,8 @@ import { appEntities } from "./entities";
     ...appServices,
     // Upload thẳng lên bucket private và đọc tệp private để xem
     UploadService,
+    // FormService đồng bộ bản dịch khi lưu biểu mẫu; API /i18n do core phục vụ
+    I18nService,
     // Ký số văn bản tờ trình: chứng thư + PIN + gọi service ký (dùng chung với core)
     DocumentSigningService,
     ESignClient,

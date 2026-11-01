@@ -9,7 +9,7 @@ import { FormEntity } from "../../entities/form";
 import { FormVersionEntity } from "../../entities/form-version";
 import { RequestTypeEntity } from "../../entities/request-type";
 import type { FormSchema } from "../approval-engine/form-schema";
-import { I18nService } from "../i18n/i18n.service";
+import { I18nService } from "@core-service/services/i18n/i18n.service";
 import { formI18nNamespace, formTranslationSources } from "./form-i18n";
 import { ensureLatestFormVersion, recordFormVersionIfChanged, sameFormSchema } from "./form-version";
 

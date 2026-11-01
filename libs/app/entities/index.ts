@@ -14,14 +14,12 @@ export { ApprovalCounterEntity } from "./approval-counter";
 export { ApprovalRequestFileEntity } from "./approval-request-file";
 export { ApprovalFileSignatureEntity, ApprovalFileSignatureStatus } from "./approval-file-signature";
 export { ApprovalFileSignSlotEntity } from "./approval-file-sign-slot";
-export { TranslationEntity } from "./translation";
 
 import { CategoryEntity } from "./category";
 import { RequestTypeEntity } from "./request-type";
 import { RequestTypeVersionEntity } from "./request-type-version";
 import { FormEntity } from "./form";
 import { FormVersionEntity } from "./form-version";
-import { TranslationEntity } from "./translation";
 import { ApprovalWorkflowEntity } from "./approval-workflow";
 import { ApprovalWorkflowVersionEntity } from "./approval-workflow-version";
 import { ApprovalRequestEntity } from "./approval-request";
@@ -40,7 +38,6 @@ export const appEntities = [
   RequestTypeVersionEntity,
   FormEntity,
   FormVersionEntity,
-  TranslationEntity,
   ApprovalWorkflowEntity,
   ApprovalWorkflowVersionEntity,
   ApprovalRequestEntity,
