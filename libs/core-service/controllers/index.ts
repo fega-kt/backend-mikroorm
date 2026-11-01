@@ -11,6 +11,7 @@ import { ActivityLogQueueController } from "./activity-log-queue";
 import { NotificationController } from "./notification";
 import { AttachmentController } from "./upload";
 import { SigningCertificateController } from "./signing-certificate";
+import { I18nController } from "./i18n";
 import {
   WorkCalendarController,
   WorkDayOverrideController,
@@ -38,6 +39,7 @@ export {
   WorkScheduleAssignmentController,
   WorkDayOverrideController,
   WorkCalendarController,
+  I18nController,
 };
 
 export const coreControllers = [
@@ -59,4 +61,5 @@ export const coreControllers = [
   WorkScheduleAssignmentController,
   WorkDayOverrideController,
   WorkCalendarController,
+  I18nController,
 ];
