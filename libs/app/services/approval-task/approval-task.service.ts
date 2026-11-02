@@ -5,11 +5,40 @@ import { EntityRepository, FilterQuery } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { HttpException, Injectable, Scope } from "@nestjs/common";
 import type { InboxFilterDto } from "../../controllers/approval-task/approval-task.validation";
+import { ApprovalHistoryEntity } from "../../entities/approval-history";
+import { ApprovalRequestEntity } from "../../entities/approval-request";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalAction, ApprovalEngineService } from "../approval-engine/approval-engine.service";
 import { actionableTaskFilter } from "../approval-engine/task-access";
 import { copyFilesToNextRound } from "../approval-request/request-files";
 import { UploadService } from "@core-service/services/upload/upload.service";
+import { UserEntity } from "@core-service/entities/user";
+import {
+  ACTIVITY_ACTIONS,
+  activityKind,
+  buildAvgApprovalTime,
+  type ActedTaskSample,
+  type ActivityKind,
+  type AvgApprovalTimeStats,
+} from "./dashboard-stats";
+
+/** Khối "Hoạt động phê duyệt" chỉ lấy hoạt động trong ngần này ngày */
+const ACTIVITY_WINDOW_DAYS = 30;
+/** Số tờ trình liên quan tối đa xét khi lấy hoạt động (mới nhất trước) */
+const ACTIVITY_REQUEST_CAP = 500;
+
+/** Một dòng ở khối "Hoạt động phê duyệt" */
+export interface ApprovalActivityItem {
+  id: string;
+  kind: ActivityKind;
+  /** null → hệ thống (quá hạn tự duyệt / từ chối) */
+  actor: { id: string; fullName: string } | null;
+  requestId: string;
+  title: string;
+  /** Người nhận khi kind = reassigned */
+  target: { id: string; fullName: string } | null;
+  createdAt: Date;
+}
 
 /** Thẻ "Tôi đã duyệt tháng này" ở trang chủ */
 export interface ApprovedStats {
@@ -157,6 +186,108 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
     ]);
     const decided = approved + rejected + returned;
     return { approved, rejected, returned, rate: decided ? Math.round((approved / decided) * 100) : 0 };
+  }
+
+  /** Các lượt tôi đã xử lý (duyệt / từ chối / trả lại) trong khoảng [from, to), kèm loại tờ trình */
+  private async actedSamples(userId: string, range: DateRange): Promise<ActedTaskSample[]> {
+    const tasks = await this.repo.find(
+      {
+        actedBy: userId,
+        status: { $in: [ApprovalTaskStatus.Approved, ApprovalTaskStatus.Rejected, ApprovalTaskStatus.Returned] },
+        actedAt: { $gte: range.from, $lt: range.to },
+        deleted: { $ne: true },
+        request: { deleted: { $ne: true } },
+      },
+      { fields: ["createdAt", "actedAt", "request.requestType", "request.requestTypeVersion.name", "request.requestTypeVersion.code"] },
+    );
+    return tasks.flatMap((task) =>
+      task.actedAt
+        ? [
+            {
+              requestTypeId: task.request.requestType.id,
+              code: task.request.requestTypeVersion.code,
+              name: task.request.requestTypeVersion.name,
+              createdAt: task.createdAt,
+              actedAt: task.actedAt,
+            },
+          ]
+        : [],
+    );
+  }
+
+  /**
+   * Ô "Thời gian duyệt trung bình" ở trang chủ: các lượt tôi đã xử lý tháng này (giờ Việt Nam), số ngày từ lúc task được giao
+   * tới lúc tôi xử lý, theo từng loại tờ trình, so với tháng trước.
+   */
+  async getAvgApprovalTime(): Promise<AvgApprovalTimeStats> {
+    const userId = this.getCurrentUser().id;
+    const [thisMonth, lastMonth] = await Promise.all([
+      this.actedSamples(userId, monthRangeVn(0)),
+      this.actedSamples(userId, monthRangeVn(-1)),
+    ]);
+    return buildAvgApprovalTime(thisMonth, lastMonth);
+  }
+
+  /**
+   * Khối "Hoạt động phê duyệt" ở trang chủ: gửi / duyệt / từ chối / trả lại / gán lại gần đây (30 ngày) của các tờ trình liên quan tới tôi —
+   * tờ trình tôi gửi, hoặc tôi (hay nhóm / ủy quyền của tôi) là người duyệt. Không bao giờ trả hoạt động của tờ trình tôi không liên quan.
+   */
+  async getRecentActivity(limit = 10): Promise<ApprovalActivityItem[]> {
+    const userId = this.getCurrentUser().id;
+    const em = this.repo.getEntityManager();
+
+    const actionable = await actionableTaskFilter(em, userId);
+    const [involvedTasks, ownRequests] = await Promise.all([
+      this.repo.find(
+        {
+          $or: [{ actedBy: userId }, { approver: { user: userId } }, { originApprover: { user: userId } }, ...actionable],
+          request: { deleted: { $ne: true } },
+        },
+        { fields: ["request"], orderBy: { createdAt: "DESC" }, limit: ACTIVITY_REQUEST_CAP },
+      ),
+      em.find(
+        ApprovalRequestEntity,
+        { requester: userId, deleted: { $ne: true } },
+        { fields: ["id"], orderBy: { updatedAt: "DESC" }, limit: ACTIVITY_REQUEST_CAP },
+      ),
+    ]);
+    const requestIds = [...new Set([...involvedTasks.map((task) => task.request.id), ...ownRequests.map((request) => request.id)])];
+    if (!requestIds.length) return [];
+
+    const since = new Date(Date.now() - ACTIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    // Lấy dư: dòng không hiện (vd hệ thống tự chia lại task nhóm) bị bỏ sau khi lọc
+    const histories = await em.find(
+      ApprovalHistoryEntity,
+      { request: { $in: requestIds, deleted: { $ne: true } }, action: { $in: ACTIVITY_ACTIONS }, createdAt: { $gte: since } },
+      {
+        fields: ["action", "data", "createdAt", "actor.id", "actor.fullName", "request.id", "request.title"],
+        orderBy: { createdAt: "DESC" },
+        limit: limit * 3,
+      },
+    );
+    const shown = histories.flatMap((history) => {
+      const kind = activityKind(history.action, history.data);
+      return kind ? [{ history, kind }] : [];
+    });
+
+    // Gán lại: data.to là id người nhận
+    const recipientIds = [
+      ...new Set(
+        shown.flatMap(({ history, kind }) => (kind === "reassigned" && typeof history.data?.to === "string" ? [history.data.to] : [])),
+      ),
+    ];
+    const recipients = recipientIds.length ? await em.find(UserEntity, { id: { $in: recipientIds } }, { fields: ["id", "fullName"] }) : [];
+    const recipientById = new Map(recipients.map((user) => [user.id, { id: user.id, fullName: user.fullName }]));
+
+    return shown.slice(0, limit).map(({ history, kind }) => ({
+      id: history.id,
+      kind,
+      actor: history.actor ? { id: history.actor.id, fullName: history.actor.fullName } : null,
+      requestId: history.request.id,
+      title: history.request.title,
+      target: typeof history.data?.to === "string" ? (recipientById.get(history.data.to) ?? null) : null,
+      createdAt: history.createdAt,
+    }));
   }
 
   /** Task đang chờ tôi xử lý: tôi giữ, của nhóm tôi đang ở, hoặc tôi được ủy quyền xử lý thay */

@@ -44,6 +44,18 @@ export class ApprovalTaskController {
     return this.taskService.getApprovalRateStats();
   }
 
+  /** Ô "Thời gian duyệt trung bình" ở trang chủ */
+  @Get("stats/avg-approval-time")
+  avgApprovalTime() {
+    return this.taskService.getAvgApprovalTime();
+  }
+
+  /** Khối "Hoạt động phê duyệt" ở trang chủ: hoạt động gần đây của các tờ trình liên quan tới tôi */
+  @Get("activity")
+  activity() {
+    return this.taskService.getRecentActivity();
+  }
+
   @Post("bulk-approve")
   bulkApprove(@Body(new ZodValidationPipe(bulkApproveValidation)) data: z.infer<typeof bulkApproveValidation>) {
     return this.taskService.bulkApprove(data.requestIds, data.comment);
