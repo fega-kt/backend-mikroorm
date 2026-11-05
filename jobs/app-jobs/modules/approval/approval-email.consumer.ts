@@ -31,6 +31,7 @@ const EVENT_MAP: Partial<Record<ApprovalEventType, { template: SystemEmailTempla
   [ApprovalEventType.Notify]: { template: SystemEmailTemplate.Notify, type: NotificationType.APPROVAL_NOTIFY },
   [ApprovalEventType.StepApproved]: { template: SystemEmailTemplate.StepApproved, type: NotificationType.APPROVAL_STEP_APPROVED },
   [ApprovalEventType.Shared]: { template: SystemEmailTemplate.Shared, type: NotificationType.APPROVAL_SHARED },
+  [ApprovalEventType.Commented]: { template: SystemEmailTemplate.Commented, type: NotificationType.APPROVAL_COMMENTED },
 };
 
 const REF_TYPE = "approval_requests";

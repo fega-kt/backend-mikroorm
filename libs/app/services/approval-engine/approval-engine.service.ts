@@ -10,6 +10,7 @@ import { ApprovalCounterEntity } from "../../entities/approval-counter";
 import { ApprovalDelegationMode } from "../../entities/approval-delegation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
+import { ApprovalCommentEntity } from "../../entities/approval-comment";
 import { ApprovalShareEntity } from "../../entities/approval-share";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
@@ -30,6 +31,7 @@ import {
   type WaitNode,
   type WorkflowDefinition,
 } from "./definition.schema";
+import { MAX_COMMENT_DEPTH } from "../approval-request/comment-thread";
 import { draftRound, loadRequestFiles, markDocumentsForConversion } from "../approval-request/request-files";
 import { RequestFileCategory } from "../approval-request/request-file.constants";
 import { buildPayloadValidator, type FormSchema } from "./form-schema";
@@ -118,6 +120,8 @@ const notifyNodeItem = (node: NotifyNode): PendingNotify => ({
 });
 
 const HOUR_MS = 60 * 60 * 1000;
+/** Độ dài tối đa đoạn trích bình luận hiện trong thông báo */
+const COMMENT_EXCERPT = 200;
 /** Chuyển cấp do quá hạn tối đa: lần 1 lên người kế trên, lần 2 (từ phó phòng) lên trưởng phòng */
 const MAX_ESCALATIONS = 2;
 
@@ -391,6 +395,65 @@ export class ApprovalEngineService {
       });
       // Xóa mềm: giữ dấu vết ai chia sẻ cho ai, lúc nào
       Object.assign(share, { deleted: true, updatedBy: this.audit(tx).updatedBy });
+    });
+  }
+
+  /**
+   * Thêm bình luận: ghi bình luận + thông báo trong cùng transaction. Không khóa dòng đơn — bình luận không đổi trạng thái đơn
+   * và không nên phải chờ một bước duyệt / ký số đang giữ khóa. Quyền viết và việc người được nhắc có mặt trong đơn do caller kiểm tra.
+   * Người được nhắc nhận thông báo + email; người trình, người đang giữ task và tác giả bình luận được trả lời chỉ nhận thông báo trong ứng dụng.
+   */
+  async addComment(requestId: string, actorId: string, input: { content: string; parentId?: string; mentionIds: string[] }) {
+    return this.run(actorId, async (tx) => {
+      const request = await tx.em.findOne(ApprovalRequestEntity, { id: requestId, deleted: { $ne: true } });
+      if (!request) throw new NotFoundException("Request not found");
+      if (request.status === ApprovalRequestStatus.Draft) throw new ConflictException("Draft requests cannot be commented on");
+      await tx.em.populate(request, ["requestTypeVersion"]);
+
+      // Bình luận được trả lời là cha trực tiếp (cây nhiều cấp); không trả lời được bình luận đã xóa
+      let replied: ApprovalCommentEntity | undefined;
+      if (input.parentId) {
+        replied =
+          (await tx.em.findOne(ApprovalCommentEntity, { id: input.parentId, request: requestId, deleted: { $ne: true } })) ?? undefined;
+        if (!replied) throw new NotFoundException("Comment not found");
+        // Cấp của bình luận được trả lời = số cha phía trên + 1; ở cấp tối đa thì không trả lời tiếp
+        let level = 1;
+        for (let cursor = replied; cursor.parent; level++) cursor = await tx.em.findOneOrFail(ApprovalCommentEntity, cursor.parent.id);
+        if (level >= MAX_COMMENT_DEPTH) throw new BadRequestException("This comment cannot be replied to any further");
+      }
+
+      const mentions = [...new Set(input.mentionIds)];
+      const comment = tx.em.create(ApprovalCommentEntity, {
+        request,
+        round: request.round,
+        parent: replied,
+        content: input.content,
+        ...this.audit(tx),
+      });
+      comment.mentions.set(mentions.map((id) => tx.em.getReference(UserEntity, id)));
+
+      const holders = (
+        await tx.em.find(
+          ApprovalTaskEntity,
+          { request: requestId, round: request.round, status: ApprovalTaskStatus.Pending },
+          { populate: ["approver"] },
+        )
+      ).map((t) => holderUserId(t));
+      const watchers = [request.requester.id, replied?.createdBy.id, ...holders].filter(
+        (id): id is string => !!id && !mentions.includes(id),
+      );
+      const excerpt = input.content.length > COMMENT_EXCERPT ? `${input.content.slice(0, COMMENT_EXCERPT)}…` : input.content;
+      if (mentions.length) {
+        await this.notify(tx, request, mentions, NotificationType.APPROVAL_COMMENTED, ApprovalEventType.Commented, {
+          message: excerpt,
+          comment: input.content,
+        });
+      }
+      await this.notify(tx, request, watchers, NotificationType.APPROVAL_COMMENTED, ApprovalEventType.Commented, {
+        message: excerpt,
+        email: false,
+      });
+      return comment;
     });
   }
 

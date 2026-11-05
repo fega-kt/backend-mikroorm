@@ -14,6 +14,7 @@ export enum SystemEmailTemplate {
   Escalated = "approval.escalated",
   StepApproved = "approval.step_approved",
   Shared = "approval.shared",
+  Commented = "approval.commented",
   /** Mặc định của bước Thông báo khi không chọn mẫu riêng */
   Notify = "approval.notify",
 }
@@ -135,6 +136,18 @@ export const SYSTEM_EMAIL_TEMPLATES: Record<SystemEmailTemplate, EmailTemplateCo
         "<p>Lời nhắn: {{message}}</p>" +
         REQUEST_DETAILS,
       requestLayout("brand", "✉️", "Tờ trình được chia sẻ với bạn"),
+    ),
+  },
+  [SystemEmailTemplate.Commented]: {
+    code: SystemEmailTemplate.Commented,
+    name: "Được nhắc trong bình luận",
+    subject: "[Phê duyệt] {{actor.name}} nhắc bạn trong tờ trình {{request.code}} – {{request.title}}",
+    body: buildEmailBody(
+      "<p>Xin chào {{recipient.name}},</p>" +
+        "<p>{{actor.name}} đã nhắc đến bạn trong một bình luận ở tờ trình <strong>{{request.code}}</strong> {{request.title}}.</p>" +
+        "<p><strong>Bình luận:</strong> {{comment}}</p>" +
+        REQUEST_DETAILS,
+      requestLayout("brand", "💬", "Bạn được nhắc trong một bình luận"),
     ),
   },
   [SystemEmailTemplate.Notify]: {
