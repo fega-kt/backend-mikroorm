@@ -24,6 +24,7 @@ import type {
 } from "../../controllers/approval-request/approval-request.validation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
+import { ApprovalCommentEntity } from "../../entities/approval-comment";
 import { ApprovalShareEntity } from "../../entities/approval-share";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalWorkflowEntity } from "../../entities/approval-workflow";
@@ -47,6 +48,7 @@ import {
   type SignSlotInput,
 } from "./request-files";
 import { migratePayload } from "./payload-migration";
+import { isRequestParticipant, isRequestSharedWith } from "./request-access";
 import {
   ARCHIVE_TOKEN_TTL_SECONDS,
   archiveFilename,
@@ -487,21 +489,13 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
     return this.list(filter, filter.requesterId ? { requester: filter.requesterId } : {});
   }
 
-  /** Người tham gia: người giữ / người duyệt theo quy trình / người đã xử lý, hoặc đang xử lý được (ủy quyền, thành viên nhóm) */
+  /** Người tham gia của đơn (xem request-access.ts) */
   private isParticipant(tasks: ApprovalTaskEntity[], user: ReturnType<ApprovalRequestService["getCurrentUser"]>, access: TaskAccess) {
-    return tasks.some(
-      (t) => [holderUserId(t), t.originApprover?.user?.id, t.actedBy?.id].includes(user.id) || canActOnTask(t, user.id, access),
-    );
+    return isRequestParticipant(tasks, user.id, access);
   }
 
-  /** Phiếu đã được chia sẻ cho người dùng — trực tiếp hoặc qua nhóm họ đang là thành viên */
-  private async isSharedWith(requestId: string, userId: string, access: TaskAccess) {
-    const count = await this.em.count(ApprovalShareEntity, {
-      request: requestId,
-      deleted: { $ne: true },
-      $or: [{ principal: { user: userId } }, { principal: { $in: [...access.memberOf] } }],
-    });
-    return count > 0;
+  private isSharedWith(requestId: string, userId: string, access: TaskAccess) {
+    return isRequestSharedWith(this.em, requestId, userId, access);
   }
 
   /** Người xem hợp lệ: người tạo, người tham gia duyệt, người được chia sẻ, hoặc có quyền xem mọi tờ trình */
@@ -822,8 +816,11 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
         message: sh.message,
         createdAt: sh.createdAt,
       })),
+      commentCount: await this.em.count(ApprovalCommentEntity, { request: id, deleted: { $ne: true } }),
       permissions: {
         canShare: this.canShareRequest(request, tasks, user, access),
+        /** Viết bình luận: người trình / người tham gia duyệt, trừ phiếu nháp (người chỉ được chia sẻ chỉ xem) */
+        canComment: request.status !== ApprovalRequestStatus.Draft && (isRequester || this.isParticipant(tasks, user, access)),
         canEdit: editable,
         canSubmit: editable,
         canDelete: isRequester && request.status === ApprovalRequestStatus.Draft,

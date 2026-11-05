@@ -6,17 +6,21 @@ import { Body, Controller, Delete, Get, Logger, Param, ParseUUIDPipe, Patch, Pos
 import archiver from "archiver";
 import type { Response } from "express";
 import { z } from "zod";
+import { ApprovalCommentService } from "../../services/approval-request/approval-comment.service";
 import { ApprovalRequestService } from "../../services/approval-request/approval-request.service";
 import { ApprovalSigningService } from "../../services/e-signature/approval-signing.service";
 import {
+  approvalCommentFilterValidation,
   approvalRequestFilterValidation,
   cancelApprovalRequestValidation,
   cloneApprovalRequestValidation,
+  createApprovalCommentValidation,
   createApprovalRequestValidation,
   filesArchiveValidation,
   presignRequestFileValidation,
   previewFlowValidation,
   shareApprovalRequestValidation,
+  updateApprovalCommentValidation,
   updateApprovalRequestValidation,
 } from "./approval-request.validation";
 
@@ -27,6 +31,7 @@ export class ApprovalRequestController {
 
   constructor(
     private readonly requestService: ApprovalRequestService,
+    private readonly commentService: ApprovalCommentService,
     private readonly signingService: ApprovalSigningService,
   ) {}
 
@@ -175,5 +180,36 @@ export class ApprovalRequestController {
     @Body(new ZodValidationPipe(cancelApprovalRequestValidation)) data: z.infer<typeof cancelApprovalRequestValidation>,
   ) {
     return this.requestService.cancelRequest(id, data.comment);
+  }
+
+  /** Bình luận: phân trang theo bình luận gốc kèm phản hồi; quyền xem / viết kiểm tra trong service */
+  @Get(":id/comments")
+  comments(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query(new ZodValidationPipe(approvalCommentFilterValidation)) query: z.infer<typeof approvalCommentFilterValidation>,
+  ) {
+    return this.commentService.list(id, query);
+  }
+
+  @Post(":id/comments")
+  addComment(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(createApprovalCommentValidation)) data: z.infer<typeof createApprovalCommentValidation>,
+  ) {
+    return this.commentService.create(id, data);
+  }
+
+  @Patch(":id/comments/:commentId")
+  updateComment(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("commentId", ParseUUIDPipe) commentId: string,
+    @Body(new ZodValidationPipe(updateApprovalCommentValidation)) data: z.infer<typeof updateApprovalCommentValidation>,
+  ) {
+    return this.commentService.update(id, commentId, data);
+  }
+
+  @Delete(":id/comments/:commentId")
+  removeComment(@Param("id", ParseUUIDPipe) id: string, @Param("commentId", ParseUUIDPipe) commentId: string) {
+    return this.commentService.removeComment(id, commentId);
   }
 }

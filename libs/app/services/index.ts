@@ -4,7 +4,7 @@ import { FormService } from "./form";
 import { HomeReportService } from "./home";
 import { ApprovalEngineService } from "./approval-engine";
 import { ApprovalWorkflowService } from "./approval-workflow";
-import { ApprovalRequestService } from "./approval-request";
+import { ApprovalCommentService, ApprovalRequestService } from "./approval-request";
 import { ApprovalTaskService } from "./approval-task";
 import { ApprovalDelegationService } from "./approval-delegation";
 import { ApprovalReportService } from "./approval-report";
@@ -19,6 +19,7 @@ export {
   ApprovalEngineService,
   ApprovalWorkflowService,
   ApprovalRequestService,
+  ApprovalCommentService,
   ApprovalTaskService,
   ApprovalDelegationService,
   ApprovalReportService,
@@ -35,6 +36,7 @@ export const appServices = [
   ApprovalEngineService,
   ApprovalWorkflowService,
   ApprovalRequestService,
+  ApprovalCommentService,
   ApprovalTaskService,
   ApprovalDelegationService,
   ApprovalReportService,

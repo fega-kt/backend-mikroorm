@@ -11,6 +11,7 @@ import { OutboxService } from "@modules/outbox/outbox.service";
 import type { RabbitMQService } from "@modules/rabbitmq/rabbitmq.service";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { appEntities } from "../../entities";
+import { ApprovalCommentEntity } from "../../entities/approval-comment";
 import { ApprovalDelegationEntity, ApprovalDelegationMode } from "../../entities/approval-delegation";
 import { ApprovalHistoryAction, ApprovalHistoryEntity } from "../../entities/approval-history";
 import { ApprovalPriority, ApprovalRequestEntity, ApprovalRequestStatus } from "../../entities/approval-request";
@@ -1053,6 +1054,42 @@ describe.skipIf(!DB_URL)("approval engine (postgres)", () => {
     await engine.act(rejected, ApprovalAction.Reject, { actorId: U.itHead, comment: "Không" });
     expect((await load(rejected)).status).toBe(ApprovalRequestStatus.Rejected);
     expect(await notified(rejected, NotificationType.APPROVAL_REJECTED)).toEqual([]);
+  });
+
+  describe("comments", () => {
+    const commentNotified = async (id: string) =>
+      (await em().find(NotificationEntity, { refId: id, type: NotificationType.APPROVAL_COMMENTED })).map((n) => n.user.id).sort();
+
+    it("notifies mentioned users and watchers, and keeps replies under the comment they answer", async () => {
+      const id = await createRequest(U.staff, D.it, { days: 1, reason: "Bình luận" });
+      await engine.submit(id, U.staff);
+
+      // itHead (người giữ task) bình luận, nhắc staff2: staff2 (được nhắc) + staff (người trình) nhận; người viết thì không
+      const root = await engine.addComment(id, U.itHead, { content: "Cần bổ sung ngày nghỉ", mentionIds: [U.staff2] });
+      expect(await commentNotified(id)).toEqual([U.staff, U.staff2].sort());
+
+      // staff trả lời: tác giả bình luận gốc (itHead) nhận
+      const reply = await engine.addComment(id, U.staff, { content: "Đã bổ sung", parentId: root.id, mentionIds: [] });
+      expect(await commentNotified(id)).toEqual([U.itHead, U.staff, U.staff2].sort());
+
+      // Phản hồi của phản hồi trỏ đúng bình luận được trả lời (cây nhiều cấp)
+      const nested = await engine.addComment(id, U.itHead, { content: "Ok", parentId: reply.id, mentionIds: [] });
+      const saved = await em().findOneOrFail(ApprovalCommentEntity, nested.id, { populate: ["parent"] });
+      expect(saved.parent?.id).toBe(reply.id);
+
+      // Cấp 3 là cấp cuối: không trả lời tiếp được
+      await expect(engine.addComment(id, U.staff, { content: "Thêm", parentId: nested.id, mentionIds: [] })).rejects.toThrow(/any further/);
+      expect(saved.round).toBe((await load(id)).round);
+    });
+
+    it("rejects comments on drafts and replies to unknown comments", async () => {
+      const draft = await createRequest(U.staff, D.it, { days: 1, reason: "Nháp" });
+      await expect(engine.addComment(draft, U.staff, { content: "Hi", mentionIds: [] })).rejects.toThrow(/Draft/);
+
+      await engine.submit(draft, U.staff);
+      const missing = "00000000-0000-7000-8000-000000000000";
+      await expect(engine.addComment(draft, U.staff, { content: "Hi", parentId: missing, mentionIds: [] })).rejects.toThrow(/not found/i);
+    });
   });
 
   it("writes events to the outbox in the same transaction and relays them later", async () => {

@@ -116,3 +116,27 @@ export const presignRequestFileValidation = z.object({
   size: z.number().int().positive(),
 });
 export type PresignRequestFileDto = z.infer<typeof presignRequestFileValidation>;
+
+/** Bình luận trong tờ trình; `mentionIds`: người được nhắc (phải là người có mặt trong tờ trình) */
+export const createApprovalCommentValidation = z.object({
+  content: z.string().trim().min(1, "Content is required").max(2000),
+  /** Trả lời một bình luận (phản hồi của phản hồi được gom về bình luận gốc) */
+  parentId: z.string().trim().min(1).optional(),
+  mentionIds: z.array(z.string().trim().min(1)).max(20).default([]),
+});
+
+/** Sửa chỉ đổi nội dung: người được nhắc giữ như lúc viết (không gửi thông báo lại) */
+export const updateApprovalCommentValidation = z.object({
+  content: z.string().trim().min(1, "Content is required").max(2000),
+});
+
+/** Phân trang theo bình luận gốc (kèm toàn bộ phản hồi của chúng); `round`: chỉ lấy một vòng duyệt */
+export const approvalCommentFilterValidation = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  round: z.coerce.number().int().min(0).optional(),
+});
+
+export type CreateApprovalCommentDto = z.infer<typeof createApprovalCommentValidation>;
+export type UpdateApprovalCommentDto = z.infer<typeof updateApprovalCommentValidation>;
+export type ApprovalCommentFilterDto = z.infer<typeof approvalCommentFilterValidation>;

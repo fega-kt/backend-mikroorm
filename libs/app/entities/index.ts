@@ -10,6 +10,7 @@ export { ApprovalTaskEntity, ApprovalTaskStatus } from "./approval-task";
 export { ApprovalHistoryEntity, ApprovalHistoryAction } from "./approval-history";
 export { ApprovalDelegationEntity, ApprovalDelegationMode } from "./approval-delegation";
 export { ApprovalShareEntity } from "./approval-share";
+export { ApprovalCommentEntity } from "./approval-comment";
 export { ApprovalCounterEntity } from "./approval-counter";
 export { ApprovalRequestFileEntity } from "./approval-request-file";
 export { ApprovalFileSignatureEntity, ApprovalFileSignatureStatus } from "./approval-file-signature";
@@ -27,6 +28,7 @@ import { ApprovalTaskEntity } from "./approval-task";
 import { ApprovalHistoryEntity } from "./approval-history";
 import { ApprovalDelegationEntity } from "./approval-delegation";
 import { ApprovalShareEntity } from "./approval-share";
+import { ApprovalCommentEntity } from "./approval-comment";
 import { ApprovalCounterEntity } from "./approval-counter";
 import { ApprovalRequestFileEntity } from "./approval-request-file";
 import { ApprovalFileSignatureEntity } from "./approval-file-signature";
@@ -45,6 +47,7 @@ export const appEntities = [
   ApprovalHistoryEntity,
   ApprovalDelegationEntity,
   ApprovalShareEntity,
+  ApprovalCommentEntity,
   ApprovalCounterEntity,
   ApprovalRequestFileEntity,
   ApprovalFileSignatureEntity,

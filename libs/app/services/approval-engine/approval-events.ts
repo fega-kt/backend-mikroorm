@@ -16,6 +16,8 @@ export enum ApprovalEventType {
   StepApproved = "request.step_approved",
   /** Tờ trình được chia sẻ cho người / nhóm */
   Shared = "request.shared",
+  /** Bình luận mới trong tờ trình (email chỉ gửi cho người được nhắc) */
+  Commented = "request.commented",
 }
 
 export interface ApprovalEventMessage {
