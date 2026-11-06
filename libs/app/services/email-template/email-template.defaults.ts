@@ -145,7 +145,7 @@ export const SYSTEM_EMAIL_TEMPLATES: Record<SystemEmailTemplate, EmailTemplateCo
     body: buildEmailBody(
       "<p>Xin chào {{recipient.name}},</p>" +
         "<p>{{actor.name}} đã nhắc đến bạn trong một bình luận ở tờ trình <strong>{{request.code}}</strong> {{request.title}}.</p>" +
-        "<p><strong>Bình luận:</strong> {{comment}}</p>" +
+        "<p><strong>Bình luận:</strong> {{comment.html}}</p>" +
         REQUEST_DETAILS,
       requestLayout("brand", "💬", "Bạn được nhắc trong một bình luận"),
     ),

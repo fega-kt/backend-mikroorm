@@ -1,5 +1,27 @@
+import { escapeHtml } from "@core-service/services/email-template/email-template.render";
 import { ApprovalPriority } from "../../entities/approval-request/approval-request.entity";
 import { FormFieldType, type FormSchema } from "../approval-engine/form-schema";
+
+/** Kiểu cụm @mention trong email (inline vì mail client không đọc được CSS ngoài) */
+const MENTION_STYLE = "color:#1458d6;background:#e8f0fe;border-radius:4px;padding:1px 4px;font-weight:600";
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Nội dung bình luận dạng HTML cho email: escape chữ của người dùng, tô nổi "@Họ tên" của những người được nhắc
+ * (tên dài khớp trước), xuống dòng thành <br>. Dùng cho biến `comment.html`.
+ */
+export function highlightMentions(text: string, names: string[]): string {
+  const escaped = escapeHtml(text);
+  const unique = [...new Set(names.map((name) => name.trim()).filter(Boolean))].sort((a, b) => b.length - a.length);
+  const highlighted = unique.length
+    ? escaped.replace(
+        new RegExp(unique.map((name) => `@${escapeRegExp(escapeHtml(name))}`).join("|"), "g"),
+        (mention) => `<span style="${MENTION_STYLE}">${mention}</span>`,
+      )
+    : escaped;
+  return highlighted.replace(/\r?\n/g, "<br>");
+}
 
 const PRIORITY_LABEL: Record<ApprovalPriority, string> = {
   [ApprovalPriority.Low]: "Thấp",
@@ -61,6 +83,8 @@ export interface RequestVariableInput {
   stepName?: string;
   actorName?: string;
   comment?: string;
+  /** Họ tên những người được nhắc trong bình luận (để tô nổi @tên trong `comment.html`) */
+  mentionNames?: string[];
   message?: string;
 }
 
@@ -77,6 +101,7 @@ export function buildRequestVariables(input: RequestVariableInput): Record<strin
     "step.name": input.stepName ?? "",
     "actor.name": input.actorName ?? "",
     comment: input.comment ?? "",
+    "comment.html": highlightMentions(input.comment ?? "", input.mentionNames ?? []),
     message: input.message ?? "",
   };
   const fields = new Map((input.formSchema ?? []).map((f) => [f.key, f]));

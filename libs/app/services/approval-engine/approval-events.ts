@@ -32,6 +32,8 @@ export interface ApprovalEventMessage {
   actorId?: string;
   nodeName?: string;
   comment?: string;
+  /** Họ tên người được nhắc trong bình luận (để tô nổi @tên trong email) */
+  mentionNames?: string[];
   /** Nội dung tùy chỉnh của node notify */
   message?: string;
   /** Mẫu email của node notify (bỏ trống → mẫu mặc định) */

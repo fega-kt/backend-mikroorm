@@ -444,9 +444,11 @@ export class ApprovalEngineService {
       );
       const excerpt = input.content.length > COMMENT_EXCERPT ? `${input.content.slice(0, COMMENT_EXCERPT)}…` : input.content;
       if (mentions.length) {
+        const mentioned = await tx.em.find(UserEntity, { id: { $in: mentions } }, { fields: ["id", "fullName"] });
         await this.notify(tx, request, mentions, NotificationType.APPROVAL_COMMENTED, ApprovalEventType.Commented, {
           message: excerpt,
           comment: input.content,
+          mentionNames: mentioned.map((u) => u.fullName),
         });
       }
       await this.notify(tx, request, watchers, NotificationType.APPROVAL_COMMENTED, ApprovalEventType.Commented, {
@@ -1255,7 +1257,7 @@ export class ApprovalEngineService {
     request: ApprovalRequestEntity,
     type: ApprovalEventType,
     recipientIds: string[],
-    extra: { nodeName?: string; comment?: string; message?: string; templateCode?: string },
+    extra: { nodeName?: string; comment?: string; mentionNames?: string[]; message?: string; templateCode?: string },
   ) {
     tx.events.push({
       type,
@@ -1282,6 +1284,7 @@ export class ApprovalEngineService {
       node?: WaitNode | NotifyNode;
       nodeName?: string;
       comment?: string;
+      mentionNames?: string[];
       message?: string;
       templateCode?: string;
       inApp?: boolean;
@@ -1313,6 +1316,7 @@ export class ApprovalEngineService {
       this.event(tx, request, eventType, recipients, {
         nodeName,
         comment: extra.comment,
+        mentionNames: extra.mentionNames,
         message: extra.message,
         templateCode: extra.templateCode,
       });

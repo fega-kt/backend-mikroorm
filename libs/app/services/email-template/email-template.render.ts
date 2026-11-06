@@ -1,5 +1,6 @@
 import { BRAND_TEMPLATE_VARIABLES } from "@core-service/services/email-template/core-email.templates";
 import { type TemplateVariable, toSampleVariables } from "@core-service/services/email-template/email-template.render";
+import { highlightMentions } from "./email-template.vars";
 
 export { renderEmail, renderTemplate, usedVariables } from "@core-service/services/email-template/email-template.render";
 export type { TemplateVariable } from "@core-service/services/email-template/email-template.render";
@@ -17,6 +18,8 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: "step.name", sample: "Trưởng phòng" },
   { key: "actor.name", sample: "Lê Văn C" },
   { key: "comment", sample: "Đồng ý, lưu ý bàn giao công việc trước khi nghỉ." },
+  // HTML dựng sẵn (đã escape, @mention tô nổi) — dùng cho bình luận thay cho {{comment}} khi muốn tô nổi người được nhắc
+  { key: "comment.html", sample: highlightMentions("Nhờ @Lê Văn C xem giúp.", ["Lê Văn C"]) },
   { key: "message", sample: "Tờ trình đã được trưởng phòng duyệt." },
   ...BRAND_TEMPLATE_VARIABLES,
 ];
