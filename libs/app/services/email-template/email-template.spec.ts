@@ -12,7 +12,7 @@ import { ApprovalPriority } from "../../entities/approval-request/approval-reque
 import { FormFieldType } from "../approval-engine/form-schema";
 import { SYSTEM_EMAIL_TEMPLATES } from "./email-template.defaults";
 import { renderTemplate, TEMPLATE_VARIABLES, usedVariables } from "./email-template.render";
-import { buildRequestVariables } from "./email-template.vars";
+import { buildRequestVariables, highlightMentions } from "./email-template.vars";
 
 describe("email templates", () => {
   it("replaces variables and escapes values in HTML", () => {
@@ -42,6 +42,28 @@ describe("email templates", () => {
     expect(vars["payload.kind"]).toBe("Phép năm");
     expect(vars["payload.paid"]).toBe("Có");
     expect(vars["payload.dates"]).toBe("20/10/2026 → 22/10/2026");
+  });
+
+  it("highlights mentioned names in the comment and keeps everything else escaped", () => {
+    const html = highlightMentions("Nhờ @Trần Bình <xem> & @An Nguyễn\nCảm ơn", ["An", "An Nguyễn", "Trần Bình"]);
+    expect(html).toContain(">@Trần Bình</span> &lt;xem&gt; &amp; <span");
+    expect(html).toContain(">@An Nguyễn</span><br>Cảm ơn");
+    expect(html.match(/<span /g)).toHaveLength(2);
+    // Không có người được nhắc → chỉ escape, không có thẻ nào
+    expect(highlightMentions("a <b> @x", [])).toBe("a &lt;b&gt; @x");
+  });
+
+  it("inserts only the allow-listed variable as raw HTML", () => {
+    const vars = { "comment.html": "<b>x</b>", comment: "<b>x</b>", "payload.note.html": "<i>y</i>" };
+    expect(renderTemplate("{{comment.html}} {{comment}} {{payload.note.html}}", vars, { html: true })).toBe(
+      "<b>x</b> &lt;b&gt;x&lt;/b&gt; &lt;i&gt;y&lt;/i&gt;",
+    );
+  });
+
+  it("builds comment.html from the comment and mentioned names", () => {
+    const vars = buildRequestVariables({ title: "T", link: "l", comment: "@An ơi", mentionNames: ["An"] });
+    expect(vars["comment.html"]).toContain(">@An</span> ơi");
+    expect(vars.comment).toBe("@An ơi");
   });
 
   it("system templates only use known variables", () => {

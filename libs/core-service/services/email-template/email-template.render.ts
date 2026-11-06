@@ -20,19 +20,25 @@ export interface EmailTemplateBody {
   body: string;
 }
 
-const escapeHtml = (value: string) =>
+export const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+/**
+ * Biến được chèn nguyên văn (không escape) vào nội dung email: giá trị do code dựng sẵn HTML và tự escape phần chữ của người dùng.
+ * Chỉ liệt kê đúng tên ở đây — không suy từ đuôi tên, vì khóa trường biểu mẫu (payload.<khóa>) do người dùng đặt.
+ */
+const RAW_HTML_VARIABLES = new Set(["comment.html"]);
 
 const VARIABLE_PATTERN = /\{\{\s*([\w.]+)\s*\}\}/g;
 
 /**
  * Thay {{biến}} bằng giá trị. `html: true` (nội dung email) thì escape giá trị để dữ liệu người dùng nhập
- * không chèn được HTML. Biến không có giá trị → chuỗi rỗng.
+ * không chèn được HTML (trừ biến trong RAW_HTML_VARIABLES). Biến không có giá trị → chuỗi rỗng.
  */
 export function renderTemplate(text: string, vars: Record<string, string | undefined>, options: { html: boolean }) {
   return text.replace(VARIABLE_PATTERN, (_, key: string) => {
     const value = vars[key] ?? "";
-    return options.html ? escapeHtml(value) : value;
+    return options.html && !RAW_HTML_VARIABLES.has(key) ? escapeHtml(value) : value;
   });
 }
 

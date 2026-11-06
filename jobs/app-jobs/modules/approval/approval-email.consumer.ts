@@ -177,6 +177,7 @@ export class ApprovalEmailConsumer implements OnModuleInit {
       // Việc do hệ thống làm (tự động duyệt / từ chối do quá hạn) không có người thực hiện
       actorName: actor?.fullName ?? (event.actorId ? undefined : SYSTEM_ACTOR_NAME),
       comment: event.comment,
+      mentionNames: event.mentionNames,
       message: event.message,
     });
     return {
