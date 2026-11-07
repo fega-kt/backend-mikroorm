@@ -16,6 +16,7 @@ export { WorkScheduleEntity, WEEK_ANCHOR_DATE } from "./work-schedule";
 export { WorkScheduleAssignmentEntity, WorkTargetType } from "./work-schedule-assignment";
 export { WorkDayOverrideEntity, WorkDayType } from "./work-day-override";
 export { TranslationEntity } from "./translation";
+export { ExportJobEntity, ExportJobStatus, ExportEmailStatus } from "./export-job";
 export type { AppRoute, RouteHandle } from "./route";
 
 import { UserEntity } from "./user";
@@ -36,6 +37,7 @@ import { WorkScheduleEntity } from "./work-schedule";
 import { WorkScheduleAssignmentEntity } from "./work-schedule-assignment";
 import { WorkDayOverrideEntity } from "./work-day-override";
 import { TranslationEntity } from "./translation";
+import { ExportJobEntity } from "./export-job";
 
 export const coreEntities = [
   UserEntity,
@@ -56,4 +58,5 @@ export const coreEntities = [
   WorkScheduleAssignmentEntity,
   WorkDayOverrideEntity,
   TranslationEntity,
+  ExportJobEntity,
 ];

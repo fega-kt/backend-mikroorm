@@ -9,6 +9,9 @@ import { CacheModule } from "@modules/cache/cache.module";
 import { CloudflareKvModule } from "@modules/cloudflare-kv/cloudflare-kv.module";
 import { HealthModule } from "@modules/health/health.module";
 import { CoreServiceJobModule } from "@core-service/core-service-job.module";
+import { coreEntities } from "@core-service/entities";
+import { CORE_EXPORT_DEFINITIONS } from "@core-service/services/export/core-export.definitions";
+import { ExportJobWorkerModule } from "@core-service/services/export/export-job-worker.module";
 import { AttachmentCleanupModule } from "./modules/attachment-cleanup/attachment-cleanup.module";
 import { InactiveReminderModule } from "./modules/inactive-reminder/inactive-reminder.module";
 import { PdfPreviewModule } from "./modules/pdf-preview/pdf-preview.module";
@@ -27,6 +30,8 @@ import { PdfPreviewModule } from "./modules/pdf-preview/pdf-preview.module";
     InactiveReminderModule,
     AttachmentCleanupModule,
     PdfPreviewModule,
+    // Xuất Excel chạy nền các danh sách của core (người dùng, phòng ban, nhóm, vai trò, nhật ký, hàng đợi mail)
+    ExportJobWorkerModule.register({ definitions: CORE_EXPORT_DEFINITIONS, entities: coreEntities }),
   ],
 })
 export class CoreJobAppModule {}

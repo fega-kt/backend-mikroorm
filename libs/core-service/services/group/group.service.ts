@@ -1,6 +1,6 @@
 import { BaseService } from "@common/base/base.service";
 import { LIST_CACHE, LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
-import { EntityManager, EntityRepository, FilterQuery } from "@mikro-orm/core";
+import { EntityManager, EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { Injectable, NotFoundException, Scope } from "@nestjs/common";
 import z from "zod";
@@ -11,6 +11,7 @@ import { UserEntity } from "../../entities/user";
 import { ActivityLogService } from "../activity-log/activity-log.service";
 import { LogData, sortLogRefs } from "../activity-log/activity-log.util";
 import { createGroupValidation, updateGroupValidation } from "../../controllers/group/group.validation";
+import { buildGroupListWhere } from "./group-list-filter";
 
 @Injectable({ scope: Scope.REQUEST })
 export class GroupService extends BaseService<GroupEntity> {
@@ -145,16 +146,7 @@ export class GroupService extends BaseService<GroupEntity> {
   }
 
   private async loadList(page: number, limit: number, keyword?: string, name?: string, description?: string) {
-    const filter: FilterQuery<GroupEntity> = { deleted: { $ne: true } };
-    if (keyword) {
-      filter.$or = [{ name: { $ilike: `%${keyword}%` } }, { description: { $ilike: `%${keyword}%` } }];
-    }
-    if (name) {
-      filter.name = { $ilike: `%${name}%` };
-    }
-    if (description) {
-      filter.description = { $ilike: `%${description}%` };
-    }
+    const filter = buildGroupListWhere({ keyword, name, description });
 
     const { data, total } = await this.paginate(filter, {
       limit,

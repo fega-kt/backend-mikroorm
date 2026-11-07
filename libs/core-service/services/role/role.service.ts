@@ -1,6 +1,5 @@
 import { BaseService } from "@common/base/base.service";
 import { LIST_CACHE_TTL } from "@common/constants/list-cache.constant";
-import { FilterQuery } from "@mikro-orm/core";
 import { EntityRepository } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, Injectable, NotFoundException, Scope } from "@nestjs/common";
@@ -12,6 +11,7 @@ import { ActivityLogService } from "../activity-log/activity-log.service";
 import { AuthCacheKey } from "../auth/auth.constants";
 import { LogData, sortLogRefs } from "../activity-log/activity-log.util";
 import { createRoleValidation, updateRoleValidation } from "../../controllers/role/role.validation";
+import { buildRoleListWhere } from "./role-list-filter";
 
 @Injectable({ scope: Scope.REQUEST })
 export class RoleService extends BaseService<RoleEntity> {
@@ -74,10 +74,7 @@ export class RoleService extends BaseService<RoleEntity> {
   }
 
   private async loadList(page: number, limit: number, keyword?: string) {
-    const filter: FilterQuery<RoleEntity> = { deleted: { $ne: true } };
-    if (keyword) {
-      filter.name = { $ilike: `%${keyword}%` };
-    }
+    const filter = buildRoleListWhere({ keyword });
 
     const { data, total } = await this.paginate(filter, {
       limit,

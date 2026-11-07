@@ -17,6 +17,7 @@ import { UserEntity } from "../../entities/user";
 import { ActivityLogService } from "../activity-log/activity-log.service";
 import { LogData, toLogRef } from "../activity-log/activity-log.util";
 import { DEPARTMENT_DETAIL_FIELDS, DEPARTMENT_DETAIL_POPULATE, DepartmentDetail, DepartmentParent } from "./department.types";
+import { buildDepartmentListWhere } from "./department-list-filter";
 
 @Injectable({ scope: Scope.REQUEST })
 export class DepartmentService extends BaseService<DepartmentEntity> {
@@ -162,20 +163,8 @@ export class DepartmentService extends BaseService<DepartmentEntity> {
     return this.cachedList("active-tree", params, () => this.loadActiveTree(params));
   }
 
-  private async loadList({ page, limit, keyword, name, code, status }: DepartmentListFilterDto & { page: number; limit: number }) {
-    const filter: FilterQuery<DepartmentEntity> = { deleted: { $ne: true } };
-    if (keyword) {
-      filter.$or = [{ name: { $ilike: `%${keyword}%` } }, { code: { $ilike: `%${keyword}%` } }];
-    }
-    if (name) {
-      filter.name = { $ilike: `%${name}%` };
-    }
-    if (code) {
-      filter.code = { $ilike: `%${code}%` };
-    }
-    if (status !== undefined) {
-      filter.status = status;
-    }
+  private async loadList({ page, limit, ...rest }: DepartmentListFilterDto & { page: number; limit: number }) {
+    const filter = buildDepartmentListWhere(rest);
 
     const { data, total } = await this.paginate(filter, {
       limit,

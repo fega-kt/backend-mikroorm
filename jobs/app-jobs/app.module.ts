@@ -9,6 +9,7 @@ import { CacheModule } from "@modules/cache/cache.module";
 import { CloudflareKvModule } from "@modules/cloudflare-kv/cloudflare-kv.module";
 import { HealthModule } from "@modules/health/health.module";
 import { ApprovalJobModule } from "./modules/approval/approval-job.module";
+import { ExportJobModule } from "./modules/export/export-job.module";
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ApprovalJobModule } from "./modules/approval/approval-job.module";
     HealthModule,
     LoggerModule.forRoot("be-app-job"),
     ApprovalJobModule,
+    ExportJobModule,
   ],
 })
 export class AppJobAppModule {}

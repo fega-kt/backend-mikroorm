@@ -1,11 +1,12 @@
 import { SYSTEM_USER_ID } from "@common/constants/system.constant";
-import { FilterQuery, MikroORM } from "@mikro-orm/core";
+import { MikroORM } from "@mikro-orm/core";
 import { RABBITMQ_EXCHANGE, RABBITMQ_QUEUES } from "@modules/rabbitmq/rabbitmq.constants";
 import { RabbitMQService } from "@modules/rabbitmq/rabbitmq.service";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { ActivityLogQueueEntity, ActivityLogQueueStatus } from "../../entities/activity-log-queue";
 import { NotificationType } from "../../entities/notification";
 import { UserEntity } from "../../entities/user";
+import { buildActivityLogQueueWhere } from "./activity-log-queue-filter";
 
 /** Email phê duyệt gửi lại qua queue approval.email (consumer nhận message có queueId → gửi đúng một người) */
 const APPROVAL_EMAIL_TYPES = [
@@ -109,14 +110,7 @@ export class ActivityLogQueueService {
   async findAll(filter: ActivityLogQueueFilter) {
     const { page, limit } = filter;
     const em = this.orm.em.fork();
-    const where: FilterQuery<ActivityLogQueueEntity> = { deleted: { $ne: true } };
-    if (filter.status) where.status = filter.status;
-    if (filter.type) where.type = filter.type;
-    if (filter.refId) where.refId = filter.refId;
-    if (filter.keyword) {
-      const like = `%${filter.keyword.replace(/[%_\\]/g, "\\$&")}%`;
-      where.$or = [{ recipient: { $ilike: like } }, { subject: { $ilike: like } }];
-    }
+    const where = buildActivityLogQueueWhere(filter);
     const [items, total] = await em.findAndCount(ActivityLogQueueEntity, where, {
       orderBy: { createdAt: "DESC" },
       limit,

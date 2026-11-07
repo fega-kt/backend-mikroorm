@@ -10,6 +10,8 @@ export enum CoreEmailTemplate {
   AccountCreated = "auth.account_created",
   PasswordChanged = "auth.password_changed",
   InactiveReminder = "system.inactive_reminder",
+  ExportReady = "system.export_ready",
+  ExportFailed = "system.export_failed",
 }
 
 /** Biến có ở mọi email (tự điền) — giá trị lấy từ env (APP_NAME, FRONTEND_URL, APP_LOGO_URL) */
@@ -32,7 +34,16 @@ export const CORE_TEMPLATE_VARIABLES: Record<EmailTemplateCategory.Auth | EmailT
     { key: "client.ip", sample: "203.113.10.25" },
     { key: "client.device", sample: "Chrome · Windows" },
   ],
-  [EmailTemplateCategory.System]: [...USER_VARIABLES, { key: "inactive.days", sample: "30" }],
+  [EmailTemplateCategory.System]: [
+    ...USER_VARIABLES,
+    { key: "inactive.days", sample: "30" },
+    { key: "export.name", sample: "Tờ-trình-của-tôi-20261107-1530.zip" },
+    { key: "export.rows", sample: "120.000" },
+    { key: "export.expireDays", sample: "7" },
+    { key: "export.note", sample: "File được đính kèm trong email này." },
+    { key: "export.error", sample: "Quá thời gian xử lý" },
+    { key: "export.link", sample: "https://app.example.com/export-history" },
+  ],
 };
 
 /** Biến bắt buộc phải còn trong mẫu (tiêu đề hoặc nội dung) — thiếu thì email mất ý nghĩa */
@@ -133,6 +144,26 @@ export const CORE_EMAIL_TEMPLATES: Record<CoreEmailTemplate, EmailTemplateConten
       `${GREETING}<p>Bạn chưa đăng nhập trong <strong>{{inactive.days}} ngày</strong> qua. Có thể có tờ trình hoặc công việc đang chờ bạn xử lý.</p>`,
       { icon: "👋", title: "Lâu rồi không gặp!", button: { label: "Mở {{app.name}}", link: "{{app.link}}" } },
     ),
+  },
+  [CoreEmailTemplate.ExportReady]: {
+    code: CoreEmailTemplate.ExportReady,
+    name: "File xuất Excel đã sẵn sàng",
+    subject: "File xuất đã sẵn sàng: {{export.name}}",
+    body: buildEmailBody(
+      `${GREETING}<p>File <strong>{{export.name}}</strong> ({{export.rows}} dòng) đã được tạo xong.</p><p>{{export.note}}</p><p>File được giữ {{export.expireDays}} ngày kể từ lúc tạo.</p>`,
+      { tone: "success", icon: "✓", title: "File xuất đã sẵn sàng", button: { label: "Mở lịch sử xuất", link: "{{export.link}}" } },
+    ),
+  },
+  [CoreEmailTemplate.ExportFailed]: {
+    code: CoreEmailTemplate.ExportFailed,
+    name: "Xuất file Excel không thành công",
+    subject: "Xuất file không thành công: {{export.name}}",
+    body: buildEmailBody(`${GREETING}<p>Lượt xuất <strong>{{export.name}}</strong> không hoàn thành.</p><p>Lý do: {{export.error}}</p>`, {
+      tone: "danger",
+      icon: "!",
+      title: "Xuất file không thành công",
+      button: { label: "Mở lịch sử xuất", link: "{{export.link}}" },
+    }),
   },
 };
 

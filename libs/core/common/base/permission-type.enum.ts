@@ -147,6 +147,30 @@ export enum PermissionType {
   /** gán lại người duyệt của bước đang chờ (vd: người duyệt nghỉ việc) */
   ReassignApprovalTask = "permission:approval-task:reassign",
 
+  /** xuất Excel danh sách người dùng */
+  ExportUser = "permission:user:export",
+
+  /** xuất Excel danh sách vai trò */
+  ExportRole = "permission:role:export",
+
+  /** xuất Excel danh sách phòng ban */
+  ExportDepartment = "permission:department:export",
+
+  /** xuất Excel danh sách nhóm */
+  ExportGroup = "permission:group:export",
+
+  /** xuất Excel nhật ký hoạt động (phạm vi theo quyền xem log của người xuất) */
+  ExportActivityLog = "permission:activity-log:export",
+
+  /** xuất Excel hàng đợi gửi mail */
+  ExportActivityLogQueue = "permission:activity-log-queue:export",
+
+  /**
+   * xuất Excel MỌI danh sách của luồng phê duyệt: tờ trình của tôi, hộp chờ duyệt, ủy quyền, và tất cả tờ trình
+   * (danh sách "tất cả" cần thêm quyền vào menu tất cả đơn, tab "tất cả" của ủy quyền cần thêm quyền quản lý ủy quyền)
+   */
+  ExportApproval = "permission:approval:export",
+
   /** tạo ủy quyền hộ người khác (vd: HR tạo ủy quyền giám đốc → phó giám đốc), xem / sửa / xóa mọi ủy quyền */
   ManageApprovalDelegation = "permission:approval-delegation:manage",
 

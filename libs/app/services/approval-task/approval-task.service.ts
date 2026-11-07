@@ -10,6 +10,7 @@ import { ApprovalRequestEntity } from "../../entities/approval-request";
 import { ApprovalTaskEntity, ApprovalTaskStatus } from "../../entities/approval-task";
 import { ApprovalAction, ApprovalEngineService } from "../approval-engine/approval-engine.service";
 import { actionableTaskFilter } from "../approval-engine/task-access";
+import { buildInboxWhere, pendingTaskWhere } from "./inbox-filter";
 import { copyFilesToNextRound } from "../approval-request/request-files";
 import { UploadService } from "@core-service/services/upload/upload.service";
 import { UserEntity } from "@core-service/entities/user";
@@ -78,17 +79,8 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
   /** Đơn chờ tôi duyệt / tôi đã xử lý */
   async getInbox(filter: InboxFilterDto) {
     const userId = this.getCurrentUser().id;
-    const { page, limit, tab, requestTypeId, search } = filter;
-    const pendingMine = await this.pendingFilter(userId);
-    const byTab: Record<typeof tab, FilterQuery<ApprovalTaskEntity>> = {
-      pending: pendingMine,
-      done: { actedBy: userId, status: { $ne: ApprovalTaskStatus.Pending } },
-      all: { $or: [pendingMine, { approver: { user: userId } }, { actedBy: userId }] },
-    };
-    const requestWhere: Record<string, unknown> = { deleted: { $ne: true } };
-    if (requestTypeId) requestWhere.requestType = requestTypeId;
-    if (search) requestWhere.$or = [{ title: { $ilike: `%${search}%` } }, { code: { $ilike: `%${search}%` } }];
-    const where: FilterQuery<ApprovalTaskEntity> = { $and: [byTab[tab], { request: requestWhere }] };
+    const { page, limit, tab } = filter;
+    const where = await buildInboxWhere(this.repo.getEntityManager(), filter, userId);
 
     const [tasks, total] = await this.repo.findAndCount(where, {
       populate: [
@@ -292,8 +284,7 @@ export class ApprovalTaskService extends BaseService<ApprovalTaskEntity> {
 
   /** Task đang chờ tôi xử lý: tôi giữ, của nhóm tôi đang ở, hoặc tôi được ủy quyền xử lý thay */
   private async pendingFilter(userId: string): Promise<FilterQuery<ApprovalTaskEntity>> {
-    const conditions = await actionableTaskFilter(this.repo.getEntityManager(), userId);
-    return { status: ApprovalTaskStatus.Pending, $or: conditions };
+    return pendingTaskWhere(this.repo.getEntityManager(), userId);
   }
 
   async act(requestId: string, action: ApprovalAction, comment?: string) {

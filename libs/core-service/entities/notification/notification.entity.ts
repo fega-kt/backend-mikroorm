@@ -26,6 +26,10 @@ export enum NotificationType {
   APPROVAL_STEP_APPROVED = "APPROVAL_STEP_APPROVED",
   APPROVAL_SHARED = "APPROVAL_SHARED",
   APPROVAL_COMMENTED = "APPROVAL_COMMENTED",
+  /** File xuất Excel chạy nền đã xong (data.name, data.count; refType export_jobs) */
+  EXPORT_READY = "EXPORT_READY",
+  /** Xuất Excel chạy nền không thành công */
+  EXPORT_FAILED = "EXPORT_FAILED",
 }
 
 @Entity({ tableName: "notifications" })
