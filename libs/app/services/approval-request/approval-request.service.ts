@@ -49,6 +49,7 @@ import {
 } from "./request-files";
 import { migratePayload } from "./payload-migration";
 import { isRequestParticipant, isRequestSharedWith } from "./request-access";
+import { allRequestsScope, buildRequestListWhere, myRequestsScope } from "./request-list-filter";
 import {
   ARCHIVE_TOKEN_TTL_SECONDS,
   archiveFilename,
@@ -482,11 +483,11 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
   }
 
   async getMyRequests(filter: ApprovalRequestFilterDto) {
-    return this.list(filter, { requester: this.getCurrentUser().id });
+    return this.list(filter, myRequestsScope(this.getCurrentUser().id));
   }
 
   async getAllRequests(filter: ApprovalRequestFilterDto) {
-    return this.list(filter, filter.requesterId ? { requester: filter.requesterId } : {});
+    return this.list(filter, allRequestsScope(filter));
   }
 
   /** Người tham gia của đơn (xem request-access.ts) */
@@ -843,12 +844,8 @@ export class ApprovalRequestService extends BaseService<ApprovalRequestEntity> {
   /* ================= HELPERS ================= */
 
   private async list(filter: ApprovalRequestFilterDto, base: FilterQuery<ApprovalRequestEntity>) {
-    const { page, limit, status, statuses, requestTypeId, search } = filter;
-    const where: FilterQuery<ApprovalRequestEntity> = { ...(base as object), deleted: { $ne: true } };
-    if (status) where.status = status;
-    else if (statuses?.length) where.status = { $in: statuses };
-    if (requestTypeId) where.requestType = requestTypeId;
-    if (search) where.$or = [{ title: { $ilike: `%${search}%` } }, { code: { $ilike: `%${search}%` } }];
+    const { page, limit } = filter;
+    const where = buildRequestListWhere(base, filter);
     const result = await this.paginate(where, {
       page,
       limit,

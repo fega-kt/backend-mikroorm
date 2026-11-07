@@ -1,4 +1,4 @@
-import { EntityData, EntityManager, EntityRepository, FilterQuery, serialize } from "@mikro-orm/core";
+import { EntityData, EntityManager, EntityRepository, serialize } from "@mikro-orm/core";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Scope } from "@nestjs/common";
 import { isAuthApiError } from "@supabase/supabase-js";
@@ -25,6 +25,7 @@ import {
   updateUserValidation,
   UserListFilterDto,
 } from "../../controllers/user/user.validation";
+import { buildUserListWhere } from "./user-list-filter";
 
 @Injectable({ scope: Scope.REQUEST })
 export class UserService extends BaseService<UserEntity> {
@@ -113,20 +114,8 @@ export class UserService extends BaseService<UserEntity> {
     return this.cachedList("page", params, () => this.loadList(params));
   }
 
-  private async loadList({ page, limit, keyword, fullName, phoneNumber, isActive }: UserListFilterDto & { page: number; limit: number }) {
-    const filter: FilterQuery<UserEntity> = { deleted: { $ne: true } };
-    if (keyword) {
-      filter.$or = [{ fullName: { $ilike: `%${keyword}%` } }, { loginName: { $ilike: `%${keyword}%` } }];
-    }
-    if (fullName) {
-      filter.fullName = { $ilike: `%${fullName}%` };
-    }
-    if (phoneNumber) {
-      filter.phoneNumber = { $ilike: `%${phoneNumber}%` };
-    }
-    if (isActive !== undefined) {
-      filter.isActive = isActive ? true : { $ne: true };
-    }
+  private async loadList({ page, limit, ...rest }: UserListFilterDto & { page: number; limit: number }) {
+    const filter = buildUserListWhere(rest);
 
     const { data, total } = await this.paginate(filter, {
       limit,

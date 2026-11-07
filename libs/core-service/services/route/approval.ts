@@ -75,6 +75,13 @@ export class ApprovalRouteService {
       ],
     };
 
+    // Lịch sử xuất Excel chạy nền (dữ liệu lớn) — trang ẩn cho mọi người dùng, mở từ thông báo / nút xuất; mỗi người chỉ thấy file của mình
+    const exportHistory = {
+      path: "/export-history",
+      component: "/export-history/index.tsx",
+      handle: { keepAlive: false, hideInMenu: true, title: "common.menu.exportHistory" },
+    };
+
     // Báo cáo cho cấp quản lý: vào menu cần MenuApprovalReport; phạm vi dữ liệu (toàn hệ thống / phòng ban) do API quyết định
     const report = "/approval/report/index.tsx";
     const reportMenu = currentUser.canAccess([PermissionType.MenuApprovalReport])
@@ -97,6 +104,6 @@ export class ApprovalRouteService {
         }
       : undefined;
 
-    return [myRequests, review, delegation, ...(reportMenu ? [reportMenu] : []), requestPages];
+    return [myRequests, review, delegation, ...(reportMenu ? [reportMenu] : []), requestPages, exportHistory];
   }
 }

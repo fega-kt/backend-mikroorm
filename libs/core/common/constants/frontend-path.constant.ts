@@ -4,6 +4,8 @@ import { ENV } from "@config/env.config";
 export enum FrontendPath {
   /** Chi tiết tờ trình: /approval/requests/:id */
   ApprovalRequests = "/approval/requests",
+  /** Lịch sử xuất Excel chạy nền: /export-history */
+  ExportHistory = "/export-history",
 }
 
 /** Link đầy đủ tới trang FE: frontendUrl(FrontendPath.ApprovalRequests, id) → https://app/approval/requests/<id> */

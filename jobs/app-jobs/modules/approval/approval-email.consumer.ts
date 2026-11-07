@@ -11,6 +11,7 @@ import { ActivityLogQueueStatus } from "@core-service/entities/activity-log-queu
 import { AppSettingEntity, AppSettingType } from "@core-service/entities/app-setting";
 import { NotificationType } from "@core-service/entities/notification";
 import { UserEntity } from "@core-service/entities/user";
+import { recipientAddress } from "@core-service/services/email-template/recipient-address";
 import { ActivityLogQueueService } from "@core-service/services/activity-log-queue/activity-log-queue.service";
 import { MikroORM } from "@mikro-orm/core";
 import { RABBITMQ_QUEUES } from "@modules/rabbitmq/rabbitmq.constants";
@@ -42,6 +43,8 @@ const RETRY_DELAYS_MS = [2_000, 10_000];
 /** Message từ engine (nhiều người nhận) hoặc từ "Gửi lại" ở hàng đợi gửi mail (có queueId, một người nhận) */
 type EmailMessage = ApprovalEventMessage & { queueId?: string; userId?: string };
 
+export { recipientAddress };
+
 type Recipient = Pick<UserEntity, "id" | "fullName" | "workEmail" | "loginName">;
 
 interface EmailContext {
@@ -50,16 +53,6 @@ interface EmailContext {
   users: Map<string, Recipient>;
   /** Setting WORK_EMAIL_FALLBACK_TO_LOGIN_NAME: người chưa có email công việc thì gửi qua email đăng nhập */
   fallbackToLoginName: boolean;
-}
-
-const asEmail = (value?: string | null) => {
-  const email = value?.trim();
-  return email?.includes("@") ? email : undefined;
-};
-
-/** Địa chỉ nhận mail công việc: email công việc; chỉ khi bật setting mới dùng email đăng nhập cho người chưa có */
-export function recipientAddress(user: Pick<Recipient, "workEmail" | "loginName">, fallbackToLoginName: boolean) {
-  return asEmail(user.workEmail) ?? (fallbackToLoginName ? asEmail(user.loginName) : undefined);
 }
 
 class SendError extends Error {

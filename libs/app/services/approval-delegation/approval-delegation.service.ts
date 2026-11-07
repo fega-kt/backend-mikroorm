@@ -1,7 +1,8 @@
 import { BaseService } from "@common/base/base.service";
 import { PermissionType } from "@common/base/permission-type.enum";
 import { UserEntity } from "@core-service/entities/user";
-import { EntityRepository, FilterQuery, serialize } from "@mikro-orm/core";
+import { EntityRepository, serialize } from "@mikro-orm/core";
+import { buildDelegationWhere } from "./delegation-filter";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Scope } from "@nestjs/common";
 import type {
@@ -29,13 +30,8 @@ export class ApprovalDelegationService extends BaseService<ApprovalDelegationEnt
 
   async getDelegations(filter: ApprovalDelegationFilterDto) {
     const userId = this.getCurrentUser().id;
-    const { page, limit, tab, activeOnly } = filter;
-    const where: FilterQuery<ApprovalDelegationEntity> = { deleted: { $ne: true } };
-    if (tab === "all") {
-      if (!this.canManage()) throw new ForbiddenException("You cannot view all delegations");
-    } else if (tab === "mine") where.fromUser = userId;
-    else where.toUser = userId;
-    if (activeOnly) where.endAt = { $gte: new Date() };
+    const { page, limit } = filter;
+    const where = buildDelegationWhere(filter, userId, this.canManage());
 
     const result = await this.paginate(where, {
       page,
