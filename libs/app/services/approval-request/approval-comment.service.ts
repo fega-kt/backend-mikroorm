@@ -83,7 +83,8 @@ export class ApprovalCommentService extends BaseService<ApprovalCommentEntity> {
     if (filter.round !== undefined) where.round = filter.round;
     const [roots, total] = await this.em.findAndCount(ApprovalCommentEntity, where, {
       populate: ["createdBy", "mentions"],
-      orderBy: { createdAt: "ASC", id: "ASC" },
+      // Bình luận gốc: mới nhất lên đầu (phân trang theo thứ tự này); phản hồi bên dưới vẫn cũ trước, mới sau
+      orderBy: { createdAt: "DESC", id: "DESC" },
       limit: filter.limit,
       offset: (filter.page - 1) * filter.limit,
     });
