@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { dropEmptyLabelLines } from "./email-template.render";
+import { CORE_EMAIL_TEMPLATES, CoreEmailTemplate } from "./core-email.templates";
+import { dropEmptyLabelLines, renderEmail } from "./email-template.render";
+
+describe("inactive reminder email template", () => {
+  const vars = { "user.name": "An", "user.email": "an@x.vn", "inactive.days": "10" };
+
+  it("tells the user how many days are left before the account is locked", () => {
+    const { html } = renderEmail(CORE_EMAIL_TEMPLATES[CoreEmailTemplate.InactiveReminder], { ...vars, "lock.daysLeft": "23" });
+    expect(html).toContain("10 ngày");
+    expect(html).toContain("sẽ bị khóa sau 23 ngày nữa");
+  });
+});
 
 describe("dropEmptyLabelLines", () => {
   it("drops a paragraph that is only a label when its variable is empty", () => {

@@ -2,6 +2,9 @@ import { ENV } from "@config/env.config";
 import { Injectable } from "@nestjs/common";
 import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
 
+/** ~100 năm — Supabase không có ban vô thời hạn, chỉ nhận số giờ */
+const PERMANENT_BAN_DURATION = "876000h";
+
 @Injectable()
 export class SupabaseService {
   private readonly admin: SupabaseClient;
@@ -53,6 +56,15 @@ export class SupabaseService {
   async updateUserPassword(userId: string, password: string): Promise<void> {
     const { error } = await this.admin.auth.admin.updateUserById(userId, { password });
     if (error) throw error;
+  }
+
+  /**
+   * Ban / gỡ ban tài khoản Supabase. Ban "vĩnh viễn" (Supabase chỉ nhận số giờ): từ chối đăng nhập và refresh token
+   * cho tới khi gỡ ban. Idempotent; tài khoản không còn ở Supabase thì bỏ qua (không có gì để chặn).
+   */
+  async setBanned(authId: string, banned: boolean): Promise<void> {
+    const { error } = await this.admin.auth.admin.updateUserById(authId, { ban_duration: banned ? PERMANENT_BAN_DURATION : "none" });
+    if (error && error.code !== "user_not_found") throw error;
   }
 
   async sendOtp(email: string): Promise<void> {

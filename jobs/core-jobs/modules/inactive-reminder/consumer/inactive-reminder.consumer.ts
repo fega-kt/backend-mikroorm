@@ -75,6 +75,7 @@ export class InactiveReminderConsumer implements OnModuleInit {
         "user.name": fullName,
         "user.email": loginName,
         "inactive.days": String(payload.days),
+        "lock.daysLeft": payload.daysLeft ? String(payload.daysLeft) : "",
       });
       const { error } = await this.resend.emails.send({ from: ENV.MAIL_FROM, to: loginName, ...content });
       if (error) throw new Error(error.message);

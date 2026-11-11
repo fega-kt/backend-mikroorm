@@ -106,6 +106,25 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       RABBITMQ_EXCHANGE.NOTIFICATION_DLX,
       RABBITMQ_QUEUES.NOTIFICATION_EMAIL_INACTIVE_REMINDER_DLQ,
     );
+
+    await ch.assertQueue(RABBITMQ_QUEUES.NOTIFICATION_EMAIL_ACCOUNT_LOCKED, {
+      durable: true,
+      arguments: {
+        "x-dead-letter-exchange": RABBITMQ_EXCHANGE.NOTIFICATION_DLX,
+        "x-dead-letter-routing-key": RABBITMQ_QUEUES.NOTIFICATION_EMAIL_ACCOUNT_LOCKED_DLQ,
+      },
+    });
+    await ch.bindQueue(
+      RABBITMQ_QUEUES.NOTIFICATION_EMAIL_ACCOUNT_LOCKED,
+      RABBITMQ_EXCHANGE.NOTIFICATION,
+      RABBITMQ_QUEUES.NOTIFICATION_EMAIL_ACCOUNT_LOCKED,
+    );
+    await ch.assertQueue(RABBITMQ_QUEUES.NOTIFICATION_EMAIL_ACCOUNT_LOCKED_DLQ, { durable: true });
+    await ch.bindQueue(
+      RABBITMQ_QUEUES.NOTIFICATION_EMAIL_ACCOUNT_LOCKED_DLQ,
+      RABBITMQ_EXCHANGE.NOTIFICATION_DLX,
+      RABBITMQ_QUEUES.NOTIFICATION_EMAIL_ACCOUNT_LOCKED_DLQ,
+    );
   }
 
   private async setupApprovalTopology(ch: amqp.Channel) {
