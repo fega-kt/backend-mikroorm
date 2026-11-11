@@ -15,6 +15,8 @@ export enum NotificationType {
   SPRINT_COMPLETED = "SPRINT_COMPLETED",
   LOGIN_INACTIVE_REMINDER = "LOGIN_INACTIVE_REMINDER",
   LOGIN_NEW_DEVICE = "LOGIN_NEW_DEVICE",
+  /** Tài khoản bị tự khóa vì lâu không đăng nhập — chỉ có email (user không đăng nhập được nên không có noti in-app) */
+  ACCOUNT_LOCKED = "ACCOUNT_LOCKED",
   APPROVAL_PENDING = "APPROVAL_PENDING",
   APPROVAL_APPROVED = "APPROVAL_APPROVED",
   APPROVAL_REJECTED = "APPROVAL_REJECTED",

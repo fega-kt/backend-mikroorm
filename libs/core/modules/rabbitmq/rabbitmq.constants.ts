@@ -10,6 +10,9 @@ export const RABBITMQ_EXCHANGE = {
 export const RABBITMQ_QUEUES = {
   NOTIFICATION_EMAIL_INACTIVE_REMINDER: "notification.email.inactive-reminder",
   NOTIFICATION_EMAIL_INACTIVE_REMINDER_DLQ: "notification.email.inactive-reminder.dlq",
+  /** core-jobs: email báo tài khoản đã bị khóa vì lâu không đăng nhập */
+  NOTIFICATION_EMAIL_ACCOUNT_LOCKED: "notification.email.account-locked",
+  NOTIFICATION_EMAIL_ACCOUNT_LOCKED_DLQ: "notification.email.account-locked.dlq",
   /** app-jobs: gửi email theo event phê duyệt */
   APPROVAL_EMAIL: "approval.email",
   APPROVAL_EMAIL_DLQ: "approval.email.dlq",

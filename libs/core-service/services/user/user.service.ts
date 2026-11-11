@@ -257,10 +257,21 @@ export class UserService extends BaseService<UserEntity> {
     return result;
   }
 
-  async updateActive(id: string, isActive: boolean) {
+  /**
+   * Khóa / mở khóa tài khoản. Khóa: ban Supabase (chặn đăng nhập và refresh token) + isActive=false (nguồn sự thật của app:
+   * giao duyệt, lịch làm việc, danh sách). Supabase làm trước ở cả hai chiều: lỗi ban thì chưa đổi gì và thử lại được;
+   * ghi DB lỗi sau khi ban thì user vẫn bị chặn thật, thử lại là idempotent.
+   * - `reason: "inactivity"`: khóa tự động vì lâu không hoạt động (cron, actor là hệ thống) — ghi vào log.
+   * - `ifInactiveSince`: bỏ qua (trả null) nếu user vừa hoạt động sau mốc này — tránh khóa nhầm người vừa đăng nhập lúc cron chạy.
+   * Mở khóa đặt lại lastActiveAt = bây giờ, nếu không cron sẽ khóa lại ngay hôm sau.
+   */
+  async updateActive(id: string, isActive: boolean, options: { reason?: "inactivity"; ifInactiveSince?: Date } = {}) {
     const user = await this.repo.findOne(
       { id, deleted: { $ne: true } },
-      { fields: ["id", "isActive", "department", "department.deleted", "department.status"], populate: ["department"] },
+      {
+        fields: ["id", "authId", "isActive", "lastActiveAt", "department", "department.deleted", "department.status"],
+        populate: ["department"],
+      },
     );
     if (!user) {
       throw new NotFoundException("User not found or deleted");
@@ -268,6 +279,10 @@ export class UserService extends BaseService<UserEntity> {
 
     if (user.isActive === isActive) {
       throw new BadRequestException(`User is already ${isActive ? "active" : "inactive"}`);
+    }
+
+    if (!isActive && options.ifInactiveSince && user.lastActiveAt && user.lastActiveAt > options.ifInactiveSince) {
+      return null;
     }
 
     if (isActive) {
@@ -280,12 +295,29 @@ export class UserService extends BaseService<UserEntity> {
       }
     }
 
+    // Supabase trước DB (xem mô tả hàm). User không có authId (system user) thì không có gì để ban
+    if (user.authId) await this.supabaseService.setBanned(user.authId, !isActive);
+
     const oldData = await this.loadLogData(id);
-    const result = await this.updateOne(id, { isActive });
+    const update: EntityData<UserEntity> = { isActive };
+    if (isActive) update.lastActiveAt = new Date();
+    const result = await this.updateOne(id, update);
     await this.cache.del(AuthCacheKey.user(id));
     // Nghỉ việc / khóa tài khoản: không để chữ ký số còn dùng được
-    if (!isActive) await this.signingCertificateService.revokeAllForUser(id, "User deactivated");
-    await this.writeLog(id, ActivityLogAction.STATUS_CHANGE, oldData, await this.loadLogData(id));
+    if (!isActive) {
+      await this.signingCertificateService.revokeAllForUser(
+        id,
+        options.reason === "inactivity" ? "Locked: inactivity" : "User deactivated",
+      );
+    }
+    const newData = await this.loadLogData(id);
+    await this.writeLog(
+      id,
+      ActivityLogAction.STATUS_CHANGE,
+      oldData,
+      newData && options.reason ? { ...newData, reason: options.reason } : newData,
+      options.reason ? ActivityLogType.System : ActivityLogType.User,
+    );
     return result;
   }
 
@@ -340,10 +372,10 @@ export class UserService extends BaseService<UserEntity> {
   }
 
   /** parentId là id của user */
-  private writeLog(id: string, action: ActivityLogAction, oldData?: LogData, newData?: LogData) {
+  private writeLog(id: string, action: ActivityLogAction, oldData?: LogData, newData?: LogData, type = ActivityLogType.User) {
     return this.activityLogService.addOne({
       parentId: id,
-      type: ActivityLogType.User,
+      type,
       parentType: this.tableName,
       action,
       oldData,

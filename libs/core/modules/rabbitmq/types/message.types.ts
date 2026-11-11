@@ -12,6 +12,15 @@ export interface NotificationEmailMessage {
 
 export interface InactiveReminderMessage {
   days: number;
+  /** Số ngày còn lại tới lúc tự khóa; không có khi tính năng tự khóa tắt */
+  daysLeft?: number;
+  queueId: string;
+  userId: string;
+}
+
+export interface AccountLockedMessage {
+  /** Số ngày không hoạt động lúc bị khóa */
+  days: number;
   queueId: string;
   userId: string;
 }

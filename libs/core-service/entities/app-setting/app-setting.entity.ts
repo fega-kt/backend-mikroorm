@@ -5,6 +5,11 @@ export enum AppSettingType {
   // ===== SYSTEM =====
   INACTIVE_DAYS_THRESHOLD = "inactive_days_threshold",
   INACTIVE_EMAIL_ALLOWED_LIST = "inactive_email_allowed_list",
+  /**
+   * Số ngày không hoạt động thì tự khóa tài khoản (ban Supabase + isActive=false, chỉ admin mở lại).
+   * 0 / chưa cấu hình → tắt. Phải lớn hơn INACTIVE_DAYS_THRESHOLD (ngưỡng nhắc), nếu không cron khóa bỏ qua.
+   */
+  INACTIVE_LOCK_DAYS = "inactive_lock_days",
   /** Số ngày giữ event outbox đã đẩy xong; 0 / chưa cấu hình → giữ vĩnh viễn */
   OUTBOX_RETENTION_DAYS = "outbox_retention_days",
   /**

@@ -2,16 +2,14 @@ import { MikroORM } from "@mikro-orm/core";
 import { ActivityLogQueueService } from "@core-service/services/activity-log-queue/activity-log-queue.service";
 import { AppSettingEntity, AppSettingType } from "@core-service/entities/app-setting";
 import { parseValuePositiveInt } from "@common/utils/parse-value.util";
-import { CACHE_SERVICE, ICacheService } from "@modules/cache/cache.interface";
 import { SYSTEM_USER_ID } from "@common/constants/system.constant";
 import { NotificationEntity, NotificationType } from "@core-service/entities/notification";
 import { RABBITMQ_EXCHANGE, RABBITMQ_QUEUES } from "@modules/rabbitmq/rabbitmq.constants";
 import { RabbitMQService } from "@modules/rabbitmq/rabbitmq.service";
-import { SupabaseAuthDbService } from "@modules/supabase/supabase-auth-db.service";
-import { AuthCacheKey } from "@core-service/services/auth/auth.constants";
 import { UserEntity } from "@core-service/entities/user";
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
+import { LastActiveBackfillService } from "./last-active-backfill.service";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -21,10 +19,9 @@ export class InactiveUserReminderService {
 
   constructor(
     private readonly orm: MikroORM,
-    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     private readonly rabbitmq: RabbitMQService,
     private readonly activityLogQueueService: ActivityLogQueueService,
-    private readonly authDb: SupabaseAuthDbService,
+    private readonly lastActiveBackfill: LastActiveBackfillService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_9AM)
@@ -33,6 +30,9 @@ export class InactiveUserReminderService {
     const em = this.orm.em.fork();
     const setting = await em.findOne(AppSettingEntity, { key: AppSettingType.INACTIVE_DAYS_THRESHOLD, deleted: { $ne: true } });
     const thresholdDays = parseValuePositiveInt(setting?.value) ?? 7;
+    const lockSetting = await em.findOne(AppSettingEntity, { key: AppSettingType.INACTIVE_LOCK_DAYS, deleted: { $ne: true } });
+    const configuredLockDays = parseValuePositiveInt(lockSetting?.value);
+    const lockDays = configuredLockDays && configuredLockDays > thresholdDays ? configuredLockDays : undefined;
 
     const users = await em.find(
       UserEntity,
@@ -44,18 +44,19 @@ export class InactiveUserReminderService {
       return;
     }
 
-    await this.backfillLastActive(users);
+    await this.lastActiveBackfill.backfill(users);
 
     const now = Date.now();
     // Số ngày thực tế không online của từng user (không phải ngưỡng) → hôm nay báo 7, mai báo 8...
     // Chưa từng online (lastActiveAt null) thì tính từ lúc tạo tài khoản
+    // Tự khóa bật: user đã tới hạn khóa (≥ lockDays) không nhắc nữa — cron khóa (chạy trước cron này) lo, và mail nhắc không còn "số ngày còn lại" để ghi
     const inactiveUsers = users
       .map((user) => ({
         id: user.id,
         fullName: user.fullName,
         days: Math.floor((now - (user.lastActiveAt ?? user.createdAt).getTime()) / DAY_MS),
       }))
-      .filter((user) => user.days >= thresholdDays);
+      .filter((user) => user.days >= thresholdDays && (!lockDays || user.days < lockDays));
 
     if (!inactiveUsers.length) {
       this.logger.log("All users are active, no inactive reminder needed");
@@ -71,7 +72,9 @@ export class InactiveUserReminderService {
     }
 
     for (const user of inactiveUsers) {
-      const msg = { days: user.days };
+      // Số ngày còn lại tới lúc khóa (chỉ khi tự khóa đang bật); luôn ≥ 1 vì user tới hạn đã bị lọc ở trên
+      const daysLeft = lockDays ? lockDays - user.days : undefined;
+      const msg = { days: user.days, ...(daysLeft && { daysLeft }) };
       this.logger.log(`Queuing inactive reminder email for user ${user.id} (${user.fullName})`);
       const queueItem = await this.activityLogQueueService.create({
         userId: user.id,
@@ -87,55 +90,6 @@ export class InactiveUserReminderService {
     }
 
     this.logger.log(`Queued inactive reminder email for ${inactiveUsers.length} user(s)`);
-  }
-
-  /**
-   * Điền lastActiveAt cho user chưa có (user cũ từ trước khi có cột): lấy mốc muộn nhất giữa key Redis cũ
-   * (user:last-active, guard không còn ghi) và Supabase (auth.sessions, auth.users.last_sign_in_at).
-   * Sau lần chạy đầu chỉ còn user chưa từng đăng nhập rơi vào đây. Không ghi đè giá trị guard vừa ghi.
-   */
-  private async backfillLastActive(users: Array<Pick<UserEntity, "id" | "authId" | "lastActiveAt">>) {
-    const missing = users.filter((u) => !u.lastActiveAt);
-    if (!missing.length) return;
-
-    const [redisValues, supabaseValues] = await Promise.all([
-      Promise.all(missing.map((u) => this.cache.get<string>(AuthCacheKey.lastActiveLegacy(u.id)))),
-      this.readSupabaseLastActive(missing.map((u) => u.authId).filter((id): id is string => !!id)),
-    ]);
-
-    const em = this.orm.em.fork();
-    let filled = 0;
-    for (const [i, user] of missing.entries()) {
-      const candidates = [Number(redisValues[i]), user.authId ? supabaseValues.get(user.authId) : undefined].filter(
-        (t): t is number => typeof t === "number" && t > 0,
-      );
-      if (!candidates.length) continue;
-
-      user.lastActiveAt = new Date(Math.max(...candidates));
-      await em.nativeUpdate(UserEntity, { id: user.id, lastActiveAt: null }, { lastActiveAt: user.lastActiveAt });
-      filled++;
-    }
-    this.logger.log(`Backfilled lastActiveAt for ${filled}/${missing.length} user(s)`);
-  }
-
-  /** authId → mốc hoạt động muộn nhất bên Supabase (ms). Lỗi đọc DB auth thì trả rỗng, chỉ dùng Redis */
-  private async readSupabaseLastActive(authIds: string[]): Promise<Map<string, number>> {
-    if (!authIds.length) return new Map();
-    try {
-      // refreshed_at là timestamp không múi giờ (UTC) → đổi sang timestamptz để so với các cột còn lại
-      const rows = await this.authDb.query<{ id: string; last_active: Date | null }>(
-        `select u.id, greatest(u.last_sign_in_at, max(s.updated_at), max(s.refreshed_at at time zone 'utc')) as last_active
-         from auth.users u
-         left join auth.sessions s on s.user_id = u.id
-         where u.id = any($1::uuid[])
-         group by u.id`,
-        [authIds],
-      );
-      return new Map(rows.filter((r) => r.last_active).map((r) => [r.id, new Date(r.last_active).getTime()]));
-    } catch (error) {
-      this.logger.warn(`Failed to read last active from Supabase auth: ${(error as Error).message}`);
-      return new Map();
-    }
   }
 
   /**

@@ -10,6 +10,7 @@ export enum CoreEmailTemplate {
   AccountCreated = "auth.account_created",
   PasswordChanged = "auth.password_changed",
   InactiveReminder = "system.inactive_reminder",
+  AccountLocked = "system.account_locked",
   ExportReady = "system.export_ready",
   ExportFailed = "system.export_failed",
 }
@@ -37,6 +38,7 @@ export const CORE_TEMPLATE_VARIABLES: Record<EmailTemplateCategory.Auth | EmailT
   [EmailTemplateCategory.System]: [
     ...USER_VARIABLES,
     { key: "inactive.days", sample: "30" },
+    { key: "lock.daysLeft", sample: "23" },
     { key: "export.name", sample: "Tờ-trình-của-tôi-20261107-1530.zip" },
     { key: "export.rows", sample: "120.000" },
     { key: "export.expireDays", sample: "7" },
@@ -138,11 +140,20 @@ export const CORE_EMAIL_TEMPLATES: Record<CoreEmailTemplate, EmailTemplateConten
   },
   [CoreEmailTemplate.InactiveReminder]: {
     code: CoreEmailTemplate.InactiveReminder,
-    name: "Nhắc đăng nhập (lâu không hoạt động)",
+    name: "Nhắc nhở đăng nhập",
     subject: "Đã {{inactive.days}} ngày bạn chưa đăng nhập",
     body: buildEmailBody(
-      `${GREETING}<p>Bạn chưa đăng nhập trong <strong>{{inactive.days}} ngày</strong> qua. Có thể có tờ trình hoặc công việc đang chờ bạn xử lý.</p>`,
+      `${GREETING}<p>Bạn đã không đăng nhập trong <strong>{{inactive.days}} ngày</strong> qua. Trong thời gian này, có thể có các tờ trình hoặc công việc đang chờ bạn xem xét và xử lý.</p><p><strong>Tài khoản của bạn sẽ bị khóa sau {{lock.daysLeft}} ngày nữa.</strong> Vui lòng đăng nhập sớm để tiếp tục sử dụng hệ thống và tránh gián đoạn công việc.</p>`,
       { icon: "👋", title: "Lâu rồi không gặp!", button: { label: "Mở {{app.name}}", link: "{{app.link}}" } },
+    ),
+  },
+  [CoreEmailTemplate.AccountLocked]: {
+    code: CoreEmailTemplate.AccountLocked,
+    name: "Tài khoản bị khóa",
+    subject: "Tài khoản của bạn đã bị khóa do không hoạt động",
+    body: buildEmailBody(
+      `${GREETING}<p>Tài khoản <strong>{{user.email}}</strong> đã bị khóa vì không có hoạt động trong <strong>{{inactive.days}} ngày</strong>.</p><p>Chữ ký số của bạn (nếu có) đã bị thu hồi. Để sử dụng lại, hãy liên hệ quản trị viên để mở khóa tài khoản, sau đó đăng ký lại chữ ký số.</p>`,
+      { tone: "danger", icon: "!", title: "Tài khoản đã bị khóa" },
     ),
   },
   [CoreEmailTemplate.ExportReady]: {
