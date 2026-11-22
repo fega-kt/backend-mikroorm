@@ -53,4 +53,15 @@ export class UserEntity extends BaseEntity {
 
   @Property({ type: types.text, nullable: true })
   description?: string;
+
+  /** Ngày sinh (YYYY-MM-DD) */
+  @Property({ type: types.date, nullable: true })
+  birthDate?: string | null;
+
+  /**
+   * Ngày bắt đầu làm việc (YYYY-MM-DD) — nhập tay, không lấy từ createdAt
+   * (createdAt là lúc tạo tài khoản trên hệ thống, thường lệch so với ngày vào làm thật).
+   */
+  @Property({ type: types.date, nullable: true })
+  joinedDate?: string | null;
 }

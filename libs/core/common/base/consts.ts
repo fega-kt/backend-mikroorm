@@ -11,6 +11,8 @@ export interface IUserResponse {
   workEmail?: string;
   phoneNumber?: string;
   description?: string;
+  birthDate?: string | null;
+  joinedDate?: string | null;
   permissions: string[];
   department?: Loaded<DepartmentEntity, never, "code" | "id" | "name", never>;
   canAccess: (pers: PermissionType[]) => boolean;

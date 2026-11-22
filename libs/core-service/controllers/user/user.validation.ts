@@ -1,5 +1,24 @@
 import { listFilterValidation } from "@common/pagination/pagination.validation";
 import { z } from "zod";
+import { isValidDate } from "../../services/work-calendar/work-calendar.util";
+
+/** Ngày YYYY-MM-DD; null / "" = xóa giá trị */
+const optionalDate = z
+  .union([
+    z.null(),
+    z
+      .string()
+      .trim()
+      .transform((v) => (v === "" ? null : v)),
+  ])
+  .refine((v) => v === null || isValidDate(v), "Date must be YYYY-MM-DD")
+  .optional();
+
+/** Hôm nay theo giờ Việt Nam, dạng YYYY-MM-DD (so sánh chuỗi đúng thứ tự ngày) */
+const todayVN = () => new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+
+/** Ngày sinh: như optionalDate nhưng không được ở tương lai */
+const optionalBirthDate = optionalDate.refine((v) => !v || v <= todayVN(), "Birth date cannot be in the future");
 
 export const userListFilterValidation = listFilterValidation.extend({
   fullName: z
@@ -35,6 +54,8 @@ export const createUserValidation = z.object({
     .max(255, "Full name must be less than 255 characters")
     .regex(/^[\p{L}]+(?:\s[\p{L}]+)*$/u, "Full name must contain only letters and single spaces between words"),
   avatar: z.string().trim().optional(),
+  birthDate: optionalBirthDate,
+  joinedDate: optionalDate,
   department: z.string().trim().uuid("Invalid department ID"),
   password: z
     .string()
@@ -70,6 +91,8 @@ export const updateUserValidation = z.object({
     .refine((v) => v === "" || /^[0-9+ ]+$/.test(v), "Invalid phone number format")
     .optional(),
   description: z.string().trim().max(1000).optional(),
+  birthDate: optionalBirthDate,
+  joinedDate: optionalDate,
   department: z.string().trim().uuid("Invalid department ID"),
 });
 
@@ -105,4 +128,6 @@ export const updateProfileValidation = z.object({
     .refine((v) => v === "" || /^[0-9+ ]+$/.test(v), "Invalid phone number format")
     .optional(),
   description: z.string().trim().max(1000).optional(),
+  birthDate: optionalBirthDate,
+  // joinedDate cố ý không có ở đây: user không tự sửa ngày vào làm của mình (chỉ admin, xem updateUserValidation)
 });
