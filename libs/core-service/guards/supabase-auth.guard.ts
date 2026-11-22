@@ -197,6 +197,8 @@ export class SupabaseAuthGuard implements CanActivate {
           "avatar",
           "phoneNumber",
           "description",
+          "birthDate",
+          "joinedDate",
           "department.id",
           "department.name",
           "department.code",
@@ -243,6 +245,8 @@ export class SupabaseAuthGuard implements CanActivate {
       workEmail: user.workEmail,
       phoneNumber: user.phoneNumber,
       description: user.description,
+      birthDate: user.birthDate,
+      joinedDate: user.joinedDate,
       permissions,
       department: user.department,
       canAccess: (pers) => {

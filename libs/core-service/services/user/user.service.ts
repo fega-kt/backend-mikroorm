@@ -56,7 +56,7 @@ export class UserService extends BaseService<UserEntity> {
       throw new BadRequestException(result.error.format());
     }
 
-    const { loginName, fullName, workEmail, password, department, isActive } = data;
+    const { loginName, fullName, workEmail, birthDate, joinedDate, password, department, isActive } = data;
     const [exist] = await Promise.all([this.repo.findOne({ loginName: { $ilike: loginName } }), this.assertDepartmentExists(department)]);
 
     if (exist) {
@@ -80,6 +80,8 @@ export class UserService extends BaseService<UserEntity> {
         fullName,
         loginName,
         workEmail,
+        birthDate,
+        joinedDate,
         isActive: isActive !== undefined ? isActive : true,
         department: em.getReference(DepartmentEntity, department),
         ...defaulValueBase,
@@ -165,7 +167,21 @@ export class UserService extends BaseService<UserEntity> {
     const user = await this.findOne(
       { id, deleted: { $ne: true } },
       {
-        fields: ["id", "fullName", "loginName", "workEmail", "avatar", "isActive", "department", "groups", "department.name"],
+        fields: [
+          "id",
+          "fullName",
+          "loginName",
+          "workEmail",
+          "phoneNumber",
+          "description",
+          "birthDate",
+          "joinedDate",
+          "avatar",
+          "isActive",
+          "department",
+          "groups",
+          "department.name",
+        ],
         populate: ["department", "groups"],
       },
     );
@@ -347,6 +363,8 @@ export class UserService extends BaseService<UserEntity> {
           "workEmail",
           "phoneNumber",
           "description",
+          "birthDate",
+          "joinedDate",
           "avatar",
           "isActive",
           "department",
@@ -365,6 +383,8 @@ export class UserService extends BaseService<UserEntity> {
       workEmail: user.workEmail ?? null,
       phoneNumber: user.phoneNumber ?? null,
       description: user.description ?? null,
+      birthDate: user.birthDate ?? null,
+      joinedDate: user.joinedDate ?? null,
       avatar: user.avatar ?? null,
       isActive: user.isActive,
       department: toLogRef(user.department, user.department?.name),
